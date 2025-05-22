@@ -10,7 +10,7 @@ from aiogram.client.default import DefaultBotProperties
 # === Конфигурация токенов и Jira данных ===
 BOT_TOKEN = '7440372138:AAHIcrjUjo0lXixcSRLWJedMg229pHg6h08'
 JIRA_EMAIL = 'ruslan.issin@mechta.kz'
-JIRA_API_TOKEN = 'ATATT3xFfGF0APxR9PapxQdb5tgKnsLyoakPWF4lQ2w9MkGs0z2ezuXnUolFUY-5HxxXbsyWz9fCXhFos14OdVHXPEzRu_WPRf_jxHZy89Ws9cTDt4QSPP7Ux1hR5XT-9BjQbGbI_p_NNEFKLHpPiYT0Qw5wEMag3q8YUz3OrMNlZsYRmndy7iI=E5FBDF1C'
+JIRA_API_TOKEN = 'ATATT3xFfGF0KjLA2DYqN-1YerpIy8iN-oASBZlPk0UxRPZ-JO2EddPSG_dx78SzkY-sWv5FHFzIJNJijMQJ05Rl_t1rNNP4mOUZIwXU099Bv-R3L2gVnXh8dMh5uDG9956sms2vjfEChmUDzM0D3JLz1bkZ08ryEfyT0r_sxFobC8DtIJmDpU4=57BBD2C7'
 JIRA_PROJECT_KEY = 'AS'
 JIRA_URL = 'https://mechtamarket.atlassian.net'
 
