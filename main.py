@@ -21,6 +21,7 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 dp = Dispatcher()
 
 TRIGGER_TAGS = ['#bug', '#jira']
+CHECK_TAG = '#check'
 THREAD_PREFIXES = {1701: '[Back]', 1703: '[Front]'}
 
 def clean_summary(text: str, tags: list[str]) -> str:
@@ -60,7 +61,8 @@ async def handle_photo(message: Message):
                         thread_prefix=get_thread_prefix(message)
                     )
                     if success:
-                        await message.reply(f"✅ Задача <b>{issue_key}</b> создана!🔗 {JIRA_URL}/browse/{issue_key}")
+                        await message.reply(f"✅ Задача <b>{issue_key}</b> создана!"
+                                            f"🔗 {JIRA_URL}/browse/{issue_key}")
                     else:
                         await message.reply("❌ Ошибка при создании задачи в Jira.")
                 else:
@@ -72,6 +74,10 @@ async def handle_text(message: Message):
     text_lower = text.lower()
     print(f"✉️ Получено сообщение: {text}")
 
+    if CHECK_TAG in text_lower:
+        await message.reply("✅ Бот работает и готов принимать задачи.")
+        return
+
     if any(tag in text_lower for tag in TRIGGER_TAGS):
         await message.reply("🔄 Обнаружен тег, создаю задачу в Jira...")
         success, issue_key = await create_jira_ticket(
@@ -82,7 +88,8 @@ async def handle_text(message: Message):
             thread_prefix=get_thread_prefix(message)
         )
         if success:
-            await message.reply(f"✅ Задача <b>{issue_key}</b> создана!🔗 {JIRA_URL}/browse/{issue_key}")
+            await message.reply(f"✅ Задача <b>{issue_key}</b> создана!"
+                                f"🔗 {JIRA_URL}/browse/{issue_key}")
         else:
             await message.reply("❌ Ошибка при создании задачи в Jira.")
 
