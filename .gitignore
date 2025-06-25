@@ -1,0 +1,17 @@
+# Отключаем .env
+.env
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# VS Code / PyCharm / IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Логи
+*.log
