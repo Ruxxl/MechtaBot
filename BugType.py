@@ -6,11 +6,12 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+import os
 
 # === Конфигурация ===
 BOT_TOKEN = '7440372138:AAHIcrjUjo0lXixcSRLWJedMg229pHg6h08'
 JIRA_EMAIL = 'ruslan.issin@mechta.kz'
-JIRA_API_TOKEN = 'джира токен'
+JIRA_API_TOKEN = os.environ.get('JIRA_API_TOKEN')
 JIRA_PROJECT_KEY = 'AS'
 JIRA_PARENT_KEY = 'AS-1679'
 JIRA_URL = 'https://mechtamarket.atlassian.net'
