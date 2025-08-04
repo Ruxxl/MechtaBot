@@ -61,8 +61,10 @@ async def handle_photo(message: Message):
                         thread_prefix=get_thread_prefix(message)
                     )
                     if success:
-                        await message.reply(f"✅ Задача <b>{issue_key}</b> создана!"
-                                            f"🔗 {JIRA_URL}/browse/{issue_key}")
+                        await message.reply(
+    f"✅ Задача <b>{issue_key}</b> создана!\n"
+    f"🔗 <a href='{JIRA_URL}/browse/{issue_key}'>{JIRA_URL}/browse/{issue_key}</a>"
+)
                     else:
                         await message.reply("❌ Ошибка при создании задачи в Jira.")
                 else:
@@ -88,8 +90,10 @@ async def handle_text(message: Message):
             thread_prefix=get_thread_prefix(message)
         )
         if success:
-            await message.reply(f"✅ Задача <b>{issue_key}</b> создана!"
-                                f"🔗 {JIRA_URL}/browse/{issue_key}")
+            await message.reply(
+    f"✅ Задача <b>{issue_key}</b> создана!\n"
+    f"🔗 <a href='{JIRA_URL}/browse/{issue_key}'>{JIRA_URL}/browse/{issue_key}</a>"
+)
         else:
             await message.reply("❌ Ошибка при создании задачи в Jira.")
 
