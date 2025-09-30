@@ -109,20 +109,21 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
     headers = {"Content-Type": "application/json"}
     summary = f"[Telegram] {cleaned_text}".strip()[:255]
     payload = {
-        "fields": {
-            "project": {"key": JIRA_PROJECT_KEY},
-            "summary": summary,
-            "description": {
-                "type": "doc",
-                "version": 1,
-                "content": [{
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": f"[Telegram] Автор: {author}\n{text}"}]
-                }]
-            },
-            "issuetype": {"name": "Баг"}
-        }
+    "fields": {
+        "project": {"key": JIRA_PROJECT_KEY},
+        "parent": {"key": "AS-2644"},   # <-- вот это главное
+        "summary": summary,
+        "description": {
+            "type": "doc",
+            "version": 1,
+            "content": [{
+                "type": "paragraph",
+                "content": [{"type": "text", "text": f"[Telegram] Автор: {author}\n{text}"}]
+            }]
+        },
+        "issuetype": {"name": "Подзадача"}   # название как в твоей Jira (обычно "Sub-task" или "Подзадача")
     }
+}
 
     async with aiohttp.ClientSession(auth=auth) as session:
         async with session.post(create_url, json=payload, headers=headers, ssl=ssl_context) as response:
