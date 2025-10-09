@@ -111,7 +111,7 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
     payload = {
     "fields": {
         "project": {"key": JIRA_PROJECT_KEY},
-        "parent": {"key": "AS-2644"},   # <-- вот это главное
+        "parent": {"key": "AS-2841"},   # <-- вот это главное
         "summary": summary,
         "description": {
             "type": "doc",
