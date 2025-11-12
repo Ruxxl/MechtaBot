@@ -8,6 +8,8 @@ from aiogram.types import Message
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+
 load_dotenv()
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -19,6 +21,51 @@ JIRA_URL = os.environ.get('JIRA_URL', 'https://mechtamarket.atlassian.net')
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
+
+HR_TOPICS = {
+    "attendance": {
+        "title": "Отметки приход/уход",
+        "text": (
+            "Все запросы об отметках (приход/уход) необходимо направлять на <b>Адильжана</b>."
+        )
+    },
+    "bs_order": {
+        "title": "Порядок запуска БС",
+        "text": (
+            "При запуске бизнес-процесса в Битриксе (БС — полдня, БС — целый день, отпуск) также изменён порядок согласования:\n\n"
+            "⬇️ В поле утверждающего указываете вашего ПМ-а,\n\n"
+            "⬇️ Далее ПМ отправляет заявку мне,\n\n"
+            "⬇️ После этого я направляю Адильжану,\n\n"
+            "✅️ Завершает процесс HR головного офиса."
+        )
+    }
+}
+
+@dp.message(F.text.lower().contains("#hr"))
+async def hr_menu(message: Message):
+    """Реагирует на тег #hr и показывает меню выбора темы"""
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=HR_TOPICS["attendance"]["title"], callback_data="hr_attendance")],
+        [InlineKeyboardButton(text=HR_TOPICS["bs_order"]["title"], callback_data="hr_bs_order")]
+    ])
+
+    await message.reply("📋 Выберите интересующую тему:", reply_markup=kb)
+
+
+@dp.callback_query(F.data.startswith("hr_"))
+async def hr_topic_detail(callback: CallbackQuery):
+    """Выводит подробности выбранной темы HR"""
+    topic_key = callback.data.split("_", 1)[1]
+
+    if topic_key == "attendance":
+        text = HR_TOPICS["attendance"]["text"]
+    elif topic_key == "bs_order":
+        text = HR_TOPICS["bs_order"]["text"]
+    else:
+        text = "❌ Неизвестная тема."
+
+    await callback.message.answer(text)
+    await callback.answer()
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
