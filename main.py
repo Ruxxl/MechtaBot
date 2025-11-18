@@ -237,7 +237,7 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
             issue_url = f"{JIRA_URL}/browse/{issue_key}"
             print(f"✅ Задача {issue_key} создана")
             notify_text = (
-                f"📨 Создана новая задача!\n"
+                f"📨 Создан новый баг!\n"
                 f"🔑 <b>{issue_key}</b>\n"
                 f"👤 Автор: <b>{author}</b>\n\n"
                 f"🔗 <a href=\"{issue_url}\">Открыть задачу</a>\n\n"
