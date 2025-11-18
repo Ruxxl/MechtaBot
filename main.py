@@ -25,7 +25,7 @@ ADMIN_ID = int(os.environ.get('ADMIN_ID', '998292747'))
 TESTERS_CHANNEL_ID = int(os.environ.get('TESTERS_CHANNEL_ID', '-1002196628724'))
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher(bot)
+dp = Dispatcher()  # без аргументов
 
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
