@@ -237,13 +237,16 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
             print(f"✅ Задача {issue_key} создана")
 
              # --- уведомление админу ---
-        notify_text = (
-            f"📨 Создана новая задача!\n"
-            f"🔑 <b>{issue_key}</b>\n"
-            f"👤 Автор: <b>{author}</b>\n\n"
-            f"🔗 Ссылка: {issue_url}"
-            f"📝 Описание:\n{text}"
-        )
+        # --- уведомление админу ---
+notify_text = (
+    f"📨 Создана новая задача!\n"
+    f"🔑 <b>{issue_key}</b>\n"
+    f"👤 Автор: <b>{author}</b>\n\n"
+    f"🔗 <a href=\"{issue_url}\">Открыть задачу</a>\n\n"
+    f"📝 <b>Описание:</b>\n"
+    f"{text}"
+)
+
         try:
             await bot.send_message(ADMIN_ID, notify_text)
         except Exception as e:
