@@ -280,7 +280,7 @@ async def notify_events():
                     participants = ", ".join(attendees_list) if attendees_list else "нет участников"
 
                     text = (
-                        f"⏰ Событие через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
+                        f"⏰ Встреча через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
                         f"👥 Участники: {participants}"
                     )
 
