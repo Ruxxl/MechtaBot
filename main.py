@@ -25,12 +25,12 @@ ADMIN_ID = int(os.environ.get('ADMIN_ID', '998292747'))
 TESTERS_CHANNEL_ID = int(os.environ.get('TESTERS_CHANNEL_ID', '-1002196628724'))
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher()  # без аргументов
+dp = Dispatcher()  # Aiogram v3+
 
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
-CHECK_INTERVAL = 60  # проверка календаря
-NOTIFY_MINUTES = 61   # за сколько минут уведомлять
+CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
+NOTIFY_MINUTES = 60   # уведомление за 60 минут до события
 
 # Подписанные чаты на уведомления
 subscribed_chats = set()
@@ -232,7 +232,6 @@ async def parse_events():
     data = await fetch_ics()
     cal = Calendar.from_ical(data)
     events = []
-    now = datetime.datetime.now(datetime.timezone.utc)
     for component in cal.walk():
         if component.name == "VEVENT":
             start = component.get('dtstart').dt
@@ -248,7 +247,12 @@ async def parse_events():
                 attendees_list = [a.params.get('CN', str(a)) for a in attendees]
             else:
                 attendees_list = []
-            events.append({"summary": str(component.get('summary')), "start": start})
+
+            events.append({
+                "summary": str(component.get('summary')),
+                "start": start,
+                "attendees": attendees_list
+            })
     return events
 
 async def notify_events():
@@ -265,9 +269,13 @@ async def notify_events():
             if 0 < diff <= NOTIFY_MINUTES * 60:
                 key = (event["summary"], event["start"])
                 if key not in sent:
+                    participants = ", ".join(event.get("attendees", [])) if event.get("attendees") else "нет участников"
                     for chat_id in subscribed_chats:
-                        await bot.send_message(chat_id, f"⏰ Событие через {NOTIFY_MINUTES} минут: {event['summary']}\n"
-                    f"👥 Участники: {participants}")
+                        await bot.send_message(
+                            chat_id,
+                            f"⏰ Событие через {NOTIFY_MINUTES} минут: {event['summary']}\n"
+                            f"👥 Участники: {participants}"
+                        )
                     sent.add(key)
         await asyncio.sleep(CHECK_INTERVAL)
 
