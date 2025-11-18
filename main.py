@@ -10,6 +10,12 @@ from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram import Bot, Dispatcher, types
+from aiogram import F
+from aiogram.types import Message
+
+@dp.message(F.text == "/getid")
+async def get_chat_id(message: Message):
+    await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
 
 load_dotenv()
 
@@ -106,16 +112,6 @@ async def hr_menu(message: Message):
     ])
 
     await message.reply("📋 Выберите интересующую тему:", reply_markup=kb)
-
-@dp.message_handler()
-async def get_chat_id(message: types.Message):
-    print(message.chat.id)
-    await message.reply(f"Chat ID: {message.chat.id}")
-
-@dp.message(F.text == "/getid")
-async def get_chat_id(message: Message):
-    await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
-
 
 
 @dp.callback_query(F.data.startswith("hr_"))
