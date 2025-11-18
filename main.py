@@ -20,6 +20,7 @@ JIRA_PARENT_KEY = os.environ.get('JIRA_PARENT_KEY', 'AS-1679')
 JIRA_URL = os.environ.get('JIRA_URL', 'https://mechtamarket.atlassian.net')
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+ADMIN_ID = int(os.environ.get('ADMIN_ID', '998292747'))
 dp = Dispatcher()
 
 HR_TOPICS = {
@@ -235,6 +236,18 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
             issue_key = result["key"]
             print(f"✅ Задача {issue_key} создана")
 
+             # --- уведомление админу ---
+        notify_text = (
+            f"📨 Создана новая задача!\n"
+            f"🔑 <b>{issue_key}</b>\n"
+            f"👤 Автор: <b>{author}</b>\n\n"
+            f"📝 Описание:\n{text}"
+        )
+        try:
+            await bot.send_message(ADMIN_ID, notify_text)
+        except Exception as e:
+            print(f"Не удалось отправить уведомление админу: {e}")
+            
         if file_bytes and filename:
             attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
             attach_headers = {"X-Atlassian-Token": "no-check"}
