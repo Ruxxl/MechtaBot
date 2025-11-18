@@ -107,8 +107,10 @@ async def hr_menu(message: Message):
 
     await message.reply("📋 Выберите интересующую тему:", reply_markup=kb)
 
+@dp.message_handler()
 async def get_chat_id(message: types.Message):
     print(message.chat.id)
+    await message.reply(f"Chat ID: {message.chat.id}")
 
 
 @dp.callback_query(F.data.startswith("hr_"))
