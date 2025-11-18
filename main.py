@@ -33,7 +33,7 @@ dp = Dispatcher()  # Aiogram v3+
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
-NOTIFY_MINUTES = 20   # уведомление за 60 минут до события
+NOTIFY_MINUTES = 5   # уведомление за 60 минут до события
 
 # Подписанные чаты на уведомления
 # Подписка на чат "Тестировщики" сразу
