@@ -241,6 +241,7 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
             f"📨 Создана новая задача!\n"
             f"🔑 <b>{issue_key}</b>\n"
             f"👤 Автор: <b>{author}</b>\n\n"
+            f"🔗 Ссылка: {issue_url}"
             f"📝 Описание:\n{text}"
         )
         try:
