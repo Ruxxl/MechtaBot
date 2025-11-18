@@ -24,6 +24,8 @@ JIRA_URL = os.environ.get('JIRA_URL', 'https://mechtamarket.atlassian.net')
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '998292747'))
+TESTERS_CHANNEL_ID = int(os.environ.get('TESTERS_CHANNEL_ID', '-1002196628724'))
+
 dp = Dispatcher()
 
 
@@ -257,6 +259,12 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
             await bot.send_message(ADMIN_ID, notify_text)
         except Exception as e:
             print(f"Не удалось отправить уведомление админу: {e}")
+
+        try:
+    # отправка в канал "Тестировщики"
+            await bot.send_message(TESTERS_CHANNEL_ID, notify_text, parse_mode="HTML")
+        except Exception as e:
+            print(f"Не удалось отправить уведомление в канал: {e}")
             
         if file_bytes and filename:
             attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
