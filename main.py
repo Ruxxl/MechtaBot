@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from icalendar import Calendar
 import datetime
 from aiogram.types import InputFile
+from aiogram.types import FSInputFile
+
 
 load_dotenv()
 
@@ -31,7 +33,7 @@ dp = Dispatcher()  # Aiogram v3+
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
-NOTIFY_MINUTES = 24   # уведомление за 60 минут до события
+NOTIFY_MINUTES = 20   # уведомление за 60 минут до события
 
 # Подписанные чаты на уведомления
 # Подписка на чат "Тестировщики" сразу
@@ -282,7 +284,7 @@ async def notify_events():
                         f"👥 Участники: {participants}"
                     )
 
-                    photo = InputFile(photo_path)  # <-- вот здесь оборачиваем файл
+                    photo = FSInputFile(photo_path)  # <-- используем FSInputFile для локального файла
 
                     for chat_id in subscribed_chats:
                         try:
