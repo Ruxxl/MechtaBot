@@ -30,7 +30,7 @@ dp = Dispatcher()  # без аргументов
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка календаря
-NOTIFY_MINUTES = 52   # за сколько минут уведомлять
+NOTIFY_MINUTES = 61   # за сколько минут уведомлять
 
 # Подписанные чаты на уведомления
 subscribed_chats = set()
