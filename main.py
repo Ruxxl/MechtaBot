@@ -279,11 +279,11 @@ async def notify_events():
         events = await parse_events()
         now = datetime.datetime.now(datetime.timezone.utc)
 
-        for event in events:
-    diff = (event["start"] - now).total_seconds()
-    if 0 < diff <= NOTIFY_MINUTES * 60:
+    for event in events:
+        diff = (event["start"] - now).total_seconds()
+        if 0 < diff <= NOTIFY_MINUTES * 60:
         key = (event.get("summary", ""), event.get("start"))
-        if key not in sent:
+            if key not in sent:
             attendees_list = event.get("attendees")
             
             # формируем список участников с тегами
@@ -311,6 +311,7 @@ async def notify_events():
                     await bot.send_message(chat_id, text)
 
             sent.add(key)
+
 
 
 # --- Запуск бота ---
