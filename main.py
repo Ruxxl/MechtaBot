@@ -13,10 +13,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram import F
 from aiogram.types import Message
 
-@dp.message(F.text == "/getid")
-async def get_chat_id(message: Message):
-    await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
-
 load_dotenv()
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -29,6 +25,11 @@ JIRA_URL = os.environ.get('JIRA_URL', 'https://mechtamarket.atlassian.net')
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '998292747'))
 dp = Dispatcher()
+
+
+@dp.message(F.text == "/getid")
+async def get_chat_id(message: Message):
+    await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
 
 HR_TOPICS = {
     "attendance": {
