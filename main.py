@@ -30,10 +30,11 @@ dp = Dispatcher()  # Aiogram v3+
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
-NOTIFY_MINUTES = 45   # уведомление за 60 минут до события
+NOTIFY_MINUTES = 40   # уведомление за 60 минут до события
 
 # Подписанные чаты на уведомления
-subscribed_chats = set()
+# Подписка на чат "Тестировщики" сразу
+subscribed_chats = {TESTERS_CHANNEL_ID}
 
 # --- HR темы ---
 HR_TOPICS = {
@@ -256,7 +257,7 @@ async def parse_events():
     return events
 
 async def notify_events():
-    sent = set()
+    sent = set()  # чтобы не отправлять повторно
     while True:
         if not subscribed_chats:
             await asyncio.sleep(CHECK_INTERVAL)
@@ -267,23 +268,20 @@ async def notify_events():
         for event in events:
             diff = (event["start"] - now).total_seconds()
             if 0 < diff <= NOTIFY_MINUTES * 60:
-                key = (event["summary"], event["start"])
+                key = (event.get("summary", ""), event.get("start"))
                 if key not in sent:
-                     # Безопасно формируем участников
                     attendees_list = event.get("attendees")
-                    if attendees_list:
-                        participants = ", ".join(attendees_list)
-                    else:
-                        participants = "нет участников"
+                    participants = ", ".join(attendees_list) if attendees_list else "нет участников"
 
                     for chat_id in subscribed_chats:
                         await bot.send_message(
                             chat_id,
-                            f"⏰ Встреча через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
+                            f"⏰ Событие через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
                             f"👥 Участники: {participants}"
                         )
                     sent.add(key)
         await asyncio.sleep(CHECK_INTERVAL)
+
 
 # --- Запуск бота ---
 async def main():
