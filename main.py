@@ -30,7 +30,7 @@ dp = Dispatcher()  # Aiogram v3+
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
-NOTIFY_MINUTES = 55   # уведомление за 60 минут до события
+NOTIFY_MINUTES = 50   # уведомление за 60 минут до события
 
 # Подписанные чаты на уведомления
 subscribed_chats = set()
@@ -269,11 +269,17 @@ async def notify_events():
             if 0 < diff <= NOTIFY_MINUTES * 60:
                 key = (event["summary"], event["start"])
                 if key not in sent:
-                    participants = ", ".join(event.get("attendees", [])) if event.get("attendees") else "нет участников"
+                     # Безопасно формируем участников
+                    attendees_list = event.get("attendees")
+                    if attendees_list:
+                        participants = ", ".join(attendees_list)
+                    else:
+                        participants = "нет участников"
+
                     for chat_id in subscribed_chats:
                         await bot.send_message(
                             chat_id,
-                            f"⏰ Событие через {NOTIFY_MINUTES} минут: {event['summary']}\n"
+                            f"⏰ Событие через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
                             f"👥 Участники: {participants}"
                         )
                     sent.add(key)
