@@ -240,6 +240,14 @@ async def parse_events():
                 start = datetime.datetime.combine(start, datetime.time.min)
             if start.tzinfo is None:
                 start = start.replace(tzinfo=datetime.timezone.utc)
+
+            attendees = component.get('attendee')
+            if attendees:
+                if not isinstance(attendees, list):
+                    attendees = [attendees]
+                attendees_list = [a.params.get('CN', str(a)) for a in attendees]
+            else:
+                attendees_list = []
             events.append({"summary": str(component.get('summary')), "start": start})
     return events
 
@@ -258,7 +266,8 @@ async def notify_events():
                 key = (event["summary"], event["start"])
                 if key not in sent:
                     for chat_id in subscribed_chats:
-                        await bot.send_message(chat_id, f"⏰ Событие через {NOTIFY_MINUTES} минут: {event['summary']}")
+                        await bot.send_message(chat_id, f"⏰ Событие через {NOTIFY_MINUTES} минут: {event['summary']}\n"
+                    f"👥 Участники: {participants}")
                     sent.add(key)
         await asyncio.sleep(CHECK_INTERVAL)
 
