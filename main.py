@@ -112,6 +112,11 @@ async def get_chat_id(message: types.Message):
     print(message.chat.id)
     await message.reply(f"Chat ID: {message.chat.id}")
 
+@dp.message(F.text == "/getid")
+async def get_chat_id(message: Message):
+    await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
+
+
 
 @dp.callback_query(F.data.startswith("hr_"))
 async def hr_topic_detail(callback: CallbackQuery):
