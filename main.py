@@ -35,7 +35,7 @@ subscribed_chats = {TESTERS_CHANNEL_ID}
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=YOUR_TOKEN&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка каждые 60 секунд
-NOTIFY_MINUTES = 2  # уведомление за 60 минут
+NOTIFY_MINUTES = 3  # уведомление за 60 минут
 photo_path = "event.jpg"  # локальная фотография для уведомлений
 
 # --- Пример HR-меню (оставляем твои данные) ---
