@@ -33,7 +33,7 @@ dp = Dispatcher()  # Aiogram v3+
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
-NOTIFY_MINUTES = 5   # уведомление за 60 минут до события
+NOTIFY_MINUTES = 9   # уведомление за 60 минут до события
 
 # Подписанные чаты на уведомления
 # Подписка на чат "Тестировщики" сразу
@@ -258,6 +258,14 @@ async def parse_events():
                 "attendees": attendees_list
             })
     return events
+    # Словарь участников ICS → Telegram ник
+PARTICIPANTS_MAP = {
+    "nurgissa.ussen": "@nurgi17",
+    "kurmangali.kussainov": "@Kurmangali_kusainoff",
+    "madina.imasheva": "@Kurokitamoko",
+    "ruslan.issin": "@ISNRUS",
+    "yernazar.kadyrbekov": "@yernazarr"
+}
 
 async def notify_events():
     sent = set()
@@ -272,35 +280,38 @@ async def notify_events():
         now = datetime.datetime.now(datetime.timezone.utc)
 
         for event in events:
-            diff = (event["start"] - now).total_seconds()
-            if 0 < diff <= NOTIFY_MINUTES * 60:
-                key = (event.get("summary", ""), event.get("start"))
-                if key not in sent:
-                    attendees_list = event.get("attendees")
-                    participants = ", ".join(attendees_list) if attendees_list else "нет участников"
+    diff = (event["start"] - now).total_seconds()
+    if 0 < diff <= NOTIFY_MINUTES * 60:
+        key = (event.get("summary", ""), event.get("start"))
+        if key not in sent:
+            attendees_list = event.get("attendees")
+            
+            # формируем список участников с тегами
+            participants = []
+            for a in attendees_list:
+                participants.append(PARTICIPANTS_MAP.get(a, a))  # заменяем на @ник если есть
+            participants_text = ", ".join(participants) if participants else "нет участников"
 
-                    text = (
-                        f"⏰ Событие через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
-                        f"👥 Участники: {participants}"
+            text = (
+                f"⏰ Событие через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
+                f"👥 Участники: {participants_text}"
+            )
+
+            photo = FSInputFile(photo_path)
+            for chat_id in subscribed_chats:
+                try:
+                    await bot.send_photo(
+                        chat_id,
+                        photo=photo,
+                        caption=text,
+                        parse_mode="HTML"
                     )
+                except Exception as e:
+                    print(f"Ошибка при отправке фото: {e}")
+                    await bot.send_message(chat_id, text)
 
-                    photo = FSInputFile(photo_path)  # <-- используем FSInputFile для локального файла
+            sent.add(key)
 
-                    for chat_id in subscribed_chats:
-                        try:
-                            await bot.send_photo(
-                                chat_id,
-                                photo=photo,
-                                caption=text,
-                                parse_mode="HTML"
-                            )
-                        except Exception as e:
-                            print(f"Ошибка при отправке фото: {e}")
-                            await bot.send_message(chat_id, text)
-
-                    sent.add(key)
-
-        await asyncio.sleep(CHECK_INTERVAL)
 
 # --- Запуск бота ---
 async def main():
