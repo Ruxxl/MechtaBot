@@ -10,6 +10,7 @@ from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 from icalendar import Calendar
 import datetime
+from aiogram.types import InputFile
 
 load_dotenv()
 
@@ -30,7 +31,7 @@ dp = Dispatcher()  # Aiogram v3+
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
-NOTIFY_MINUTES = 28   # уведомление за 60 минут до события
+NOTIFY_MINUTES = 24   # уведомление за 60 минут до события
 
 # Подписанные чаты на уведомления
 # Подписка на чат "Тестировщики" сразу
@@ -281,19 +282,19 @@ async def notify_events():
                         f"👥 Участники: {participants}"
                     )
 
+                    photo = InputFile(photo_path)  # <-- вот здесь оборачиваем файл
+
                     for chat_id in subscribed_chats:
                         try:
-                            # отправка фото с текстом в caption
-                            with open(photo_path, "rb") as photo:
-                                await bot.send_photo(
-                                    chat_id,
-                                    photo=photo,
-                                    caption=text,
-                                    parse_mode="HTML"
-                                )
+                            await bot.send_photo(
+                                chat_id,
+                                photo=photo,
+                                caption=text,
+                                parse_mode="HTML"
+                            )
                         except Exception as e:
                             print(f"Ошибка при отправке фото: {e}")
-                            await bot.send_message(chat_id, text)  # на случай ошибки фото
+                            await bot.send_message(chat_id, text)
 
                     sent.add(key)
 
