@@ -30,7 +30,7 @@ dp = Dispatcher()  # Aiogram v3+
 # --- Настройки календаря ---
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
-NOTIFY_MINUTES = 5   # уведомление за 60 минут до события
+NOTIFY_MINUTES = 28   # уведомление за 60 минут до события
 
 # Подписанные чаты на уведомления
 # Подписка на чат "Тестировщики" сразу
@@ -257,7 +257,9 @@ async def parse_events():
     return events
 
 async def notify_events():
-    sent = set()  # чтобы не отправлять повторно
+    sent = set()
+    photo_path = "event.jpg"  # заранее подготовленная фотография
+
     while True:
         if not subscribed_chats:
             await asyncio.sleep(CHECK_INTERVAL)
@@ -265,6 +267,7 @@ async def notify_events():
 
         events = await parse_events()
         now = datetime.datetime.now(datetime.timezone.utc)
+
         for event in events:
             diff = (event["start"] - now).total_seconds()
             if 0 < diff <= NOTIFY_MINUTES * 60:
@@ -273,15 +276,28 @@ async def notify_events():
                     attendees_list = event.get("attendees")
                     participants = ", ".join(attendees_list) if attendees_list else "нет участников"
 
-                    for chat_id in subscribed_chats:
-                        await bot.send_message(
-                            chat_id,
-                            f"⏰ Встреча через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
-                            f"👥 Участники: {participants}"
-                        )
-                    sent.add(key)
-        await asyncio.sleep(CHECK_INTERVAL)
+                    text = (
+                        f"⏰ Событие через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
+                        f"👥 Участники: {participants}"
+                    )
 
+                    for chat_id in subscribed_chats:
+                        try:
+                            # отправка фото с текстом в caption
+                            with open(photo_path, "rb") as photo:
+                                await bot.send_photo(
+                                    chat_id,
+                                    photo=photo,
+                                    caption=text,
+                                    parse_mode="HTML"
+                                )
+                        except Exception as e:
+                            print(f"Ошибка при отправке фото: {e}")
+                            await bot.send_message(chat_id, text)  # на случай ошибки фото
+
+                    sent.add(key)
+
+        await asyncio.sleep(CHECK_INTERVAL)
 
 # --- Запуск бота ---
 async def main():
