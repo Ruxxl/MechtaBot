@@ -12,7 +12,7 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, FSInputFile
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from datetime import datetime
+import datetime
 
 # --- Настройка логирования с эмодзи ---
 class EmojiFormatter(logging.Formatter):
