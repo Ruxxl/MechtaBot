@@ -41,13 +41,16 @@ class EmojiFormatter(logging.Formatter):
         return f"{color}[{time}] {emoji} {record.levelname}: {message}{self.RESET}"
 
 
-handler = logging.StreamHandler()
-handler.setFormatter(EmojiFormatter())
+class RailwayFormatter(logging.Formatter):
+    def format(self, record):
+        time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        emoji = ""
+        if record.levelno == logging.WARNING:
+            emoji = "⚠️ "
+        elif record.levelno == logging.ERROR:
+            emoji = "❌ "
+        return f"[{time}] {emoji}{record.levelname}: {record.getMessage()}"
 
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[handler]
-)
 
 logger = logging.getLogger(__name__)
 
