@@ -225,11 +225,17 @@ async def create_jira_ticket(
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60
-ALERT_BEFORE = timedelta(minutes=14)
+ALERT_BEFORE = timedelta(minutes=5)
 
 calendar_sent_notifications = set()
 EVENT_PHOTO_PATH = "event.jpg"   # фото в корне проекта
 
+# Словарь замен email → @mention
+MENTION_MAP = {
+    "ruslan.issin@mechta.kz": "@ISNVO",
+    "yernazar.kadyrbekov@mechta.kz": "@yernazarr",
+    # добавляй дальше при необходимости
+}
 
 async def fetch_calendar():
     async with aiohttp.ClientSession() as session:
@@ -259,9 +265,19 @@ async def check_calendar_events():
                 # Формирование списка участников
                 if attendees:
                     if isinstance(attendees, list):
-                        attendees_list = [str(a) for a in attendees]
+                        attendees_raw = [str(a) for a in attendees]
                     else:
-                        attendees_list = [str(attendees)]
+                        attendees_raw = [str(attendees)]
+
+                    attendees_list = []
+                    for a in attendees_raw:
+                        email = a.replace("mailto:", "").strip()
+
+                        if email in MENTION_MAP:
+                            attendees_list.append(MENTION_MAP[email])
+                        else:
+                            attendees_list.append(email)
+
                     attendees_text = ", ".join(attendees_list)
                 else:
                     attendees_text = "не указаны"
@@ -274,8 +290,8 @@ async def check_calendar_events():
                     text = (
                         f"📅 Встреча скоро начнется!\n"
                         f"📝 Название: <b>{summary}</b>\n"
-                        f"👥 Участники: {attendees_text}\n"
-                        f"⏰ Начало: {start.strftime('%H:%M')}"
+                        f"⏰ Начало: {start.strftime('%H:%M')}\n"
+                        f"👥 Участники: {attendees_text}"
                     )
 
                     try:
