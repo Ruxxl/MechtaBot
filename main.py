@@ -6,7 +6,9 @@ import re
 import logging
 from dotenv import load_dotenv
 from typing import List, Tuple, Optional
+from icalendar import Calendar
 from datetime import datetime, timedelta
+from dateutil import tz
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -20,6 +22,8 @@ from photo_handler import handle_photo_message
 # Настройка окружения
 # =======================
 load_dotenv()
+cal = Calendar.from_ical(data)
+
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 JIRA_EMAIL = os.getenv('JIRA_EMAIL')
 JIRA_API_TOKEN = os.getenv('JIRA_API_TOKEN')
