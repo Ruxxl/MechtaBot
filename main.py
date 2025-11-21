@@ -14,6 +14,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
+from text_handler import handle_text_message
 
 # =======================
 # Настройка окружения
@@ -101,32 +102,9 @@ async def handle_photo(message: types.Message):
 # =======================
 # Обработка текста
 # =======================
-@dp.message(F.text)
+@dp.message(types.F.text)
 async def handle_text(message: Message):
-    text = message.text or ""
-    text_lower = text.lower()
-    logger.info(f"✉️ Получено сообщение: {text}")
-
-    if CHECK_TAG in text_lower:
-        await message.reply("✅ Бот работает и готов принимать задачи.")
-        return
-
-    if any(tag in text_lower for tag in TRIGGER_TAGS):
-        await message.reply("🔄 Обнаружен тег, создаю задачу в Jira...")
-        success, issue_key = await create_jira_ticket(
-            text,
-            message.from_user.full_name,
-            file_bytes=None,
-            filename=None,
-            thread_prefix=get_thread_prefix(message)
-        )
-        if success:
-            await message.reply(
-                f"✅ Задача <b>{issue_key}</b> создана!\n"
-                f"🔗 <a href='{JIRA_URL}/browse/{issue_key}'>{JIRA_URL}/browse/{issue_key}</a>"
-            )
-        else:
-            await message.reply("❌ Ошибка при создании задачи в Jira.")
+    await handle_text_message(message)
 
 # =======================
 # Создание задачи Jira
