@@ -225,7 +225,7 @@ async def create_jira_ticket(
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60
-ALERT_BEFORE = timedelta(minutes=1)
+ALERT_BEFORE = timedelta(minutes=17)
 
 calendar_sent_notifications = set()
 EVENT_PHOTO_PATH = "event.jpg"   # фото в корне проекта
@@ -234,6 +234,22 @@ EVENT_PHOTO_PATH = "event.jpg"   # фото в корне проекта
 MENTION_MAP = {
     "ruslan.issin@mechta.kz": " @ISNVO ",
     "yernazar.kadyrbekov@mechta.kz": " @yernazarr ",
+    "madina.imasheva@mechta.kz": "@Kurokitamoko ",
+    "nargiza.marassulova@mechta.kz": " @m_nargi ",
+    "kurmangali.kussainov@mechta.kz": " @Kurmangali_kusainoff ",
+    "damir.shaniiazov@mechta.kz": " @DamirShaniyazov ",
+    "gulnur.yermagambetova@mechta.kz": " @gunya_tt ",
+    "karlygash.tashmukhambetova@mechta.kz": " @karlybirdkarly ",
+    "sultan.nadirbek@mechta.kz": " @av3nt4d0r ",
+    "yerlan.nurakhmetov@mechta.kz": " @coolywooly ",
+    "nurgissa.ussen@mechta.kz": " @nurgi17 ",
+    "azamat.zhumabekov@mechta.kz": " @azamat_zhumabek ",
+    "damir.kuanysh@mechta.kz": " @KuanyshovD ",
+    "abzal.zholkenov@mechta.kz": " @zholkenov ",
+    "amirbek.ashirbek@mechta.kz": " @amir_ashir ",
+    "ruslan.nadyrov@mechta.kz": " @nopeacefulll ",
+    "kamilla.aisakhunova@mechta.kz": " @aisakhunovak ",
+    "vladislav.borovkov@mechta.kz": " @john_folker "
     # добавляй дальше при необходимости
 }
 
