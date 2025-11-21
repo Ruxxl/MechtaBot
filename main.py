@@ -6,7 +6,6 @@ import os
 import logging
 from dotenv import load_dotenv
 from icalendar import Calendar
-import datetime
 from zoneinfo import ZoneInfo  # Python 3.9+
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, FSInputFile
@@ -25,7 +24,7 @@ class EmojiFormatter(logging.Formatter):
     }
 
     def format(self, record):
-        time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         emoji = self.LEVEL_EMOJIS.get(record.levelno, "ℹ️")
         message = record.getMessage()
         return f"[{time}] {emoji} {record.levelname}: {message}"
