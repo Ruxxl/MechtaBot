@@ -74,7 +74,7 @@ async def start(message: Message):
     subscribed_chats.add(message.chat.id)
     await message.reply("✅ Этот чат подписан на уведомления о событиях из календаря!")
 
-@dp.message(F.text.contains("#hr", ignore_case=True))
+@dp.message(F.text.regexp("(?i).*#hr.*"))
 async def hr_menu(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=HR_TOPICS["attendance"]["title"], callback_data="hr_attendance")],
