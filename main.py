@@ -22,8 +22,6 @@ from photo_handler import handle_photo_message
 # Настройка окружения
 # =======================
 load_dotenv()
-cal = Calendar.from_ical(data)
-
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 JIRA_EMAIL = os.getenv('JIRA_EMAIL')
 JIRA_API_TOKEN = os.getenv('JIRA_API_TOKEN')
@@ -231,7 +229,8 @@ async def fetch_calendar():
         async with session.get(ICS_URL) as resp:
             if resp.status == 200:
                 data = await resp.text()
-                return Calendar.from_ical(data)
+                cal = Calendar.from_ical(data)
+                return cal
             else:
                 logger.error(f"Ошибка при получении ICS: {resp.status}")
                 return None
