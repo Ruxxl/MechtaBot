@@ -42,17 +42,26 @@ class EmojiFormatter(logging.Formatter):
 
 
 class RailwayFormatter(logging.Formatter):
+    """Для Railway, INFO будет зелёным"""
+    LEVEL_EMOJIS = {
+        logging.WARNING: "⚠️ ",
+        logging.ERROR: "❌ "
+    }
+
     def format(self, record):
         time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        emoji = ""
-        if record.levelno == logging.WARNING:
-            emoji = "⚠️ "
-        elif record.levelno == logging.ERROR:
-            emoji = "❌ "
+        emoji = self.LEVEL_EMOJIS.get(record.levelno, "")
         return f"[{time}] {emoji}{record.levelname}: {record.getMessage()}"
 
-
+# --- Настройка логгера ---
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # минимальный уровень логов
+
+# Вывод в консоль с эмодзи
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(EmojiFormatter())
+logger.addHandler(console_handler)
 
 load_dotenv()
 
