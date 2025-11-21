@@ -10,6 +10,7 @@ from icalendar import Calendar
 from datetime import datetime, timedelta
 from dateutil import tz
 import pathlib
+from aiogram.types import InputFile
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -225,7 +226,7 @@ from aiogram.types import InputFile
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка каждые 60 секунд
-ALERT_BEFORE = timedelta(minutes=15)
+ALERT_BEFORE = timedelta(minutes=9)
 calendar_sent_notifications = set()
 
 # путь к файлу event.jpg
@@ -272,10 +273,9 @@ async def check_calendar_events():
                             f"👥 Участники: {attendees_text}\n"
                             f"⏰ Начало: {start.strftime('%H:%M %d.%m.%Y')}"
                         )
-
                         try:
                             if EVENT_PHOTO_PATH.exists():
-                                photo = InputFile(EVENT_PHOTO_PATH)
+                                photo = InputFile(str(EVENT_PHOTO_PATH))  # передаем путь как строку
                                 await bot.send_photo(
                                     chat_id=TESTERS_CHANNEL_ID,
                                     photo=photo,
@@ -289,6 +289,7 @@ async def check_calendar_events():
                             logger.info(f"Отправлено уведомление по календарю: {summary}")
                         except Exception as e:
                             logger.error(f"Ошибка отправки уведомления: {e}")
+
         await asyncio.sleep(CHECK_INTERVAL)
 # =======================
 # Запуск бота
