@@ -221,16 +221,13 @@ async def create_jira_ticket(
 # =======================
 # Уведомления по календарю
 # =======================
-import pathlib
-from aiogram.types import InputFile
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка каждые 60 секунд
-ALERT_BEFORE = timedelta(minutes=9)
+ALERT_BEFORE = timedelta(minutes=3)
 calendar_sent_notifications = set()
 
-# путь к файлу event.jpg
-EVENT_PHOTO_PATH = pathlib.Path(__file__).parent / "event.jpg"
+EVENT_PHOTO_PATH = "event.jpg"  # путь к файлу относительно корня проекта
 
 async def fetch_calendar():
     async with aiohttp.ClientSession() as session:
@@ -249,47 +246,50 @@ async def check_calendar_events():
         if cal:
             now = datetime.now(tz=tz.gettz("Asia/Almaty"))
             for component in cal.walk():
-                if component.name == "VEVENT":
-                    start = component.get('dtstart').dt
-                    summary = component.get('summary')
-                    attendees = component.get('attendee')
+                if component.name != "VEVENT":
+                    continue
 
-                    # формируем список участников
-                    if attendees:
-                        if isinstance(attendees, list):
-                            attendees_list = [str(a) for a in attendees]
-                        else:
-                            attendees_list = [str(attendees)]
-                        attendees_text = ", ".join(attendees_list)
+                start = component.get('dtstart').dt
+                summary = component.get('summary')
+                attendees = component.get('attendee')
+
+                # Формируем список участников
+                if attendees:
+                    if isinstance(attendees, list):
+                        attendees_list = [str(a) for a in attendees]
                     else:
-                        attendees_text = "не указаны"
+                        attendees_list = [str(attendees)]
+                    attendees_text = ", ".join(attendees_list)
+                else:
+                    attendees_text = "не указаны"
 
-                    alert_time = start - ALERT_BEFORE
-                    # проверяем, нужно ли отправить уведомление
-                    if alert_time <= now < start and summary not in calendar_sent_notifications:
-                        text = (
-                            f"📅 Встреча скоро начнется!\n"
-                            f"📝 Название: <b>{summary}</b>\n"
-                            f"👥 Участники: {attendees_text}\n"
-                            f"⏰ Начало: {start.strftime('%H:%M %d.%m.%Y')}"
-                        )
-                        try:
-                            if EVENT_PHOTO_PATH.exists():
-                                photo = InputFile(str(EVENT_PHOTO_PATH))  # передаем путь как строку
-                                await bot.send_photo(
-                                    chat_id=TESTERS_CHANNEL_ID,
-                                    photo=photo,
-                                    caption=text,
-                                    parse_mode=ParseMode.HTML
-                                )
-                            else:
-                                await bot.send_message(TESTERS_CHANNEL_ID, text)
+                alert_time = start - ALERT_BEFORE
 
-                            calendar_sent_notifications.add(summary)
-                            logger.info(f"Отправлено уведомление по календарю: {summary}")
-                        except Exception as e:
-                            logger.error(f"Ошибка отправки уведомления: {e}")
+                # Проверяем, нужно ли отправить уведомление
+                if alert_time <= now < start and summary not in calendar_sent_notifications:
+                    text = (
+                        f"📅 Встреча скоро начнется!\n"
+                        f"📝 Название: <b>{summary}</b>\n"
+                        f"👥 Участники: {attendees_text}\n"
+                        f"⏰ Начало: {start.strftime('%H:%M %d.%m.%Y')}"
+                    )
 
+                    try:
+                        import os
+                        if os.path.exists(EVENT_PHOTO_PATH):
+                            await bot.send_photo(
+                                chat_id=TESTERS_CHANNEL_ID,
+                                photo=EVENT_PHOTO_PATH,  # передаем путь к локальному файлу как строку
+                                caption=text,
+                                parse_mode=types.ParseMode.HTML
+                            )
+                        else:
+                            await bot.send_message(TESTERS_CHANNEL_ID, text)
+
+                        calendar_sent_notifications.add(summary)
+                        logger.info(f"Отправлено уведомление по календарю: {summary}")
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки уведомления: {e}")
         await asyncio.sleep(CHECK_INTERVAL)
 # =======================
 # Запуск бота
