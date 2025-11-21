@@ -266,21 +266,21 @@ async def check_calendar_events():
                             f"⏰ Начало: {start.strftime('%H:%M %d.%m.%Y')}"
                         )
                         try:
-        if EVENT_PHOTO_PATH.exists():
-            with open(EVENT_PHOTO_PATH, "rb") as photo_file:
-                await bot.send_photo(
-                    TESTERS_CHANNEL_ID,
-                    photo=photo_file,
-                    caption=text,
-                    parse_mode=ParseMode.HTML
-                )
-        else:
-            await bot.send_message(TESTERS_CHANNEL_ID, text)
+                            if EVENT_PHOTO_PATH.exists():
+                                with open(EVENT_PHOTO_PATH, "rb") as photo_file:
+                                    await bot.send_photo(
+                                        TESTERS_CHANNEL_ID,
+                                        photo=photo_file,
+                                        caption=text,
+                                        parse_mode=ParseMode.HTML
+                                    )
+                            else:
+                                await bot.send_message(TESTERS_CHANNEL_ID, text)
         
-        calendar_sent_notifications.add(summary)
-        logger.info(f"Отправлено уведомление по календарю: {summary}")
-    except Exception as e:
-        logger.error(f"Ошибка отправки уведомления: {e}")
+                            calendar_sent_notifications.add(summary)
+                            logger.info(f"Отправлено уведомление по календарю: {summary}")
+                        except Exception as e:
+                            logger.error(f"Ошибка отправки уведомления: {e}")
         await asyncio.sleep(CHECK_INTERVAL)
 
 # =======================
