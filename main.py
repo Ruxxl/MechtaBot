@@ -10,7 +10,7 @@ from icalendar import Calendar
 from datetime import datetime, timedelta
 from dateutil import tz
 import pathlib
-from aiogram.types import InputFile
+from aiogram.types import FSInputFile  # <- правильный InputFile для локальных файлов
 
 
 from aiogram import Bot, Dispatcher, F, types
@@ -225,10 +225,10 @@ async def create_jira_ticket(
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка каждые 60 секунд
-ALERT_BEFORE = timedelta(minutes=23)
+ALERT_BEFORE = timedelta(minutes=20)
 calendar_sent_notifications = set()
 
-EVENT_PHOTO_PATH = "event.jpg"  # путь к файлу относительно корня проекта
+EVENT_PHOTO_PATH = "event.jpg"  # локальный файл в корне проекта
 
 async def fetch_calendar():
     async with aiohttp.ClientSession() as session:
@@ -276,11 +276,13 @@ async def check_calendar_events():
                     )
 
                     try:
+                        import os
                         if os.path.exists(EVENT_PHOTO_PATH):
+                            # Открываем файл в бинарном режиме
                             with open(EVENT_PHOTO_PATH, "rb") as photo_file:
                                 await bot.send_photo(
                                     chat_id=TESTERS_CHANNEL_ID,
-                                    photo=photo_file,
+                                    photo=FSInputFile("event.jpg"),  # путь к файлу
                                     caption=text,
                                     parse_mode=ParseMode.HTML
                                 )
@@ -291,7 +293,6 @@ async def check_calendar_events():
                         logger.info(f"Отправлено уведомление по календарю: {summary}")
                     except Exception as e:
                         logger.error(f"Ошибка отправки уведомления: {e}")
-
         await asyncio.sleep(CHECK_INTERVAL)
 # =======================
 # Запуск бота
