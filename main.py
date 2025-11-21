@@ -222,7 +222,7 @@ async def create_jira_ticket(
 # =======================
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60
-ALERT_BEFORE = timedelta(minutes=5)
+ALERT_BEFORE = timedelta(minutes=30)
 calendar_sent_notifications = set()
 
 async def fetch_calendar():
