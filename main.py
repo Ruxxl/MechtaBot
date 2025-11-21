@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional
 from icalendar import Calendar
 from datetime import datetime, timedelta
 from dateutil import tz
+import pathlib
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -256,6 +257,7 @@ async def check_calendar_events():
                         attendees_text = "не указаны"
 
                     alert_time = start - ALERT_BEFORE
+                    EVENT_PHOTO_PATH = pathlib.Path(__file__).parent / "event.jpg"
                     if alert_time <= now < start and summary not in calendar_sent_notifications:
                         text = (
                             f"📅 Встреча скоро начнется!\n"
@@ -264,11 +266,21 @@ async def check_calendar_events():
                             f"⏰ Начало: {start.strftime('%H:%M %d.%m.%Y')}"
                         )
                         try:
-                            await bot.send_message(TESTERS_CHANNEL_ID, text)
-                            calendar_sent_notifications.add(summary)
-                            logger.info(f"Отправлено уведомление по календарю: {summary}")
-                        except Exception as e:
-                            logger.error(f"Ошибка отправки уведомления: {e}")
+        if EVENT_PHOTO_PATH.exists():
+            with open(EVENT_PHOTO_PATH, "rb") as photo_file:
+                await bot.send_photo(
+                    TESTERS_CHANNEL_ID,
+                    photo=photo_file,
+                    caption=text,
+                    parse_mode=ParseMode.HTML
+                )
+        else:
+            await bot.send_message(TESTERS_CHANNEL_ID, text)
+        
+        calendar_sent_notifications.add(summary)
+        logger.info(f"Отправлено уведомление по календарю: {summary}")
+    except Exception as e:
+        logger.error(f"Ошибка отправки уведомления: {e}")
         await asyncio.sleep(CHECK_INTERVAL)
 
 # =======================
