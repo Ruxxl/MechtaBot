@@ -225,7 +225,7 @@ async def create_jira_ticket(
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка каждые 60 секунд
-ALERT_BEFORE = timedelta(minutes=20)
+ALERT_BEFORE = timedelta(minutes=18)
 calendar_sent_notifications = set()
 
 EVENT_PHOTO_PATH = "event.jpg"  # локальный файл в корне проекта
