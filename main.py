@@ -220,10 +220,16 @@ async def create_jira_ticket(
 # =======================
 # Уведомления по календарю
 # =======================
+import pathlib
+from aiogram.types import InputFile
+
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
-CHECK_INTERVAL = 60
-ALERT_BEFORE = timedelta(minutes=30)
+CHECK_INTERVAL = 60  # проверка каждые 60 секунд
+ALERT_BEFORE = timedelta(minutes=5)
 calendar_sent_notifications = set()
+
+# путь к файлу event.jpg
+EVENT_PHOTO_PATH = pathlib.Path(__file__).parent / "event.jpg"
 
 async def fetch_calendar():
     async with aiohttp.ClientSession() as session:
@@ -247,6 +253,7 @@ async def check_calendar_events():
                     summary = component.get('summary')
                     attendees = component.get('attendee')
 
+                    # формируем список участников
                     if attendees:
                         if isinstance(attendees, list):
                             attendees_list = [str(a) for a in attendees]
@@ -257,7 +264,7 @@ async def check_calendar_events():
                         attendees_text = "не указаны"
 
                     alert_time = start - ALERT_BEFORE
-                    EVENT_PHOTO_PATH = pathlib.Path(__file__).parent / "event.jpg"
+                    # проверяем, нужно ли отправить уведомление
                     if alert_time <= now < start and summary not in calendar_sent_notifications:
                         text = (
                             f"📅 Встреча скоро начнется!\n"
@@ -265,9 +272,10 @@ async def check_calendar_events():
                             f"👥 Участники: {attendees_text}\n"
                             f"⏰ Начало: {start.strftime('%H:%M %d.%m.%Y')}"
                         )
+
                         try:
                             if EVENT_PHOTO_PATH.exists():
-                                photo = types.InputFile(EVENT_PHOTO_PATH)
+                                photo = InputFile(EVENT_PHOTO_PATH)
                                 await bot.send_photo(
                                     chat_id=TESTERS_CHANNEL_ID,
                                     photo=photo,
@@ -281,7 +289,6 @@ async def check_calendar_events():
                             logger.info(f"Отправлено уведомление по календарю: {summary}")
                         except Exception as e:
                             logger.error(f"Ошибка отправки уведомления: {e}")
-
         await asyncio.sleep(CHECK_INTERVAL)
 # =======================
 # Запуск бота
