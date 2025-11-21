@@ -23,11 +23,23 @@ class EmojiFormatter(logging.Formatter):
         logging.CRITICAL: "🔥"
     }
 
+    LEVEL_COLORS = {
+        logging.DEBUG: "\033[36m",    # cyan
+        logging.INFO: "\033[32m",     # green
+        logging.WARNING: "\033[33m",  # yellow
+        logging.ERROR: "\033[31m",    # red
+        logging.CRITICAL: "\033[41m", # red background
+    }
+
+    RESET = "\033[0m"
+
     def format(self, record):
         time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         emoji = self.LEVEL_EMOJIS.get(record.levelno, "ℹ️")
+        color = self.LEVEL_COLORS.get(record.levelno, "")
         message = record.getMessage()
-        return f"[{time}] {emoji} {record.levelname}: {message}"
+        return f"{color}[{time}] {emoji} {record.levelname}: {message}{self.RESET}"
+
 
 handler = logging.StreamHandler()
 handler.setFormatter(EmojiFormatter())
