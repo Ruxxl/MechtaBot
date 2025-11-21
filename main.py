@@ -225,15 +225,15 @@ async def create_jira_ticket(
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60
-ALERT_BEFORE = timedelta(minutes=5)
+ALERT_BEFORE = timedelta(minutes=1)
 
 calendar_sent_notifications = set()
 EVENT_PHOTO_PATH = "event.jpg"   # фото в корне проекта
 
 # Словарь замен email → @mention
 MENTION_MAP = {
-    "ruslan.issin@mechta.kz": "@ISNVO",
-    "yernazar.kadyrbekov@mechta.kz": "@yernazarr",
+    "ruslan.issin@mechta.kz": " @ISNVO ",
+    "yernazar.kadyrbekov@mechta.kz": " @yernazarr ",
     # добавляй дальше при необходимости
 }
 
