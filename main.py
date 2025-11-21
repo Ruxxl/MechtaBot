@@ -20,7 +20,6 @@ from aiogram.client.default import DefaultBotProperties
 
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
-from calendar_notifications import check_calendar_events
 
 # =======================
 # Настройка окружения
@@ -220,6 +219,121 @@ async def create_jira_ticket(
 
     return True, issue_key
 
+# =======================
+# Уведомления по календарю
+# =======================
+
+ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
+CHECK_INTERVAL = 60
+ALERT_BEFORE = timedelta(minutes=5)
+
+calendar_sent_notifications = set()
+EVENT_PHOTO_PATH = "event.jpg"   # фото в корне проекта
+
+# Словарь замен email → @mention
+MENTION_MAP = {
+    "ruslan.issin@mechta.kz": " @ISNVO ",
+    "yernazar.kadyrbekov@mechta.kz": " @yernazarr ",
+    "madina.imasheva@mechta.kz": "@Kurokitamoko ",
+    "nargiza.marassulova@mechta.kz": " @m_nargi ",
+    "kurmangali.kussainov@mechta.kz": " @Kurmangali_kusainoff ",
+    "damir.shaniiazov@mechta.kz": " @DamirShaniyazov ",
+    "gulnur.yermagambetova@mechta.kz": " @gunya_tt ",
+    "karlygash.tashmukhambetova@mechta.kz": " @karlybirdkarly ",
+    "sultan.nadirbek@mechta.kz": " @av3nt4d0r ",
+    "yerlan.nurakhmetov@mechta.kz": " @coolywooly ",
+    "nurgissa.ussen@mechta.kz": " @nurgi17 ",
+    "azamat.zhumabekov@mechta.kz": " @azamat_zhumabek ",
+    "damir.kuanysh@mechta.kz": " @KuanyshovD ",
+    "abzal.zholkenov@mechta.kz": " @zholkenov ",
+    "amirbek.ashirbek@mechta.kz": " @amir_ashir ",
+    "ruslan.nadyrov@mechta.kz": " @nopeacefulll ",
+    "kamilla.aisakhunova@mechta.kz": " @aisakhunovak ",
+    "vladislav.borovkov@mechta.kz": " @john_folker "
+    # добавляй дальше при необходимости
+}
+
+async def fetch_calendar():
+    async with aiohttp.ClientSession() as session:
+        async with session.get(ICS_URL) as resp:
+            if resp.status == 200:
+                data = await resp.text()
+                return Calendar.from_ical(data)
+            else:
+                logger.error(f"Ошибка при получении ICS: {resp.status}")
+                return None
+
+
+async def check_calendar_events():
+    while True:
+        cal = await fetch_calendar()
+        if cal:
+            now = datetime.now(tz=tz.gettz("Asia/Almaty"))
+
+            for component in cal.walk():
+                if component.name != "VEVENT":
+                    continue
+
+                start = component.get('dtstart').dt
+                summary = component.get('summary')
+                attendees = component.get('attendee')
+
+                # Формирование списка участников
+                if attendees:
+                    if isinstance(attendees, list):
+                        attendees_raw = [str(a) for a in attendees]
+                    else:
+                        attendees_raw = [str(attendees)]
+
+                    attendees_list = []
+                    for a in attendees_raw:
+                        email = a.replace("mailto:", "").strip()
+
+                        if email in MENTION_MAP:
+                            attendees_list.append(MENTION_MAP[email])
+                        else:
+                            attendees_list.append(email)
+
+                    attendees_text = ", ".join(attendees_list)
+                else:
+                    attendees_text = "не указаны"
+
+                alert_time = start - ALERT_BEFORE
+
+                # Проверяем условие отправки
+                if alert_time <= now < start and summary not in calendar_sent_notifications:
+
+                    text = (
+                        f"📅 Встреча скоро начнется!\n"
+                        f"📝 Название: <b>{summary}</b>\n"
+                        f"⏰ Начало: {start.strftime('%H:%M')}\n"
+                        f"👥 Участники: {attendees_text}"
+                    )
+
+                    try:
+                        if os.path.exists(EVENT_PHOTO_PATH):
+                            file = FSInputFile(EVENT_PHOTO_PATH)
+
+                            await bot.send_photo(
+                                chat_id=TESTERS_CHANNEL_ID,
+                                photo=file,
+                                caption=text,
+                                parse_mode=ParseMode.HTML
+                            )
+                        else:
+                            await bot.send_message(
+                                chat_id=TESTERS_CHANNEL_ID,
+                                text=text,
+                                parse_mode=ParseMode.HTML
+                            )
+
+                        calendar_sent_notifications.add(summary)
+                        logger.info(f"Отправлено уведомление по календарю: {summary}")
+
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки уведомления: {e}")
+
+        await asyncio.sleep(CHECK_INTERVAL)
 # =======================
 # Запуск бота
 # =======================
