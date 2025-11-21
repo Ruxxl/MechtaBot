@@ -58,7 +58,7 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 JIRA_EMAIL = os.environ.get('JIRA_EMAIL')
 JIRA_API_TOKEN = os.environ.get('JIRA_API_TOKEN')
 JIRA_PROJECT_KEY = os.environ.get('JIRA_PROJECT_KEY', 'AS')
-JIRA_PARENT_KEY = os.environ.get('JIRA_PARENT_KEY', 'AS-1679')
+JIRA_PARENT_KEY = os.environ.get('JIRA_PARENT_KEY', 'AS-3047')
 JIRA_URL = os.environ.get('JIRA_URL', 'https://mechtamarket.atlassian.net')
 
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '998292747'))
