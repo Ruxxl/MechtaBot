@@ -13,6 +13,7 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
 from hr_topics import HR_TOPICS
+from photo_handler import handle_photo_message
 
 # =======================
 # Настройка окружения
@@ -89,41 +90,13 @@ async def hr_topic_detail(callback: CallbackQuery):
 # Обработка фото
 # =======================
 @dp.message(F.photo)
-async def handle_photo(message: Message):
-    caption = message.caption or ""
-    caption_lower = caption.lower()
-    logger.info(f"📸 Получено фото: {caption}")
-
-    if any(tag in caption_lower for tag in TRIGGER_TAGS):
-        await message.reply("🔄 Обнаружен тег, создаю задачу в Jira...")
-        file_id = message.photo[-1].file_id
-        file = await bot.get_file(file_id)
-        file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file.file_path}"
-
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(file_url, ssl=ssl_context) as resp:
-                if resp.status == 200:
-                    photo_bytes = await resp.read()
-                    success, issue_key = await create_jira_ticket(
-                        caption,
-                        message.from_user.full_name,
-                        file_bytes=photo_bytes,
-                        filename="telegram_photo.jpg",
-                        thread_prefix=get_thread_prefix(message)
-                    )
-                    if success:
-                        await message.reply(
-                            f"✅ Задача <b>{issue_key}</b> создана!\n"
-                            f"🔗 <a href='{JIRA_URL}/browse/{issue_key}'>{JIRA_URL}/browse/{issue_key}</a>"
-                        )
-                    else:
-                        await message.reply("❌ Ошибка при создании задачи в Jira.")
-                else:
-                    await message.reply("❌ Не удалось скачать фото с Telegram.")
+async def handle_photo(message: types.Message):
+    await handle_photo_message(
+        bot,
+        message,
+        trigger_tags=TRIGGER_TAGS,
+        create_jira_ticket=create_jira_ticket
+    )
 
 # =======================
 # Обработка текста
