@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import ssl
 import datetime
 from icalendar import Calendar
 from zoneinfo import ZoneInfo
