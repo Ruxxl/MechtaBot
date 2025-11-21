@@ -12,6 +12,35 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, FSInputFile
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+import logging
+from datetime import datetime
+
+class EmojiFormatter(logging.Formatter):
+    LEVEL_EMOJIS = {
+        logging.DEBUG: "🐞",
+        logging.INFO: "ℹ️",
+        logging.WARNING: "⚠️",
+        logging.ERROR: "❌",
+        logging.CRITICAL: "🔥"
+    }
+
+    def format(self, record):
+        time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        emoji = self.LEVEL_EMOJIS.get(record.levelno, "ℹ️")
+        message = record.getMessage()
+        return f"[{time}] {emoji} {record.levelname}: {message}"
+
+
+handler = logging.StreamHandler()
+handler.setFormatter(EmojiFormatter())
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[handler]
+)
+
+logger = logging.getLogger(__name__)
+
 
 load_dotenv()
 
