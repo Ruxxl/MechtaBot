@@ -225,7 +225,7 @@ async def create_jira_ticket(
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка каждые 60 секунд
-ALERT_BEFORE = timedelta(minutes=28)
+ALERT_BEFORE = timedelta(minutes=23)
 calendar_sent_notifications = set()
 
 EVENT_PHOTO_PATH = "event.jpg"  # путь к файлу относительно корня проекта
@@ -276,14 +276,14 @@ async def check_calendar_events():
                     )
 
                     try:
-                        import os
                         if os.path.exists(EVENT_PHOTO_PATH):
-                            await bot.send_photo(
-                                chat_id=TESTERS_CHANNEL_ID,
-                                photo=EVENT_PHOTO_PATH,  # передаем путь к локальному файлу как строку
-                                caption=text,
-                                parse_mode=ParseMode.HTML
-                            )
+                            with open(EVENT_PHOTO_PATH, "rb") as photo_file:
+                                await bot.send_photo(
+                                    chat_id=TESTERS_CHANNEL_ID,
+                                    photo=photo_file,
+                                    caption=text,
+                                    parse_mode=ParseMode.HTML
+                                )
                         else:
                             await bot.send_message(TESTERS_CHANNEL_ID, text)
 
@@ -291,6 +291,7 @@ async def check_calendar_events():
                         logger.info(f"Отправлено уведомление по календарю: {summary}")
                     except Exception as e:
                         logger.error(f"Ошибка отправки уведомления: {e}")
+
         await asyncio.sleep(CHECK_INTERVAL)
 # =======================
 # Запуск бота
