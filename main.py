@@ -12,6 +12,7 @@ from dateutil import tz
 import pathlib
 from aiogram.types import InputFile
 
+
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
@@ -281,7 +282,7 @@ async def check_calendar_events():
                                 chat_id=TESTERS_CHANNEL_ID,
                                 photo=EVENT_PHOTO_PATH,  # передаем путь к локальному файлу как строку
                                 caption=text,
-                                parse_mode=types.ParseMode.HTML
+                                parse_mode=ParseMode.HTML
                             )
                         else:
                             await bot.send_message(TESTERS_CHANNEL_ID, text)
