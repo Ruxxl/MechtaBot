@@ -224,28 +224,30 @@ async def create_jira_ticket(
 # =======================
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
-CHECK_INTERVAL = 60  # проверка каждые 60 секунд
-ALERT_BEFORE = timedelta(minutes=18)
-calendar_sent_notifications = set()
+CHECK_INTERVAL = 60
+ALERT_BEFORE = timedelta(minutes=14)
 
-EVENT_PHOTO_PATH = "event.jpg"  # локальный файл в корне проекта
+calendar_sent_notifications = set()
+EVENT_PHOTO_PATH = "event.jpg"   # фото в корне проекта
+
 
 async def fetch_calendar():
     async with aiohttp.ClientSession() as session:
         async with session.get(ICS_URL) as resp:
             if resp.status == 200:
                 data = await resp.text()
-                cal = Calendar.from_ical(data)
-                return cal
+                return Calendar.from_ical(data)
             else:
                 logger.error(f"Ошибка при получении ICS: {resp.status}")
                 return None
+
 
 async def check_calendar_events():
     while True:
         cal = await fetch_calendar()
         if cal:
             now = datetime.now(tz=tz.gettz("Asia/Almaty"))
+
             for component in cal.walk():
                 if component.name != "VEVENT":
                     continue
@@ -254,7 +256,7 @@ async def check_calendar_events():
                 summary = component.get('summary')
                 attendees = component.get('attendee')
 
-                # Формируем список участников
+                # Формирование списка участников
                 if attendees:
                     if isinstance(attendees, list):
                         attendees_list = [str(a) for a in attendees]
@@ -266,33 +268,39 @@ async def check_calendar_events():
 
                 alert_time = start - ALERT_BEFORE
 
-                # Проверяем, нужно ли отправить уведомление
+                # Проверяем условие отправки
                 if alert_time <= now < start and summary not in calendar_sent_notifications:
+
                     text = (
                         f"📅 Встреча скоро начнется!\n"
                         f"📝 Название: <b>{summary}</b>\n"
                         f"👥 Участники: {attendees_text}\n"
-                        f"⏰ Начало: {start.strftime('%H:%M %d.%m.%Y')}"
+                        f"⏰ Начало: {start.strftime('%H:%M')}"
                     )
 
                     try:
-                        import os
                         if os.path.exists(EVENT_PHOTO_PATH):
-                            # Открываем файл в бинарном режиме
-                            with open(EVENT_PHOTO_PATH, "rb") as photo_file:
-                                await bot.send_photo(
-                                    chat_id=TESTERS_CHANNEL_ID,
-                                    photo=FSInputFile("event.jpg"),  # путь к файлу
-                                    caption=text,
-                                    parse_mode=ParseMode.HTML
-                                )
+                            file = FSInputFile(EVENT_PHOTO_PATH)
+
+                            await bot.send_photo(
+                                chat_id=TESTERS_CHANNEL_ID,
+                                photo=file,
+                                caption=text,
+                                parse_mode=ParseMode.HTML
+                            )
                         else:
-                            await bot.send_message(TESTERS_CHANNEL_ID, text)
+                            await bot.send_message(
+                                chat_id=TESTERS_CHANNEL_ID,
+                                text=text,
+                                parse_mode=ParseMode.HTML
+                            )
 
                         calendar_sent_notifications.add(summary)
                         logger.info(f"Отправлено уведомление по календарю: {summary}")
+
                     except Exception as e:
                         logger.error(f"Ошибка отправки уведомления: {e}")
+
         await asyncio.sleep(CHECK_INTERVAL)
 # =======================
 # Запуск бота
