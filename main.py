@@ -6,6 +6,7 @@ import re
 import logging
 from dotenv import load_dotenv
 from typing import List, Tuple, Optional
+from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
