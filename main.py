@@ -14,6 +14,11 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 import logging
 from datetime import datetime
+import datetime as dt  # чтобы избежать конфликтов
+
+if isinstance(start, dt.date) and not isinstance(start, dt.datetime):
+    start = dt.datetime.combine(start, dt.time.min)
+
 
 class EmojiFormatter(logging.Formatter):
     LEVEL_EMOJIS = {
