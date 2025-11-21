@@ -3,18 +3,21 @@ import aiohttp
 import ssl
 import re
 import os
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
+import logging
 from dotenv import load_dotenv
 from icalendar import Calendar
 import datetime
-from aiogram.types import InputFile
-from aiogram.types import FSInputFile
-
+from zoneinfo import ZoneInfo  # Python 3.9+
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, FSInputFile
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 
 load_dotenv()
+
+# Логирование
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- Переменные окружения ---
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -31,12 +34,14 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 dp = Dispatcher()  # Aiogram v3+
 
 # --- Настройки календаря ---
-ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
-CHECK_INTERVAL = 60  # проверка календаря каждые 60 секунд
-NOTIFY_MINUTES = 5   # уведомление за 60 минут до события
+ICS_URL = os.environ.get(
+    'ICS_URL',
+    "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
+)
+CHECK_INTERVAL = int(os.environ.get('CHECK_INTERVAL', 60))  # проверка календаря каждые 60 секунд
+NOTIFY_MINUTES = int(os.environ.get('NOTIFY_MINUTES', 60))   # уведомление за 60 минут до события (по умолчанию 60)
 
 # Подписанные чаты на уведомления
-# Подписка на чат "Тестировщики" сразу
 subscribed_chats = {TESTERS_CHANNEL_ID}
 
 # --- HR темы ---
@@ -54,9 +59,9 @@ HR_TOPICS = {
         "text": "✈️ Инструкция по командировке..."
     },
     "uvolnenie": {
-    "title": "Обходной лист (увольнение)",
-    "text": "Добрый день, уважаемые коллеги!\n\nСо сегодняшнего дня запускаем в работу электронный обходной лист. Ниже описан порядок его обработки:\n\n1. HR-менеджер инициирует процесс увольнения сотрудника через Битрикс.\n2. Всем согласующим руководителям поступает уведомление в Битриксе.\n3. Руководители должны своевременно дать согласование.\n   - Часть руководителей отделов указана по умолчанию.\n   - Непосредственный руководитель сотрудника выбирается при необходимости.\n4. После согласования всеми участниками процесса сотруднику придёт уведомление на почту. В течение 2 часов он должен подписать обходной лист с помощью своей ЭЦП.\n\nУбедительно прошу всех участников оперативно согласовывать процесс в Битриксе, так как это влияет на своевременное подписание приказа сотрудником и не должно затягивать процедуру увольнения. В период отсутствия (отпуск, командировка и т.д.) будет автоматически назначаться сотрудник, выполняющий ваши обязанности.\n\nСпасибо за внимание! Хорошего дня!"
-  }
+        "title": "Обходной лист (увольнение)",
+        "text": "Добрый день, уважаемые коллеги!\n\nСо сегодняшнего дня запускаем в работу электронный обходной лист. Ниже описан порядок его обработки:\n\n1. HR-менеджер инициирует процесс увольнения сотрудника через Битрикс.\n2. Всем согласующим руководителям поступает уведомление в Битриксе.\n3. Руководители должны своевременно дать согласование.\n   - Часть руководителей отделов указана по умолчанию.\n   - Непосредственный руководитель сотрудника выбирается при необходимости.\n4. После согласования всеми участниками процесса сотруднику придёт уведомление на почту. В течение 2 часов он должен подписать обходной лист с помощью своей ЭЦП.\n\nУбедительно прошу всех участников оперативно согласовывать процесс в Битриксе, так как это влияет на своевременное подписание приказа сотрудником и не должно затягивать процедуру увольнения. В период отсутствия (отпуск, командировка и т.д.) будет автоматически назначаться сотрудник, выполняющий ваши обязанности.\n\nСпасибо за внимание! Хорошего дня!"
+    }
 }
 
 # --- Telegram команды ---
@@ -69,7 +74,7 @@ async def start(message: Message):
     subscribed_chats.add(message.chat.id)
     await message.reply("✅ Этот чат подписан на уведомления о событиях из календаря!")
 
-@dp.message(F.text.lower().contains("#hr"))
+@dp.message(F.text.contains("#hr", ignore_case=True))
 async def hr_menu(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=HR_TOPICS["attendance"]["title"], callback_data="hr_attendance")],
@@ -83,7 +88,7 @@ async def hr_menu(message: Message):
 async def hr_topic_detail(callback: CallbackQuery):
     topic_key = callback.data.split("_", 1)[1]
     text = HR_TOPICS.get(topic_key, {}).get("text", "❌ Неизвестная тема.")
-    await callback.message.answer(text)
+    await callback.message.answer(text, parse_mode="HTML")
     await callback.answer()
 
 # --- Jira обработка ---
@@ -104,7 +109,7 @@ def get_thread_prefix(message: Message) -> str:
 async def handle_photo(message: Message):
     caption = message.caption or ""
     caption_lower = caption.lower()
-    print(f"📸 Получено фото: {caption}")
+    logger.info("📸 Получено фото: %s", caption)
 
     if any(tag in caption_lower for tag in TRIGGER_TAGS):
         await message.reply("🔄 Обнаружен тег, создаю задачу в Jira...")
@@ -113,6 +118,7 @@ async def handle_photo(message: Message):
         file_path = file.file_path
         file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
 
+        # ssl context если нужен (аналогичный твоему): отключаем валидацию
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -142,7 +148,7 @@ async def handle_photo(message: Message):
 async def handle_text(message: Message):
     text = message.text or ""
     text_lower = text.lower()
-    print(f"✉️ Получено сообщение: {text}")
+    logger.info("✉️ Получено сообщение: %s", text)
 
     if CHECK_TAG in text_lower:
         await message.reply("✅ Бот работает и готов принимать задачи.")
@@ -198,7 +204,7 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
         async with session.post(create_url, json=payload, headers=headers, ssl=ssl_context) as response:
             if response.status != 201:
                 error = await response.text()
-                print(f"❌ Ошибка при создании задачи: {response.status} — {error}")
+                logger.error("❌ Ошибка при создании задачи: %s — %s", response.status, error)
                 return False, None
 
             result = await response.json()
@@ -214,59 +220,91 @@ async def create_jira_ticket(text: str, author: str, file_bytes: bytes = None, f
                 await bot.send_message(ADMIN_ID, notify_text)
                 await bot.send_message(TESTERS_CHANNEL_ID, notify_text, parse_mode="HTML")
             except Exception as e:
-                print(f"Не удалось отправить уведомления: {e}")
+                logger.exception("Не удалось отправить уведомления: %s", e)
 
+            # вложение файла в задачу (если есть)
             if file_bytes and filename:
                 attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
                 attach_headers = {"X-Atlassian-Token": "no-check"}
                 data = aiohttp.FormData()
+                # bytes передаём как (имя поля, содержимое, ...)
                 data.add_field('file', file_bytes, filename=filename, content_type='image/jpeg')
                 async with session.post(attach_url, data=data, headers=attach_headers, ssl=ssl_context) as attach_response:
                     if attach_response.status in (200, 201):
-                        print(f"📎 Фото прикреплено к задаче {issue_key}")
+                        logger.info("📎 Фото прикреплено к задаче %s", issue_key)
                     else:
                         error = await attach_response.text()
-                        print(f"❌ Ошибка при вложении: {attach_response.status} — {error}")
-                        return False, None
+                        logger.error("❌ Ошибка при вложении: %s — %s", attach_response.status, error)
+                        # не делаем return False чтобы задача осталась созданной — вложение не критично
 
             return True, issue_key
 
 # --- Функции уведомлений из календаря ---
 async def fetch_ics():
+    # ssl context — если нужно отключить валидацию (как в твоём примере)
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
     async with aiohttp.ClientSession() as session:
-        async with session.get(ICS_URL) as resp:
+        async with session.get(ICS_URL, ssl=ssl_context) as resp:
+            if resp.status != 200:
+                logger.error("Не удалось скачать .ics: %s", resp.status)
+                return None
             return await resp.text()
 
 async def parse_events():
     data = await fetch_ics()
+    if not data:
+        return []
+
     cal = Calendar.from_ical(data)
     events = []
+    local_tz = None
+    try:
+        local_tz = ZoneInfo("Asia/Almaty")
+    except Exception:
+        local_tz = datetime.timezone.utc
+
     for component in cal.walk():
         if component.name == "VEVENT":
             start = component.get('dtstart').dt
+            # Нормализуем дату/время
             if isinstance(start, datetime.date) and not isinstance(start, datetime.datetime):
                 start = datetime.datetime.combine(start, datetime.time.min)
             if start.tzinfo is None:
-                start = start.replace(tzinfo=datetime.timezone.utc)
+                # предполагаем локальную зону если нет tzinfo
+                try:
+                    start = start.replace(tzinfo=local_tz)
+                except Exception:
+                    start = start.replace(tzinfo=datetime.timezone.utc)
+            # приводим к UTC для корректного сравнения
+            start_utc = start.astimezone(datetime.timezone.utc)
 
             attendees = component.get('attendee')
             if attendees:
                 if not isinstance(attendees, list):
                     attendees = [attendees]
-                attendees_list = [a.params.get('CN', str(a)) for a in attendees]
+                attendees_list = []
+                for a in attendees:
+                    try:
+                        cn = a.params.get('CN')
+                        attendees_list.append(cn if cn else str(a))
+                    except Exception:
+                        attendees_list.append(str(a))
             else:
                 attendees_list = []
 
             events.append({
                 "summary": str(component.get('summary')),
-                "start": start,
+                "start": start_utc,
                 "attendees": attendees_list
             })
     return events
 
 async def notify_events():
     sent = set()
-    photo_path = "event.jpg"  # заранее подготовленная фотография
+    photo_path = os.environ.get('EVENT_PHOTO_PATH', "event.jpg")  # локальный файл для превью (опционально)
 
     while True:
         if not subscribed_chats:
@@ -280,37 +318,46 @@ async def notify_events():
             diff = (event["start"] - now).total_seconds()
             if 0 < diff <= NOTIFY_MINUTES * 60:
                 key = (event.get("summary", ""), event.get("start"))
-                if key not in sent:
-                    attendees_list = event.get("attendees")
-                    participants = ", ".join(attendees_list) if attendees_list else "нет участников"
+                if key in sent:
+                    continue
 
-                    text = (
-                        f"⏰ Встреча через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
-                        f"👥 Участники: {participants}"
-                    )
+                attendees_list = event.get("attendees")
+                participants = ", ".join(attendees_list) if attendees_list else "нет участников"
 
-                    photo = FSInputFile(photo_path)  # <-- используем FSInputFile для локального файла
+                text = (
+                    f"⏰ Встреча через {NOTIFY_MINUTES} минут: {event.get('summary', '')}\n"
+                    f"👥 Участники: {participants}"
+                )
 
-                    for chat_id in subscribed_chats:
-                        try:
+                # Отправляем фото (если файл есть) — создаём FSInputFile каждый раз
+                for chat_id in list(subscribed_chats):
+                    try:
+                        if os.path.isfile(photo_path):
                             await bot.send_photo(
                                 chat_id,
-                                photo=photo,
+                                photo=FSInputFile(photo_path),
                                 caption=text,
                                 parse_mode="HTML"
                             )
-                        except Exception as e:
-                            print(f"Ошибка при отправке фото: {e}")
-                            await bot.send_message(chat_id, text)
+                        else:
+                            await bot.send_message(chat_id, text, parse_mode="HTML")
+                    except Exception as e:
+                        logger.exception("Ошибка при отправке уведомления в %s: %s", chat_id, e)
+                        # пробуем отправить текстом
+                        try:
+                            await bot.send_message(chat_id, text, parse_mode="HTML")
+                        except Exception:
+                            logger.exception("Повторная отправка текстом не удалась для %s", chat_id)
 
-                    sent.add(key)
+                sent.add(key)
 
         await asyncio.sleep(CHECK_INTERVAL)
 
 # --- Запуск бота ---
 async def main():
+    # Запускаем таску уведомлений
     asyncio.create_task(notify_events())
-    print("🚀 Бот запущен и ждет сообщений")
+    logger.info("🚀 Бот запущен и ждет сообщений")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
