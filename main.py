@@ -225,7 +225,7 @@ from aiogram.types import InputFile
 
 ICS_URL = "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 CHECK_INTERVAL = 60  # проверка каждые 60 секунд
-ALERT_BEFORE = timedelta(minutes=5)
+ALERT_BEFORE = timedelta(minutes=15)
 calendar_sent_notifications = set()
 
 # путь к файлу event.jpg
