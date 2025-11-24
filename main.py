@@ -19,9 +19,7 @@ from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
 from text_handler import process_text_message
 from calendar_service import check_calendar_events
-from daily_reminder import daily_reminder
-
-
+from daily_reminder import start_reminders
 
 # =======================
 # Настройка окружения
@@ -258,9 +256,10 @@ async def main():
     # Если check_calendar_events ожидает (bot, channel_id) — передаём
     asyncio.create_task(run_background_task(check_calendar_events, bot, TESTERS_CHANNEL_ID, interval=60))
     # Запуск ежедневного напоминания
-    asyncio.create_task(daily_reminder(bot, TESTERS_CHANNEL_ID))
+    await start_reminders(bot, TESTERS_CHANNEL_ID)
 
-    # Запуск polling
+
+# Запуск polling
     await dp.start_polling(bot)
 
 
