@@ -1,3 +1,6 @@
+# Refactored main.py
+# Улучшенная структура, безопасные фильтры, обработка фоновой задачи и логирование.
+
 import asyncio
 import aiohttp
 import ssl
@@ -6,7 +9,6 @@ import re
 import logging
 from dotenv import load_dotenv
 from typing import List, Tuple, Optional
-
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -38,34 +40,45 @@ THREAD_PREFIXES = {1701: '[Back]', 1703: '[Front]'}
 
 
 # =======================
-# Логирование
+# Логирование (встроенное)
 # =======================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-logger = logging.getLogger(__name__)
+def setup_logger():
+    fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    logging.basicConfig(level=logging.INFO, format=fmt)
+    return logging.getLogger("bot")
+
+logger = setup_logger()
 
 
 # =======================
 # Инициализация бота
 # =======================
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+# Dispatcher без параметров — современный стиль
 dp = Dispatcher()
 
 
 # =======================
 # Утилиты
 # =======================
+
 def clean_summary(text: str, tags: List[str]) -> str:
     """Удаляет заданные теги из текста"""
     for tag in tags:
         text = re.sub(re.escape(tag), '', text, flags=re.IGNORECASE)
     return ' '.join(text.split()).strip()
 
+
 def get_thread_prefix(message: Message) -> str:
     """Возвращает префикс подзадачи по thread_id"""
-    return THREAD_PREFIXES.get(message.message_thread_id, '')
+    return THREAD_PREFIXES.get(getattr(message, 'message_thread_id', None), '')
+
+
+async def send_safe(chat_id: int, text: str):
+    try:
+        await bot.send_message(chat_id, text)
+    except Exception as e:
+        logger.error("Не удалось отправить сообщение %s: %s", chat_id, e)
 
 
 # =======================
@@ -79,7 +92,7 @@ async def get_chat_id(message: Message):
 # =======================
 # HR Меню
 # =======================
-@dp.message(F.text.lower().contains("#hr"))
+@dp.message(F.text.func(lambda t: bool(t) and "#hr" in t.lower()))
 async def hr_menu(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=HR_TOPICS["attendance"]["title"], callback_data="hr_attendance")],
@@ -89,10 +102,12 @@ async def hr_menu(message: Message):
     ])
     await message.reply("📋 Выберите интересующую тему:", reply_markup=kb)
 
+
 @dp.callback_query(F.data.startswith("hr_"))
 async def hr_topic_detail(callback: CallbackQuery):
     topic_key = callback.data.split("_", 1)[1]
     text = HR_TOPICS.get(topic_key, {}).get("text", "❌ Неизвестная тема.")
+    # Отвечаем в том же чате
     await callback.message.answer(text)
     await callback.answer()
 
@@ -102,17 +117,20 @@ async def hr_topic_detail(callback: CallbackQuery):
 # =======================
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
+    # передаём create_jira_ticket как callback
     await handle_photo_message(
-        bot,
-        message,
+        bot=bot,
+        message=message,
         trigger_tags=TRIGGER_TAGS,
         create_jira_ticket=create_jira_ticket
     )
 
+
 # =======================
 # Обработка текста
 # =======================
-@dp.message(F.text)
+# Исключаем команды (начинающиеся с '/') чтобы не мешать стандартным командам
+@dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message):
     await process_text_message(
         message=message,
@@ -129,16 +147,17 @@ async def handle_text(message: Message):
 # Создание задачи Jira
 # =======================
 async def create_jira_ticket(
-    text: str,
-    author: str,
-    file_bytes: Optional[bytes] = None,
-    filename: Optional[str] = None,
-    thread_prefix: str = ""
+        text: str,
+        author: str,
+        file_bytes: Optional[bytes] = None,
+        filename: Optional[str] = None,
+        thread_prefix: str = ""
 ) -> Tuple[bool, Optional[str]]:
 
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
     cleaned_text = clean_summary(text, TRIGGER_TAGS)
-    summary = f"[Telegram] {cleaned_text}".strip()[:255]
+    # Включаем префикс, если он передан
+    summary = f"{thread_prefix} [Telegram] {cleaned_text}".strip()[:255]
 
     payload = {
         "fields": {
@@ -157,21 +176,26 @@ async def create_jira_ticket(
         }
     }
 
+    # Если нужно отключить верификацию (в dev/railway), делаем контекст
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
     async with aiohttp.ClientSession(auth=auth) as session:
         # Создание задачи
-        async with session.post(f"{JIRA_URL}/rest/api/3/issue", json=payload, ssl=ssl_context) as resp:
-            if resp.status != 201:
-                error = await resp.text()
-                logger.error(f"❌ Ошибка при создании задачи: {resp.status} — {error}")
-                return False, None
+        try:
+            async with session.post(f"{JIRA_URL}/rest/api/3/issue", json=payload, ssl=ssl_context) as resp:
+                if resp.status != 201:
+                    error = await resp.text()
+                    logger.error("❌ Ошибка при создании задачи: %s — %s", resp.status, error)
+                    return False, None
 
-            result = await resp.json()
-            issue_key = result["key"]
-            logger.info(f"✅ Задача {issue_key} создана")
+                result = await resp.json()
+                issue_key = result.get("key")
+                logger.info("✅ Задача %s создана", issue_key)
+        except Exception as e:
+            logger.exception("Ошибка при запросе к Jira: %s", e)
+            return False, None
 
         # Формирование уведомления
         notify_text = (
@@ -182,42 +206,68 @@ async def create_jira_ticket(
             f"📝 <b>Описание:</b>\n{text}"
         )
 
-        # Отправка уведомлений
-        try:
-            await bot.send_message(ADMIN_ID, notify_text)
-        except Exception as e:
-            logger.error(f"Не удалось отправить уведомление админу: {e}")
+        # Отправка уведомлений безопасно
+        await send_safe(ADMIN_ID, notify_text)
+        await send_safe(TESTERS_CHANNEL_ID, notify_text)
 
-        try:
-            await bot.send_message(TESTERS_CHANNEL_ID, notify_text)
-        except Exception as e:
-            logger.error(f"Не удалось отправить уведомление в канал: {e}")
-
-        # Прикрепление файла
+        # Прикрепление файла (если есть)
         if file_bytes and filename:
             attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
             attach_headers = {"X-Atlassian-Token": "no-check"}
             data = aiohttp.FormData()
             data.add_field('file', file_bytes, filename=filename, content_type='image/jpeg')
 
-            async with session.post(attach_url, data=data, headers=attach_headers, ssl=ssl_context) as attach_resp:
-                if attach_resp.status in (200, 201):
-                    logger.info(f"📎 Фото прикреплено к задаче {issue_key}")
-                else:
-                    error = await attach_resp.text()
-                    logger.error(f"❌ Ошибка при вложении: {attach_resp.status} — {error}")
-                    return False, None
+            try:
+                async with session.post(attach_url, data=data, headers=attach_headers, ssl=ssl_context) as attach_resp:
+                    if attach_resp.status in (200, 201):
+                        logger.info("📎 Фото прикреплено к задаче %s", issue_key)
+                    else:
+                        error = await attach_resp.text()
+                        logger.error("❌ Ошибка при вложении: %s — %s", attach_resp.status, error)
+                        return False, None
+            except Exception as e:
+                logger.exception("Ошибка при прикреплении файла: %s", e)
+                return False, None
 
     return True, issue_key
+
+
+# =======================
+# Фоновая задача — биндер
+# =======================
+async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
+    """Запускает корутину в цикле с обработкой исключений.
+    coro_func — функция, принимающая (bot, channel_id) или другие аргументы в зависимости от реализации.
+    interval — пауза между вызовами в секундах.
+    """
+    while True:
+        try:
+            await coro_func(*args, **kwargs)
+        except asyncio.CancelledError:
+            logger.info("Фоновая задача отменена")
+            raise
+        except Exception as e:
+            logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
+        await asyncio.sleep(interval)
 
 
 # =======================
 # Запуск бота
 # =======================
 async def main():
-    logger.info("🚀 Бот запущен и ждет сообщений")
-    asyncio.create_task(check_calendar_events(bot, TESTERS_CHANNEL_ID))
+    logger.info("🚀 Бот стартует")
+    # Фоновые задачи
+    # Если check_calendar_events ожидает (bot, channel_id) — передаём
+    asyncio.create_task(run_background_task(check_calendar_events, bot, TESTERS_CHANNEL_ID, interval=60))
+
+    # Запуск polling
     await dp.start_polling(bot)
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Остановка по Ctrl+C")
+    except Exception:
+        logger.exception("Критическая ошибка при запуске")
