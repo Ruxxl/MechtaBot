@@ -299,10 +299,9 @@ async def check_calendar_events():
                     attendees_text = "не указаны"
 
                 alert_time = start - ALERT_BEFORE
+                event_key = (summary, start.date())  # уникальность на каждый день
 
-                # Проверяем условие отправки
-                if alert_time <= now < start and summary not in calendar_sent_notifications:
-
+                if alert_time <= now < start and event_key not in calendar_sent_notifications:
                     text = (
                         f"📅 Встреча скоро начнется!\n"
                         f"📝 Название: <b>{summary}</b>\n"
