@@ -6,11 +6,6 @@ import re
 import logging
 from dotenv import load_dotenv
 from typing import List, Tuple, Optional
-from icalendar import Calendar
-from datetime import datetime, timedelta
-from dateutil import tz
-import pathlib
-from aiogram.types import FSInputFile  # <- правильный InputFile для локальных файлов
 
 
 from aiogram import Bot, Dispatcher, F, types
@@ -41,6 +36,7 @@ TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
 THREAD_PREFIXES = {1701: '[Back]', 1703: '[Front]'}
 
+
 # =======================
 # Логирование
 # =======================
@@ -50,11 +46,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # =======================
 # Инициализация бота
 # =======================
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
+
 
 # =======================
 # Утилиты
@@ -69,12 +67,14 @@ def get_thread_prefix(message: Message) -> str:
     """Возвращает префикс подзадачи по thread_id"""
     return THREAD_PREFIXES.get(message.message_thread_id, '')
 
+
 # =======================
 # Команды
 # =======================
 @dp.message(F.text == "/getid")
 async def get_chat_id(message: Message):
     await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
+
 
 # =======================
 # HR Меню
@@ -95,6 +95,7 @@ async def hr_topic_detail(callback: CallbackQuery):
     text = HR_TOPICS.get(topic_key, {}).get("text", "❌ Неизвестная тема.")
     await callback.message.answer(text)
     await callback.answer()
+
 
 # =======================
 # Обработка фото
@@ -209,9 +210,6 @@ async def create_jira_ticket(
 
     return True, issue_key
 
-# =======================
-# Уведомления по календарю
-# =======================
 
 # =======================
 # Запуск бота
