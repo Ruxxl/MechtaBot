@@ -112,7 +112,7 @@ async def check_calendar_events(bot, chat_id):
                 alert_time = start - ALERT_BEFORE
                 event_key = (summary, start.date())
 
-                if alert_time <= now < start and event_key not in calendar_sent_notifications:
+                if now >= alert_time:
                     text = (
                         f"📅 Встреча скоро начнется!\n"
                         f"📝 Название: <b>{summary}</b>\n"

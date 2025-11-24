@@ -237,10 +237,6 @@ async def create_jira_ticket(
 # Фоновая задача — биндер
 # =======================
 async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
-    """Запускает корутину в цикле с обработкой исключений.
-    coro_func — функция, принимающая (bot, channel_id) или другие аргументы в зависимости от реализации.
-    interval — пауза между вызовами в секундах.
-    """
     while True:
         try:
             await coro_func(*args, **kwargs)
