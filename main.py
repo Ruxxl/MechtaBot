@@ -20,6 +20,8 @@ from aiogram.client.default import DefaultBotProperties
 
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
+from text_handler import process_text_message
+
 
 # =======================
 # Настройка окружения
@@ -81,7 +83,8 @@ async def hr_menu(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=HR_TOPICS["attendance"]["title"], callback_data="hr_attendance")],
         [InlineKeyboardButton(text=HR_TOPICS["bs_order"]["title"], callback_data="hr_bs_order")],
-        [InlineKeyboardButton(text=HR_TOPICS["business_trip"]["title"], callback_data="hr_business_trip")]
+        [InlineKeyboardButton(text=HR_TOPICS["business_trip"]["title"], callback_data="hr_business_trip")],
+        [InlineKeyboardButton(text=HR_TOPICS["uvolnenie"]["title"], callback_data="uvolnenie")]
     ])
     await message.reply("📋 Выберите интересующую тему:", reply_markup=kb)
 
@@ -109,30 +112,16 @@ async def handle_photo(message: types.Message):
 # =======================
 @dp.message(F.text)
 async def handle_text(message: Message):
-    text = message.text or ""
-    text_lower = text.lower()
-    logger.info(f"✉️ Получено сообщение: {text}")
+    await process_text_message(
+        message=message,
+        TRIGGER_TAGS=TRIGGER_TAGS,
+        CHECK_TAG=CHECK_TAG,
+        THREAD_PREFIXES=THREAD_PREFIXES,
+        create_jira_ticket=create_jira_ticket,
+        bot=bot,
+        JIRA_URL=JIRA_URL
+    )
 
-    if CHECK_TAG in text_lower:
-        await message.reply("✅ Бот работает и готов принимать задачи.")
-        return
-
-    if any(tag in text_lower for tag in TRIGGER_TAGS):
-        await message.reply("🔄 Обнаружен тег, создаю задачу в Jira...")
-        success, issue_key = await create_jira_ticket(
-            text,
-            message.from_user.full_name,
-            file_bytes=None,
-            filename=None,
-            thread_prefix=get_thread_prefix(message)
-        )
-        if success:
-            await message.reply(
-                f"✅ Задача <b>{issue_key}</b> создана!\n"
-                f"🔗 <a href='{JIRA_URL}/browse/{issue_key}'>{JIRA_URL}/browse/{issue_key}</a>"
-            )
-        else:
-            await message.reply("❌ Ошибка при создании задачи в Jira.")
 
 # =======================
 # Создание задачи Jira
