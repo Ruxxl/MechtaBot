@@ -23,6 +23,7 @@ ALERT_BEFORE = timedelta(minutes=2)
 
 EVENT_PHOTO_PATH = "event.jpg"
 
+
 # Словарь замен email → @mention
 MENTION_MAP = {
     "ruslan.issin@mechta.kz": " @ISNVO ",
