@@ -21,6 +21,7 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 
 
+
 # =======================
 # Настройка окружения
 # =======================

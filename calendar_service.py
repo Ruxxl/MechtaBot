@@ -19,7 +19,7 @@ ICS_URL = os.getenv(
     "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
 )
 CHECK_INTERVAL = int(os.getenv("CALENDAR_CHECK_INTERVAL", 30))
-ALERT_BEFORE = timedelta(minutes=40)
+ALERT_BEFORE = timedelta(minutes=2)
 
 EVENT_PHOTO_PATH = "event.jpg"
 
