@@ -98,7 +98,7 @@ async def hr_menu(message: Message):
         [InlineKeyboardButton(text=HR_TOPICS["attendance"]["title"], callback_data="hr_attendance")],
         [InlineKeyboardButton(text=HR_TOPICS["bs_order"]["title"], callback_data="hr_bs_order")],
         [InlineKeyboardButton(text=HR_TOPICS["business_trip"]["title"], callback_data="hr_business_trip")],
-        [InlineKeyboardButton(text=HR_TOPICS["uvolnenie"]["title"], callback_data="uvolnenie")]
+        [InlineKeyboardButton(text=HR_TOPICS["uvolnenie"]["title"], callback_data="hr_uvolnenie")]
     ])
     await message.reply("📋 Выберите интересующую тему:", reply_markup=kb)
 
