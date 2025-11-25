@@ -258,8 +258,52 @@ async def main():
     # Запуск ежедневного напоминания
     await start_reminders(bot, TESTERS_CHANNEL_ID)
 
+@dp.callback_query(F.data == "create_bug_from_photo")
+async def create_bug_cb(callback: CallbackQuery):
+    await callback.answer()
 
-# Запуск polling
+    photo_cache = callback.bot.get("photo_cache", {})
+    photo_bytes = photo_cache.get(callback.message.message_id)
+
+    if not photo_bytes:
+        return await callback.message.answer("❌ Не нашёл фото для создания задачи.")
+
+    await callback.message.answer("Создаю баг…")
+
+    ok, issue_key = await create_jira_ticket(
+        "Авто-баг по скриншоту",
+        callback.from_user.full_name,
+        file_bytes=photo_bytes,
+        filename="error.jpg"
+    )
+
+    if ok:
+        await callback.message.answer(f"✅ Баг создан: {issue_key}")
+    else:
+        await callback.message.answer("❌ Ошибка при создании задачи.")
+
+
+
+@dp.callback_query(F.data == "search_similar_from_photo")
+async def search_similar_cb(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.answer("Ищу похожие баги…")
+    # тут делаешь JQL-поиск по распознанному тексту
+
+
+@dp.callback_query(F.data == "error_help")
+async def error_help_cb(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.answer("Справочник ошибок:\n\n"
+                                  "500 – ошибка сервера\n"
+                                  "400 – неверный запрос\n"
+                                  "404 – не найдено\n"
+                                  "403 – нет доступа\n"
+                                  "Timeout – падение сети")
+
+
+
+    # Запуск polling
     await dp.start_polling(bot)
 
 
