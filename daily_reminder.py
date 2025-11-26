@@ -2,12 +2,27 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from dateutil import tz
+
 from aiogram.enums import ParseMode
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 logger = logging.getLogger(__name__)
 
+# =============================
+# Кнопка Clockster
+# =============================
+def get_clockster_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📝 Отметиться в Clockster", url="clockster://")]
+        ]
+    )
+
+# =============================
+# Утреннее уведомление
+# =============================
 async def daily_reminder(bot, TESTERS_CHANNEL_ID):
-    """Ежедневное уведомление в 08:00 по Астане."""
+    """Ежедневное уведомление в 08:05 по Астане."""
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -26,19 +41,23 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
         )
 
         try:
-            await bot.send_message(TESTERS_CHANNEL_ID, text, parse_mode=ParseMode.HTML)
-            logger.info("✅ Отправлено ежедневное уведомление")
+            await bot.send_message(
+                TESTERS_CHANNEL_ID,
+                text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_clockster_keyboard()  # ⬅️ Вот кнопка
+            )
+            logger.info("✅ Отправлено ежедневное утреннее уведомление")
         except Exception as e:
             logger.error(f"Ошибка отправки ежедневного уведомления: {e}")
 
-        # Ждем минуту, чтобы случайно не повторилось
         await asyncio.sleep(60)
 
-# ----------------------------
-# Новая функция для вечернего уведомления
-# ----------------------------
+# =============================
+# Вечернее уведомление
+# =============================
 async def evening_reminder(bot, TESTERS_CHANNEL_ID):
-    """Ежедневное вечернее уведомление в 17:01 по Алматы."""
+    """Ежедневное вечернее уведомление в 17:01 по Астане."""
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -53,17 +72,25 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
         text = (
             "🌇 Добрый вечер, коллеги!\n\n"
             "Не забудьте отметиться в <b>Clockster</b>.\n"
-            "Хорошо отдохните после работы и наберитесь сил! 😎"
+            "Хорошего вечера и приятного отдыха! 😎"
         )
 
         try:
-            await bot.send_message(TESTERS_CHANNEL_ID, text, parse_mode=ParseMode.HTML)
+            await bot.send_message(
+                TESTERS_CHANNEL_ID,
+                text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_clockster_keyboard()  # ⬅️ Кнопка и тут
+            )
             logger.info("✅ Отправлено вечернее уведомление")
         except Exception as e:
             logger.error(f"Ошибка отправки вечернего уведомления: {e}")
 
-        await asyncio.sleep(60)  # Чтобы случайно не повторилось
+        await asyncio.sleep(60)
 
+# =============================
+# Запуск двух напоминаний
+# =============================
 async def start_reminders(bot, TESTERS_CHANNEL_ID):
     asyncio.create_task(daily_reminder(bot, TESTERS_CHANNEL_ID))
     asyncio.create_task(evening_reminder(bot, TESTERS_CHANNEL_ID))
