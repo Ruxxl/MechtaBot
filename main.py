@@ -232,7 +232,7 @@ async def create_jira_ticket(
     return True, issue_key
 
 # =======================
-# Проверка релиза Jira каждые 30 минут
+# Проверка релиза Jira каждые 30 минут с фото
 # =======================
 async def jira_release_check():
     global notified_releases
@@ -247,7 +247,7 @@ async def jira_release_check():
     try:
         async with aiohttp.ClientSession(auth=auth) as session:
             # Получаем список релизов
-            async with session.get(url) as resp:
+            async with session.get(url, auth=auth) as resp:
                 logger.info(f"Ответ Jira (versions): {resp.status}")
                 if resp.status != 200:
                     logger.error(f"Ошибка получения релизов: {resp.status}")
@@ -278,7 +278,7 @@ async def jira_release_check():
             params = {"jql": jql, "maxResults": 100}
 
             async with aiohttp.ClientSession(auth=auth) as session:
-                async with session.get(search_url, params=params) as resp:
+                async with session.get(search_url, params=params, auth=auth) as resp:
                     logger.info(f"Ответ Jira (search): {resp.status}")
                     if resp.status != 200:
                         logger.error(f"Ошибка получения задач для релиза: {resp.status}")
@@ -298,7 +298,7 @@ async def jira_release_check():
             if not tasks_text:
                 tasks_text = "В релизе нет задач."
 
-            # Уведомление в Telegram
+            # Уведомление в Telegram с фото
             message = (
                 f"🎉 Релиз <b>{RELEASE_NAME}</b> выпущен!\n\n"
                 f"📝 <b>Список задач:</b>\n"
@@ -306,11 +306,20 @@ async def jira_release_check():
                 f"🔗 <a href='{JIRA_URL}/projects/{JIRA_PROJECT_KEY}/versions'>Все версии</a>"
             )
 
-            await bot.send_message(TESTERS_CHANNEL_ID, message)
-            logger.info(f"Уведомление отправлено: {RELEASE_NAME}")
+            try:
+                if os.path.exists("release.jpg"):
+                    photo = types.FSInputFile("release.jpg")
+                    await bot.send_photo(TESTERS_CHANNEL_ID, photo=photo, caption=message, parse_mode=ParseMode.HTML)
+                else:
+                    await bot.send_message(TESTERS_CHANNEL_ID, message, parse_mode=ParseMode.HTML)
+
+                logger.info(f"Уведомление о релизе отправлено с фото: {RELEASE_NAME}")
+            except Exception as e:
+                logger.exception(f"Ошибка отправки уведомления о релизе: {e}")
 
     except Exception as e:
         logger.exception("Ошибка в jira_release_check: %s", e)
+
 
 
 
