@@ -262,7 +262,7 @@ async def jira_release_check():
             notified_releases.add(RELEASE_NAME)
 
             # ==== Получаем задачи по имени версии ====
-            search_url = f"{JIRA_URL}/rest/api/3/search"
+            search_url = f"{JIRA_URL}/rest/api/3/search/jql"
             jql = f"fixVersion='{RELEASE_NAME}' ORDER BY key ASC"
             params = {"jql": jql, "maxResults": 100}
 
