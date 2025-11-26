@@ -62,7 +62,7 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
 
     while True:
         now = datetime.now(timezone)
-        target_time = now.replace(hour=17, minute=1, second=0, microsecond=0)
+        target_time = now.replace(hour=17, minute=5, second=0, microsecond=0)
         if now >= target_time:
             target_time += timedelta(days=1)
 
