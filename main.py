@@ -241,86 +241,78 @@ async def jira_release_check():
 
     logger.info("Проверяю релизы Jira...")
 
-    url = f"{JIRA_URL}/rest/api/2/project/{JIRA_PROJECT_KEY}/versions"
+    url_versions = f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
 
     try:
         async with aiohttp.ClientSession(auth=auth) as session:
-            # Получаем список релизов
-            async with session.get(url, auth=auth) as resp:
-                logger.info(f"Ответ Jira (versions): {resp.status}")
+            async with session.get(url_versions) as resp:
                 if resp.status != 200:
-                    logger.error(f"Ошибка получения релизов: {resp.status}")
+                    logger.error(f"Ошибка получения версий Jira: {resp.status}")
                     return
-
                 versions = await resp.json()
 
-        RELEASE_NAME = "[WEB] Релиз 3.5"   # ← поменяй на свой релиз
-        logger.info(f"Ищу релиз: {RELEASE_NAME}")
-
+        RELEASE_NAME = "[WEB] Релиз 3.5"   # <-- укажи свой релиз
         release = next((r for r in versions if r["name"] == RELEASE_NAME), None)
-
         if not release:
             logger.warning(f"Релиз '{RELEASE_NAME}' не найден")
             return
 
-        logger.info(f"Статус релиза: released={release.get('released')}")
-
-        # === Если релиз выпущен — собираем задачи ===
         if release.get("released") and RELEASE_NAME not in notified_releases:
             notified_releases.add(RELEASE_NAME)
 
-            release_id = release["id"]
-
-            # Формируем запрос задач
-            search_url = f"{JIRA_URL}/rest/api/3/search/jql"
-            jql = f"fixVersion='{RELEASE_NAME}'"
+            # ==== Получаем задачи по имени версии ====
+            search_url = f"{JIRA_URL}/rest/api/3/search"
+            jql = f"fixVersion='{RELEASE_NAME}' ORDER BY key ASC"
             params = {"jql": jql, "maxResults": 100}
 
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
             async with aiohttp.ClientSession(auth=auth) as session:
-                async with session.get(search_url, params=params) as resp:
+                async with session.get(search_url, params=params, ssl=ssl_context) as resp:
                     text = await resp.text()
                     logger.info(f"Ответ Jira (search): {resp.status} — {text}")
                     if resp.status != 200:
                         logger.error(f"Ошибка получения задач для релиза: {resp.status} — {text}")
                         return
-            
+
                     data = await resp.json()
                     issues = data.get("issues", [])
-            
-            # Формируем список задач
-            tasks_text = ""
-            for issue in issues:
-                key = issue.get("key")  # ключ задачи
-                fields = issue.get("fields") or {}
-                summary = fields.get("summary") or "Без названия"
-                link = f"{JIRA_URL}/browse/{key}"
-                tasks_text += f"• <a href='{link}'>{key}</a> — {summary}\n"
-            
-            if not tasks_text:
-                tasks_text = "В релизе нет задач."
 
-            # Уведомление в Telegram с фото
-            message = (
+            # ==== Формируем текст уведомления ====
+            if not issues:
+                tasks_text = "В релизе нет задач."
+            else:
+                tasks_text = ""
+                for issue in issues:
+                    key = issue.get("key", "None")
+                    summary = issue.get("fields", {}).get("summary", "Без названия")
+                    link = f"{JIRA_URL}/browse/{key}"
+                    tasks_text += f"• <a href='{link}'>{key}</a> — {summary}\n"
+
+            message_text = (
                 f"🎉 Релиз <b>{RELEASE_NAME}</b> выпущен!\n\n"
                 f"📝 <b>Список задач:</b>\n"
                 f"{tasks_text}\n"
                 f"🔗 <a href='{JIRA_URL}/projects/{JIRA_PROJECT_KEY}/versions'>Все версии</a>"
             )
 
+            # ==== Отправка уведомления с фото ====
             try:
                 if os.path.exists("release.jpg"):
                     photo = types.FSInputFile("release.jpg")
-                    await bot.send_photo(TESTERS_CHANNEL_ID, photo=photo, caption=message, parse_mode=ParseMode.HTML)
+                    await bot.send_photo(TESTERS_CHANNEL_ID, photo=photo, caption=message_text, parse_mode=ParseMode.HTML)
                 else:
-                    await bot.send_message(TESTERS_CHANNEL_ID, message, parse_mode=ParseMode.HTML)
-
-                logger.info(f"Уведомление о релизе отправлено с фото: {RELEASE_NAME}")
+                    await bot.send_message(TESTERS_CHANNEL_ID, message_text, parse_mode=ParseMode.HTML)
+                logger.info(f"Уведомление о релизе '{RELEASE_NAME}' отправлено")
             except Exception as e:
                 logger.exception(f"Ошибка отправки уведомления о релизе: {e}")
 
     except Exception as e:
-        logger.exception("Ошибка в jira_release_check: %s", e)
+        logger.exception(f"Ошибка в jira_release_check: {e}")
+
 
 
 
