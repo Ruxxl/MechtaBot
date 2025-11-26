@@ -319,7 +319,7 @@ async def main():
 
     # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
     try:
-        asyncio.create_task(run_background_task(jira_release_check, interval=1800))
+        asyncio.create_task(run_background_task(jira_release_check, interval=10))
         logger.info("Запущен мониторинг релизов Jira")
     except Exception as e:
         logger.exception("Не удалось запустить мониторинг релизов Jira: %s", e)
