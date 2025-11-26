@@ -231,21 +231,6 @@ async def create_jira_ticket(
 
     return True, issue_key
 
-
-# =======================
-# Фоновая задача — биндер
-# =======================
-async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
-    while True:
-        try:
-            await coro_func(*args, **kwargs)
-        except asyncio.CancelledError:
-            logger.info("Фоновая задача отменена")
-            raise
-        except Exception as e:
-            logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
-        await asyncio.sleep(interval)
-
 # =======================
 # Проверка релиза Jira каждые 30 минут
 # =======================
@@ -296,6 +281,23 @@ async def jira_release_check():
 
 
 # =======================
+# Фоновая задача — биндер
+# =======================
+async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
+    while True:
+        try:
+            await coro_func(*args, **kwargs)
+        except asyncio.CancelledError:
+            logger.info("Фоновая задача отменена")
+            raise
+        except Exception as e:
+            logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
+        await asyncio.sleep(interval)
+
+
+
+
+# =======================
 # Запуск бота
 # =======================
 async def main():
@@ -314,6 +316,14 @@ async def main():
         logger.info("Запущен start_reminders в фоне")
     except Exception as e:
         logger.exception("Не удалось запустить start_reminders: %s", e)
+
+    # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
+    try:
+        asyncio.create_task(run_background_task(jira_release_check, interval=1800))
+        logger.info("Запущен мониторинг релизов Jira")
+    except Exception as e:
+        logger.exception("Не удалось запустить мониторинг релизов Jira: %s", e)
+
 
     # 3) Теперь запускаем polling — он держит главный цикл
     logger.info("Запуск polling...")
