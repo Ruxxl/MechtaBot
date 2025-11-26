@@ -235,13 +235,11 @@ async def create_jira_ticket(
 # Проверка релиза Jira каждые 30 минут
 # =======================
 async def jira_release_check():
-    """
-    Проверяет релизы проекта Jira.
-    Если релиз выпущен (released=True) — отправляет уведомление.
-    """
     global notified_releases
     if "notified_releases" not in globals():
         notified_releases = set()
+
+    logger.info("Проверяю релизы Jira...")
 
     url = f"{JIRA_URL}/rest/api/2/project/{JIRA_PROJECT_KEY}/versions"
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
@@ -249,22 +247,25 @@ async def jira_release_check():
     try:
         async with aiohttp.ClientSession(auth=auth) as session:
             async with session.get(url) as resp:
+                logger.info(f"Ответ Jira: {resp.status}")
+
                 if resp.status != 200:
                     logger.error(f"Ошибка получения релизов из Jira: {resp.status}")
                     return
 
                 versions = await resp.json()
 
-        # Ищем нужный релиз по имени
-        RELEASE_NAME = "Тестовый релиз"  # <-- Поменяй на свой релиз
+        RELEASE_NAME = "Тестовый релиз"  # ← здесь поставь правильное имя версии
+        logger.info(f"Ищу релиз: {RELEASE_NAME}")
 
         release = next((r for r in versions if r["name"] == RELEASE_NAME), None)
 
         if not release:
-            logger.warning(f"Релиз {RELEASE_NAME} не найден в Jira")
+            logger.warning(f"Релиз '{RELEASE_NAME}' не найден")
             return
 
-        # Проверяем статус
+        logger.info(f"release.released = {release.get('released')}")
+
         if release.get("released") and RELEASE_NAME not in notified_releases:
             notified_releases.add(RELEASE_NAME)
 
@@ -273,11 +274,10 @@ async def jira_release_check():
                 f"🎉 Релиз <b>{RELEASE_NAME}</b> выпущен!\n"
                 f"🔗 <a href='{JIRA_URL}/projects/{JIRA_PROJECT_KEY}/versions'>Открыть в Jira</a>"
             )
-            logger.info(f"Отправлено уведомление о релизе: {RELEASE_NAME}")
+            logger.info(f"Уведомление отправлено: {RELEASE_NAME}")
 
     except Exception as e:
-        logger.exception(f"Ошибка в jira_release_check: {e}")
-
+        logger.exception("Ошибка в jira_release_check: %s", e)
 
 
 # =======================
