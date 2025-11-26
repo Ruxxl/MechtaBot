@@ -246,16 +246,16 @@ async def jira_release_check():
 
     try:
         async with aiohttp.ClientSession(auth=auth) as session:
+            # Получаем список релизов
             async with session.get(url) as resp:
-                logger.info(f"Ответ Jira: {resp.status}")
-
+                logger.info(f"Ответ Jira (versions): {resp.status}")
                 if resp.status != 200:
-                    logger.error(f"Ошибка получения релизов из Jira: {resp.status}")
+                    logger.error(f"Ошибка получения релизов: {resp.status}")
                     return
 
                 versions = await resp.json()
 
-        RELEASE_NAME = "Тестовый релиз"  # ← здесь поставь правильное имя версии
+        RELEASE_NAME = "Тестовый релиз"   # ← поменяй на свой релиз
         logger.info(f"Ищу релиз: {RELEASE_NAME}")
 
         release = next((r for r in versions if r["name"] == RELEASE_NAME), None)
@@ -264,20 +264,54 @@ async def jira_release_check():
             logger.warning(f"Релиз '{RELEASE_NAME}' не найден")
             return
 
-        logger.info(f"release.released = {release.get('released')}")
+        logger.info(f"Статус релиза: released={release.get('released')}")
 
+        # === Если релиз выпущен — собираем задачи ===
         if release.get("released") and RELEASE_NAME not in notified_releases:
             notified_releases.add(RELEASE_NAME)
 
-            await bot.send_message(
-                TESTERS_CHANNEL_ID,
-                f"🎉 Релиз <b>{RELEASE_NAME}</b> выпущен!\n"
-                f"🔗 <a href='{JIRA_URL}/projects/{JIRA_PROJECT_KEY}/versions'>Открыть в Jira</a>"
+            release_id = release["id"]
+
+            # Формируем запрос задач
+            search_url = f"{JIRA_URL}/rest/api/3/search"
+            jql = f"fixVersion={release_id}"
+            params = {"jql": jql, "maxResults": 100}
+
+            async with aiohttp.ClientSession(auth=auth) as session:
+                async with session.get(search_url, params=params) as resp:
+                    logger.info(f"Ответ Jira (search): {resp.status}")
+                    if resp.status != 200:
+                        logger.error(f"Ошибка получения задач для релиза: {resp.status}")
+                        return
+
+                    data = await resp.json()
+                    issues = data.get("issues", [])
+
+            # Формируем список задач
+            tasks_text = ""
+            for issue in issues:
+                key = issue.get("key")
+                summary = issue.get("fields", {}).get("summary", "Без названия")
+                link = f"{JIRA_URL}/browse/{key}"
+                tasks_text += f"• <a href='{link}'>{key}</a> — {summary}\n"
+
+            if not tasks_text:
+                tasks_text = "В релизе нет задач."
+
+            # Уведомление в Telegram
+            message = (
+                f"🎉 Релиз <b>{RELEASE_NAME}</b> выпущен!\n\n"
+                f"📝 <b>Список задач:</b>\n"
+                f"{tasks_text}\n"
+                f"🔗 <a href='{JIRA_URL}/projects/{JIRA_PROJECT_KEY}/versions'>Все версии</a>"
             )
+
+            await bot.send_message(TESTERS_CHANNEL_ID, message)
             logger.info(f"Уведомление отправлено: {RELEASE_NAME}")
 
     except Exception as e:
         logger.exception("Ошибка в jira_release_check: %s", e)
+
 
 
 # =======================
