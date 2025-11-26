@@ -32,7 +32,7 @@ JIRA_PROJECT_KEY = os.getenv('JIRA_PROJECT_KEY', 'AS')
 JIRA_PARENT_KEY = os.getenv('JIRA_PARENT_KEY', 'AS-3150')
 JIRA_URL = os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '998292747'))
-TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-1002196628724'))
+TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '998292747'))
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
@@ -245,6 +245,54 @@ async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
         except Exception as e:
             logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
         await asyncio.sleep(interval)
+
+# =======================
+# Проверка релиза Jira каждые 30 минут
+# =======================
+async def jira_release_check():
+    """
+    Проверяет релизы проекта Jira.
+    Если релиз выпущен (released=True) — отправляет уведомление.
+    """
+    global notified_releases
+    if "notified_releases" not in globals():
+        notified_releases = set()
+
+    url = f"{JIRA_URL}/rest/api/2/project/{JIRA_PROJECT_KEY}/versions"
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+
+    try:
+        async with aiohttp.ClientSession(auth=auth) as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    logger.error(f"Ошибка получения релизов из Jira: {resp.status}")
+                    return
+
+                versions = await resp.json()
+
+        # Ищем нужный релиз по имени
+        RELEASE_NAME = "Тестовый релиз"  # <-- Поменяй на свой релиз
+
+        release = next((r for r in versions if r["name"] == RELEASE_NAME), None)
+
+        if not release:
+            logger.warning(f"Релиз {RELEASE_NAME} не найден в Jira")
+            return
+
+        # Проверяем статус
+        if release.get("released") and RELEASE_NAME not in notified_releases:
+            notified_releases.add(RELEASE_NAME)
+
+            await bot.send_message(
+                TESTERS_CHANNEL_ID,
+                f"🎉 Релиз <b>{RELEASE_NAME}</b> выпущен!\n"
+                f"🔗 <a href='{JIRA_URL}/projects/{JIRA_PROJECT_KEY}/versions'>Открыть в Jira</a>"
+            )
+            logger.info(f"Отправлено уведомление о релизе: {RELEASE_NAME}")
+
+    except Exception as e:
+        logger.exception(f"Ошибка в jira_release_check: {e}")
+
 
 
 # =======================
