@@ -273,8 +273,8 @@ async def jira_release_check():
             release_id = release["id"]
 
             # Формируем запрос задач
-            search_url = f"{JIRA_URL}/rest/api/3/search"
-            jql = f"fixVersion={release_id}"
+            release_name_escaped = RELEASE_NAME.replace("'", "\\'")
+            jql = f"fixVersion='{release_name_escaped}'"
             params = {"jql": jql, "maxResults": 100}
 
             async with aiohttp.ClientSession(auth=auth) as session:
