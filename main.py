@@ -278,12 +278,12 @@ async def jira_release_check():
             params = {"jql": jql, "maxResults": 100}
 
             async with aiohttp.ClientSession(auth=auth) as session:
-                async with session.get(search_url, params=params, auth=auth) as resp:
+                async with session.get(search_url, params=params) as resp:
                     logger.info(f"Ответ Jira (search): {resp.status}")
                     if resp.status != 200:
-                        logger.error(f"Ошибка получения задач для релиза: {resp.status}")
+                        error_text = await resp.text()
+                        logger.error(f"Ошибка получения задач для релиза: {resp.status} — {error_text}")
                         return
-
                     data = await resp.json()
                     issues = data.get("issues", [])
 
