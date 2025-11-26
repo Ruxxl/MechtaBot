@@ -255,7 +255,7 @@ async def jira_release_check():
 
                 versions = await resp.json()
 
-        RELEASE_NAME = "[WEB] Релиз Детали заказа"   # ← поменяй на свой релиз
+        RELEASE_NAME = "[WEB] Релиз 3.5"   # ← поменяй на свой релиз
         logger.info(f"Ищу релиз: {RELEASE_NAME}")
 
         release = next((r for r in versions if r["name"] == RELEASE_NAME), None)
