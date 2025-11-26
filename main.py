@@ -274,28 +274,29 @@ async def jira_release_check():
 
             # Формируем запрос задач
             search_url = f"{JIRA_URL}/rest/api/3/search/jql"
-            release_name_escaped = RELEASE_NAME.replace("'", "\\'")
-            jql = f"fixVersion='{release_name_escaped}'"
+            jql = f"fixVersion='{RELEASE_NAME}'"
             params = {"jql": jql, "maxResults": 100}
 
             async with aiohttp.ClientSession(auth=auth) as session:
                 async with session.get(search_url, params=params) as resp:
-                    logger.info(f"Ответ Jira (search): {resp.status}")
+                    text = await resp.text()
+                    logger.info(f"Ответ Jira (search): {resp.status} — {text}")
                     if resp.status != 200:
-                        error_text = await resp.text()
-                        logger.error(f"Ошибка получения задач для релиза: {resp.status} — {error_text}")
+                        logger.error(f"Ошибка получения задач для релиза: {resp.status} — {text}")
                         return
+            
                     data = await resp.json()
                     issues = data.get("issues", [])
-
+            
             # Формируем список задач
             tasks_text = ""
             for issue in issues:
-                key = issue.get("key")
-                summary = issue.get("fields", {}).get("summary", "Без названия")
+                key = issue.get("key")  # ключ задачи
+                fields = issue.get("fields") or {}
+                summary = fields.get("summary") or "Без названия"
                 link = f"{JIRA_URL}/browse/{key}"
                 tasks_text += f"• <a href='{link}'>{key}</a> — {summary}\n"
-
+            
             if not tasks_text:
                 tasks_text = "В релизе нет задач."
 
