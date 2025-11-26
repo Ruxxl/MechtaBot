@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def get_clockster_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Отметиться в Clockster", url="clockster://")]
+            [InlineKeyboardButton(text="📝 Отметиться в Clockster", url="https://ruxxl.github.io/clockster-launch/")]
         ]
     )
 
