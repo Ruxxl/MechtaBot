@@ -252,14 +252,23 @@ async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
 # =======================
 async def main():
     logger.info("🚀 Бот стартует")
-    # Фоновые задачи
-    # Если check_calendar_events ожидает (bot, channel_id) — передаём
-    asyncio.create_task(run_background_task(check_calendar_events, bot, TESTERS_CHANNEL_ID, interval=60))
-    # Запуск ежедневного напоминания
-    await start_reminders(bot, TESTERS_CHANNEL_ID)
 
+    # 1) Запускаем календарный сервис как таск (если check_calendar_events содержит свой loop)
+    try:
+        asyncio.create_task(check_calendar_events(bot, TESTERS_CHANNEL_ID))
+        logger.info("Запущен check_calendar_events в фоне")
+    except Exception as e:
+        logger.exception("Не удалось запустить check_calendar_events: %s", e)
 
-# Запуск polling
+    # 2) Запускаем ежедневные напоминания тоже в фоне (не await!)
+    try:
+        asyncio.create_task(start_reminders(bot, TESTERS_CHANNEL_ID))
+        logger.info("Запущен start_reminders в фоне")
+    except Exception as e:
+        logger.exception("Не удалось запустить start_reminders: %s", e)
+
+    # 3) Теперь запускаем polling — он держит главный цикл
+    logger.info("Запуск polling...")
     await dp.start_polling(bot)
 
 
