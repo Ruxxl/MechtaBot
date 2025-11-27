@@ -12,13 +12,18 @@ from aiogram.enums import ParseMode
 logger = logging.getLogger(__name__)
 
 # =============================
+# Название конкретного релиза
+# =============================
+RELEASE_NAME = "[WEB] Релиз Детали заказа"
+
+# =============================
 # Кнопки Clockster + Jira
 # =============================
 def get_clockster_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Отметиться в Clockster", url="https://ruxxl.github.io/clockster-launch/")],
-            [InlineKeyboardButton(text="📊 Посмотреть статус будущего релиза", callback_data="jira_release_status")]
+            [InlineKeyboardButton(text="📊 Посмотреть статус релиза", callback_data="jira_release_status")]
         ]
     )
 
@@ -29,7 +34,6 @@ async def handle_jira_release_status(callback: CallbackQuery,
                                      JIRA_EMAIL,
                                      JIRA_API_TOKEN,
                                      JIRA_PROJECT_KEY,
-                                     JIRA_PARENT_KEY,
                                      JIRA_URL):
     await callback.answer()  # закрываем “часики”
 
@@ -38,26 +42,42 @@ async def handle_jira_release_status(callback: CallbackQuery,
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
-    jql = f'project="{JIRA_PROJECT_KEY}" AND parent="{JIRA_PARENT_KEY}" ORDER BY priority DESC'
+    # Получаем версии проекта
+    versions_url = f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(versions_url, ssl=ssl_context) as resp:
+            if resp.status != 200:
+                await callback.message.answer(f"❌ Не удалось получить версии проекта (статус {resp.status})")
+                return
+            versions = await resp.json()
+
+    release = next((v for v in versions if v["name"] == RELEASE_NAME), None)
+    if not release:
+        await callback.message.answer(f"❌ Релиз '{RELEASE_NAME}' не найден")
+        return
+
+    version_id = release.get("id")
+    jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id} ORDER BY priority DESC'
     search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status&maxResults=200"
 
     async with aiohttp.ClientSession(auth=auth) as session:
         async with session.get(search_url, ssl=ssl_context) as resp:
             if resp.status != 200:
-                text = f"❌ Не удалось получить задачи релиза (статус {resp.status})"
+                await callback.message.answer(f"❌ Не удалось получить задачи релиза (статус {resp.status})")
+                return
+            data = await resp.json()
+            issues = data.get("issues", [])
+
+            if not issues:
+                text = f"✅ Задачи для релиза <b>{RELEASE_NAME}</b> не найдены."
             else:
-                data = await resp.json()
-                issues = data.get("issues", [])
-                if not issues:
-                    text = "✅ Задачи для текущего релиза не найдены."
-                else:
-                    lines = ["📊 <b>Статус задач текущего релиза:</b>\n"]
-                    for issue in issues:
-                        key = issue.get("key")
-                        summary = issue["fields"].get("summary", "Без названия")
-                        status = issue["fields"]["status"]["name"]
-                        lines.append(f"🔹 <b>{key}</b>: {summary} — <i>{status}</i>")
-                    text = "\n".join(lines)
+                lines = [f"📊 <b>Статус задач релиза {RELEASE_NAME}:</b>\n"]
+                for issue in issues:
+                    key = issue.get("key")
+                    summary = issue["fields"].get("summary", "Без названия")
+                    status = issue["fields"]["status"]["name"]
+                    lines.append(f"🔹 <b>{key}</b>: {summary} — <i>{status}</i>")
+                text = "\n".join(lines)
 
     await callback.message.answer(text, parse_mode=ParseMode.HTML)
 
