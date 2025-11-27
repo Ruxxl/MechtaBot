@@ -76,7 +76,9 @@ async def handle_jira_release_status(callback: CallbackQuery,
                     key = issue.get("key")
                     summary = issue["fields"].get("summary", "Без названия")
                     status = issue["fields"]["status"]["name"]
-                    lines.append(f"🔹 <b>{key}</b>: {summary} — <i>{status}</i>")
+                    # Формируем ссылку на Jira
+                    url = f"{JIRA_URL}/browse/{key}"
+                    lines.append(f"🔹 <a href='{url}'>{key} — {summary}</a> — <b>{status}</b>")
                 text = "\n".join(lines)
 
     await callback.message.answer(text, parse_mode=ParseMode.HTML)
