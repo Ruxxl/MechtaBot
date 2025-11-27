@@ -4,7 +4,6 @@ import logging
 from datetime import datetime
 from aiogram import Bot
 from aiogram.enums import ParseMode
-from aiogram.utils.markdown import escape_html
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 
 logger = logging.getLogger(__name__)
@@ -16,6 +15,17 @@ SITES_TO_CHECK = [
 
 # Интервал проверок в секундах
 CHECK_INTERVAL = 10  # 5 минут
+
+def escape_html(text: str) -> str:
+    """Экранирует текст для parse_mode=HTML в Telegram."""
+    html_escape_table = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    }
+    return "".join(html_escape_table.get(c, c) for c in text)
 
 async def check_site(bot: Bot, url: str, chat_id: int):
     """Проверка конкретного сайта через Playwright"""
@@ -75,6 +85,7 @@ async def check_site(bot: Bot, url: str, chat_id: int):
 async def site_checker(bot: Bot, chat_id: int, interval: int = CHECK_INTERVAL):
     """Фоновая задача для проверки всех сайтов каждые N секунд"""
     while True:
-        for url in SITES_TO_CHECK:
+        for idx, url in enumerate(SITES_TO_CHECK, start=1):
+            logger.info(f"[{idx}/{len(SITES_TO_CHECK)}] Проверка сайта: {url}")
             await check_site(bot, url, chat_id)
         await asyncio.sleep(interval)
