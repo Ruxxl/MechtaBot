@@ -253,7 +253,7 @@ async def jira_release_check():
                     return
                 versions = await resp.json()
 
-            RELEASE_NAME = "[WEB] Релиз 3.5"  # имя релиза
+            RELEASE_NAME = "[WEB] Релиз Детали заказа"  # имя релиза
             release = next((r for r in versions if r["name"] == RELEASE_NAME), None)
 
             if not release:
@@ -347,7 +347,7 @@ async def main():
 
     # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
     try:
-        asyncio.create_task(run_background_task(jira_release_check, interval=10))
+        asyncio.create_task(run_background_task(jira_release_check, interval=1800))
         logger.info("Запущен мониторинг релизов Jira")
     except Exception as e:
         logger.exception("Не удалось запустить мониторинг релизов Jira: %s", e)
