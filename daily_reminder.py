@@ -23,7 +23,7 @@ def get_clockster_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Отметиться в Clockster", url="https://ruxxl.github.io/clockster-launch/")],
-            [InlineKeyboardButton(text="📊 Посмотреть статус релиза", callback_data="jira_release_status")]
+            [InlineKeyboardButton(text="📊 Посмотреть статус будущего релиза", callback_data="jira_release_status")]
         ]
     )
 
@@ -71,7 +71,7 @@ async def handle_jira_release_status(callback: CallbackQuery,
             if not issues:
                 text = f"✅ Задачи для релиза <b>{RELEASE_NAME}</b> не найдены."
             else:
-                lines = [f"📊 <b>Статус задач релиза {RELEASE_NAME}:</b>\n"]
+                lines = [f"📊 <b>Статус задач будущего релиза {RELEASE_NAME}:</b>\n"]
                 for issue in issues:
                     key = issue.get("key")
                     summary = issue["fields"].get("summary", "Без названия")
@@ -92,7 +92,7 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
 
     while True:
         now = datetime.now(timezone)
-        target_time = now.replace(hour=9, minute=24, second=0, microsecond=0)
+        target_time = now.replace(hour=9, minute=28, second=0, microsecond=0)
         if now >= target_time:
             target_time += timedelta(days=1)
 
@@ -121,7 +121,7 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
 
     while True:
         now = datetime.now(timezone)
-        target_time = now.replace(hour=9, minute=25, second=0, microsecond=0)
+        target_time = now.replace(hour=17, minute=1, second=0, microsecond=0)
         if now >= target_time:
             target_time += timedelta(days=1)
 
