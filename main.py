@@ -33,7 +33,7 @@ JIRA_PROJECT_KEY = os.getenv('JIRA_PROJECT_KEY', 'AS')
 JIRA_PARENT_KEY = os.getenv('JIRA_PARENT_KEY', 'AS-3150')
 JIRA_URL = os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '998292747'))
-TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '998292747'))
+TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-1002196628724'))
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
@@ -269,7 +269,7 @@ async def main():
         logger.exception("Не удалось запустить start_reminders: %s", e)
 
     # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
-    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=10))
+    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=1800))
 
     # 4) Теперь запускаем polling — он держит главный цикл
     logger.info("Запуск polling...")
