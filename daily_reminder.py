@@ -92,7 +92,7 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
 
     while True:
         now = datetime.now(timezone)
-        target_time = now.replace(hour=9, minute=12, second=0, microsecond=0)
+        target_time = now.replace(hour=9, minute=24, second=0, microsecond=0)
         if now >= target_time:
             target_time += timedelta(days=1)
 
