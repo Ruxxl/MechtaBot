@@ -20,6 +20,7 @@ from photo_handler import handle_photo_message
 from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import start_reminders
+from daily_reminder import handle_jira_release_status
 from release_notifier import jira_release_check
 
 # =======================
@@ -246,6 +247,11 @@ async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
         except Exception as e:
             logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
         await asyncio.sleep(interval)
+
+dp.callback_query.register(
+    lambda c: handle_jira_release_status(c, bot),
+    lambda c: c.data == "jira_release_status"
+)
 
 
 # =======================
