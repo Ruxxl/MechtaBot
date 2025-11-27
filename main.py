@@ -21,6 +21,7 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
+from site_checker import site_checker
 
 # =======================
 # Настройка окружения
@@ -281,6 +282,9 @@ async def main():
 
     # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
     asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=1800))
+
+    asyncio.create_task(site_checker(bot, TESTERS_CHANNEL_ID, interval=300))
+    logger.info("Запущен site_checker в фоне")
 
     # 5) Теперь запускаем polling — он держит главный цикл
     logger.info("Запуск polling...")
