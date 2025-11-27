@@ -3,4 +3,4 @@ aiohttp
 python-dotenv
 icalendar
 pytesseract
-playwright
+playwright>=1.37.0
