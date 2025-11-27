@@ -280,12 +280,12 @@ async def jira_release_check():
                 # Формируем текст с задачами и ссылками с нумерацией
                 if issues:
                     issue_lines = []
-                    for idx, issue in enumerate(issues, start=1):
+                    for issue in issues:
                         summary = issue["fields"]["summary"]
                         key = issue["key"]
                         url = f"{JIRA_URL}/browse/{key}"
-                        # Эмодзи с номером, HTML-ссылка на название задачи
-                        issue_lines.append(f"{idx}️⃣ <a href=\"{url}\">{summary}</a>")
+                        # HTML-форматирование: ссылка на название задачи
+                        issue_lines.append(f'<a href="{url}">{summary}</a>')
                     issues_text = "\n".join(issue_lines)
                 else:
                     issues_text = "Задачи не найдены."
