@@ -2,34 +2,88 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from dateutil import tz
+from urllib.parse import quote
+import aiohttp
+import ssl
 
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 logger = logging.getLogger(__name__)
 
 # =============================
-# Кнопка Clockster
+# Настройки Jira — подставьте из env
+# =============================
+from os import getenv
+
+JIRA_EMAIL = getenv('JIRA_EMAIL')
+JIRA_API_TOKEN = getenv('JIRA_API_TOKEN')
+JIRA_PROJECT_KEY = getenv('JIRA_PROJECT_KEY', 'AS')
+JIRA_PARENT_KEY = getenv('JIRA_PARENT_KEY', 'AS-3150')
+JIRA_URL = getenv('JIRA_URL', 'https://mechtamarket.atlassian.net')
+
+# =============================
+# Кнопки Clockster + Jira
 # =============================
 def get_clockster_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Отметиться в Clockster", url="https://ruxxl.github.io/clockster-launch/")],
             [InlineKeyboardButton(text="📊 Посмотреть статус будущего релиза", callback_data="jira_release_status")]
-
         ]
     )
+
+# =============================
+# Callback кнопки "Посмотреть статус релиза"
+# =============================
+async def handle_callback(callback: CallbackQuery, bot):
+    if callback.data != "jira_release_status":
+        return
+    await callback.answer()  # закрываем “часики”
+    text = await get_jira_release_status_text()
+    await callback.message.answer(text, parse_mode=ParseMode.HTML)
+
+# =============================
+# Функция получения статуса задач текущего релиза
+# =============================
+async def get_jira_release_status_text():
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
+    jql = f'project = "{JIRA_PROJECT_KEY}" AND parent = "{JIRA_PARENT_KEY}" ORDER BY priority DESC'
+    search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status&maxResults=200"
+
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(search_url, ssl=ssl_context) as resp:
+            if resp.status != 200:
+                return f"❌ Не удалось получить задачи релиза (статус {resp.status})"
+            
+            data = await resp.json()
+            issues = data.get("issues", [])
+
+            if not issues:
+                return "✅ Задачи для текущего релиза не найдены."
+
+            msg_lines = ["📊 <b>Статус задач текущего релиза:</b>\n"]
+            for issue in issues:
+                key = issue.get("key")
+                summary = issue["fields"].get("summary", "Без названия")
+                status = issue["fields"]["status"]["name"]
+                msg_lines.append(f"🔹 <b>{key}</b>: {summary} — <i>{status}</i>")
+
+            return "\n".join(msg_lines)
 
 # =============================
 # Утреннее уведомление
 # =============================
 async def daily_reminder(bot, TESTERS_CHANNEL_ID):
-    """Ежедневное уведомление в 08:05 по Астане."""
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
         now = datetime.now(timezone)
-        target_time = now.replace(hour=8, minute=5, second=0, microsecond=0)
+        target_time = now.replace(hour=8, minute=55, second=0, microsecond=0)
         if now >= target_time:
             target_time += timedelta(days=1)
 
@@ -43,13 +97,21 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
         )
 
         try:
-            await bot.send_message(
+            sent_message = await bot.send_message(
                 TESTERS_CHANNEL_ID,
                 text,
                 parse_mode=ParseMode.HTML,
-                reply_markup=get_clockster_keyboard()  # ⬅️ Вот кнопка
+                reply_markup=get_clockster_keyboard()
             )
             logger.info("✅ Отправлено ежедневное утреннее уведомление")
+
+            # Регистрируем callback
+            bot.register_callback_query_handler(
+                handle_callback,
+                lambda c: c.data == "jira_release_status",
+                state="*"
+            )
+
         except Exception as e:
             logger.error(f"Ошибка отправки ежедневного уведомления: {e}")
 
@@ -59,7 +121,6 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
 # Вечернее уведомление
 # =============================
 async def evening_reminder(bot, TESTERS_CHANNEL_ID):
-    """Ежедневное вечернее уведомление в 17:01 по Астане."""
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -78,13 +139,21 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
         )
 
         try:
-            await bot.send_message(
+            sent_message = await bot.send_message(
                 TESTERS_CHANNEL_ID,
                 text,
                 parse_mode=ParseMode.HTML,
-                reply_markup=get_clockster_keyboard()  # ⬅️ Кнопка и тут
+                reply_markup=get_clockster_keyboard()
             )
             logger.info("✅ Отправлено вечернее уведомление")
+
+            # Регистрируем callback
+            bot.register_callback_query_handler(
+                handle_callback,
+                lambda c: c.data == "jira_release_status",
+                state="*"
+            )
+
         except Exception as e:
             logger.error(f"Ошибка отправки вечернего уведомления: {e}")
 
