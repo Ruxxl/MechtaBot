@@ -267,7 +267,7 @@ async def jira_release_check():
                 # Получаем задачи релиза
                 version_id = release.get("id")
                 jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
-                search_url = f"{JIRA_URL}/rest/api/3/search?jql={jql}&fields=key,summary&maxResults=200"
+                search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={jql}&fields=key,summary&maxResults=200"
 
                 async with session.get(search_url) as resp_issues:
                     if resp_issues.status != 200:
