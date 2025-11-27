@@ -284,8 +284,8 @@ async def jira_release_check():
                         summary = issue["fields"]["summary"]
                         key = issue["key"]
                         url = f"{JIRA_URL}/browse/{key}"
-                        # Нумерация и HTML-ссылка на название задачи
-                        issue_lines.append(f"• <a href=\"{url}\">{summary}</a>")
+                        # Эмодзи с номером, HTML-ссылка на название задачи
+                        issue_lines.append(f"{idx}️⃣ <a href=\"{url}\">{summary}</a>")
                     issues_text = "\n".join(issue_lines)
                 else:
                     issues_text = "Задачи не найдены."
