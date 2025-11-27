@@ -1,7 +1,11 @@
+# daily_reminders.py
 import asyncio
 import logging
 from datetime import datetime, timedelta
 from dateutil import tz
+from urllib.parse import quote
+import aiohttp
+import ssl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums import ParseMode
 
@@ -21,10 +25,40 @@ def get_clockster_keyboard():
 # =============================
 # Callback кнопки "Посмотреть статус релиза"
 # =============================
-async def handle_jira_release_status(callback: CallbackQuery, bot):
+async def handle_jira_release_status(callback: CallbackQuery,
+                                     JIRA_EMAIL,
+                                     JIRA_API_TOKEN,
+                                     JIRA_PROJECT_KEY,
+                                     JIRA_PARENT_KEY,
+                                     JIRA_URL):
     await callback.answer()  # закрываем “часики”
-    from release_notifier import get_jira_release_status_text
-    text = await get_jira_release_status_text()
+
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
+    jql = f'project="{JIRA_PROJECT_KEY}" AND parent="{JIRA_PARENT_KEY}" ORDER BY priority DESC'
+    search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status&maxResults=200"
+
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(search_url, ssl=ssl_context) as resp:
+            if resp.status != 200:
+                text = f"❌ Не удалось получить задачи релиза (статус {resp.status})"
+            else:
+                data = await resp.json()
+                issues = data.get("issues", [])
+                if not issues:
+                    text = "✅ Задачи для текущего релиза не найдены."
+                else:
+                    lines = ["📊 <b>Статус задач текущего релиза:</b>\n"]
+                    for issue in issues:
+                        key = issue.get("key")
+                        summary = issue["fields"].get("summary", "Без названия")
+                        status = issue["fields"]["status"]["name"]
+                        lines.append(f"🔹 <b>{key}</b>: {summary} — <i>{status}</i>")
+                    text = "\n".join(lines)
+
     await callback.message.answer(text, parse_mode=ParseMode.HTML)
 
 
@@ -36,12 +70,11 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
 
     while True:
         now = datetime.now(timezone)
-        target_time = now.replace(hour=9, minute=8, second=0, microsecond=0)
+        target_time = now.replace(hour=9, minute=12, second=0, microsecond=0)
         if now >= target_time:
             target_time += timedelta(days=1)
 
-        wait_seconds = (target_time - now).total_seconds()
-        await asyncio.sleep(wait_seconds)
+        await asyncio.sleep((target_time - now).total_seconds())
 
         text = (
             "☀️ Доброе утро, коллеги!\n\n"
@@ -50,13 +83,8 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
         )
 
         try:
-            await bot.send_message(
-                TESTERS_CHANNEL_ID,
-                text,
-                parse_mode=ParseMode.HTML,
-                reply_markup=get_clockster_keyboard()
-            )
-            logger.info("✅ Отправлено ежедневное утреннее уведомление")
+            await bot.send_message(TESTERS_CHANNEL_ID, text, parse_mode=ParseMode.HTML, reply_markup=get_clockster_keyboard())
+            logger.info("✅ Отправлено утреннее уведомление")
         except Exception as e:
             logger.error(f"Ошибка отправки утреннего уведомления: {e}")
 
@@ -75,8 +103,7 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
         if now >= target_time:
             target_time += timedelta(days=1)
 
-        wait_seconds = (target_time - now).total_seconds()
-        await asyncio.sleep(wait_seconds)
+        await asyncio.sleep((target_time - now).total_seconds())
 
         text = (
             "🌇 Добрый вечер, коллеги!\n\n"
@@ -85,12 +112,7 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
         )
 
         try:
-            await bot.send_message(
-                TESTERS_CHANNEL_ID,
-                text,
-                parse_mode=ParseMode.HTML,
-                reply_markup=get_clockster_keyboard()
-            )
+            await bot.send_message(TESTERS_CHANNEL_ID, text, parse_mode=ParseMode.HTML, reply_markup=get_clockster_keyboard())
             logger.info("✅ Отправлено вечернее уведомление")
         except Exception as e:
             logger.error(f"Ошибка отправки вечернего уведомления: {e}")
