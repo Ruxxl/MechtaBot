@@ -14,7 +14,7 @@ SITES_TO_CHECK = [
     "https://www.mechta.kz"
 ]
 
-CHECK_INTERVAL = 300  # Проверка каждые 5 минут
+CHECK_INTERVAL = 10  # Проверка каждые 5 минут
 
 # Заголовки как у браузера (для обхода 403)
 HEADERS = {
