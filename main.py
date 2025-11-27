@@ -277,15 +277,15 @@ async def jira_release_check():
                         data = await resp_issues.json()
                         issues = data.get("issues", [])
 
-                # Формируем текст с задачами и ссылками
+                # Формируем текст с задачами и ссылками с нумерацией
                 if issues:
                     issue_lines = []
-                    for issue in issues:
+                    for idx, issue in enumerate(issues, start=1):
                         summary = issue["fields"]["summary"]
                         key = issue["key"]
                         url = f"{JIRA_URL}/browse/{key}"
-                        # HTML-форматирование: ссылка на название задачи
-                        issue_lines.append(f'<a href="{url}">{summary}</a>')
+                        # Нумерация и HTML-ссылка на название задачи
+                        issue_lines.append(f"• <a href=\"{url}\">{summary}</a>")
                     issues_text = "\n".join(issue_lines)
                 else:
                     issues_text = "Задачи не найдены."
@@ -310,7 +310,6 @@ async def jira_release_check():
         logger.exception("Ошибка в jira_release_check: %s", e)
 
 
-
 # =======================
 # Фоновая задача — биндер
 # =======================
@@ -324,8 +323,6 @@ async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
         except Exception as e:
             logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
         await asyncio.sleep(interval)
-
-
 
 
 # =======================
