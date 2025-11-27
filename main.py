@@ -20,6 +20,7 @@ from photo_handler import handle_photo_message
 from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import start_reminders
+from release_notifier import jira_release_check
 
 # =======================
 # Настройка окружения
@@ -32,7 +33,7 @@ JIRA_PROJECT_KEY = os.getenv('JIRA_PROJECT_KEY', 'AS')
 JIRA_PARENT_KEY = os.getenv('JIRA_PARENT_KEY', 'AS-3150')
 JIRA_URL = os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '998292747'))
-TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-1002196628724'))
+TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '998292747'))
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
@@ -231,84 +232,6 @@ async def create_jira_ticket(
 
     return True, issue_key
 
-# =======================
-# Проверка релиза Jira с фото (без задач)
-# =======================
-async def jira_release_check():
-    global notified_releases
-    if "notified_releases" not in globals():
-        notified_releases = set()
-
-    logger.info("Проверяю релизы Jira...")
-
-    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
-
-    try:
-        async with aiohttp.ClientSession(auth=auth) as session:
-            # Получаем список версий проекта
-            async with session.get(f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions") as resp:
-                logger.info(f"Ответ Jira (versions): {resp.status}")
-                if resp.status != 200:
-                    logger.error(f"Ошибка получения релизов: {resp.status}")
-                    return
-                versions = await resp.json()
-
-            RELEASE_NAME = "[WEB] Релиз Детали заказа"  # имя релиза
-            release = next((r for r in versions if r["name"] == RELEASE_NAME), None)
-
-            if not release:
-                logger.warning(f"Релиз '{RELEASE_NAME}' не найден")
-                return
-
-            # Если релиз уже выпущен и ещё не отправляли уведомление
-            if release.get("released") and RELEASE_NAME not in notified_releases:
-                notified_releases.add(RELEASE_NAME)
-
-                # Получаем задачи релиза
-                version_id = release.get("id")
-                jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
-                search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={jql}&fields=key,summary&maxResults=200"
-
-                async with session.get(search_url) as resp_issues:
-                    if resp_issues.status != 200:
-                        logger.error(f"Ошибка получения задач релиза: {resp_issues.status}")
-                        issues = []
-                    else:
-                        data = await resp_issues.json()
-                        issues = data.get("issues", [])
-
-                # Формируем текст с задачами и ссылками с нумерацией
-                if issues:
-                    issue_lines = []
-                    for issue in issues:
-                        summary = issue["fields"]["summary"]
-                        key = issue["key"]
-                        url = f"{JIRA_URL}/browse/{key}"
-                        # HTML-форматирование: ссылка на название задачи
-                        issue_lines.append(f'<a href="{url}">{summary}</a>')
-                    issues_text = "\n".join(issue_lines)
-                else:
-                    issues_text = "Задачи не найдены."
-
-
-                # Формируем сообщение
-                message = f"🎉 Релиз <b>{RELEASE_NAME}</b> выпущен!\n\n📝 Задачи релиза:\n{issues_text}"
-
-                # Отправляем фото (если есть) или просто текст
-                try:
-                    if os.path.exists("release.jpg"):
-                        photo = types.FSInputFile("release.jpg")
-                        await bot.send_photo(TESTERS_CHANNEL_ID, photo=photo, caption=message, parse_mode=ParseMode.HTML)
-                    else:
-                        await bot.send_message(TESTERS_CHANNEL_ID, message, parse_mode=ParseMode.HTML)
-
-                    logger.info(f"Уведомление о релизе отправлено: {RELEASE_NAME}")
-                except Exception as e:
-                    logger.exception(f"Ошибка отправки уведомления о релизе: {e}")
-
-    except Exception as e:
-        logger.exception("Ошибка в jira_release_check: %s", e)
-
 
 # =======================
 # Фоновая задача — биндер
@@ -346,14 +269,9 @@ async def main():
         logger.exception("Не удалось запустить start_reminders: %s", e)
 
     # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
-    try:
-        asyncio.create_task(run_background_task(jira_release_check, interval=1800))
-        logger.info("Запущен мониторинг релизов Jira")
-    except Exception as e:
-        logger.exception("Не удалось запустить мониторинг релизов Jira: %s", e)
+    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=10))
 
-
-    # 3) Теперь запускаем polling — он держит главный цикл
+    # 4) Теперь запускаем polling — он держит главный цикл
     logger.info("Запуск polling...")
     await dp.start_polling(bot)
 
