@@ -9,8 +9,7 @@ logger = logging.getLogger(__name__)
 
 # Список сайтов для проверки
 SITES_TO_CHECK = [
-    "https://mechtamarket.kz",
-    "https://mechta.kz",
+    "https://www.mechta.kz/"
 ]
 
 # Интервал проверок в секундах
