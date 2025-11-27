@@ -248,12 +248,18 @@ async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
             logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
         await asyncio.sleep(interval)
 
-dp.callback_query.register(
-    lambda c: handle_jira_release_status(
-        c, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_PARENT_KEY, JIRA_URL
-    ),
-    lambda c: c.data == "jira_release_status"
-)
+# callback для кнопки Jira Release
+@dp.callback_query(F.data == "jira_release_status")
+async def callback_jira_release_status(callback: CallbackQuery):
+    await handle_jira_release_status(
+        callback,
+        JIRA_EMAIL,
+        JIRA_API_TOKEN,
+        JIRA_PROJECT_KEY,
+        JIRA_PARENT_KEY,
+        JIRA_URL
+    )
+
 
 # =======================
 # Запуск бота
