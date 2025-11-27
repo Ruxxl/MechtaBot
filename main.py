@@ -281,14 +281,15 @@ async def jira_release_check():
                 if issues:
                     issue_lines = []
                     for issue in issues:
-                        key = issue["key"]
                         summary = issue["fields"]["summary"]
+                        key = issue["key"]
                         url = f"{JIRA_URL}/browse/{key}"
-                        # HTML-форматирование для Telegram
-                        issue_lines.append(f'<a href="{url}">{key}</a> — {summary}')
+                        # HTML-форматирование: ссылка на название задачи
+                        issue_lines.append(f'<a href="{url}">{summary}</a>')
                     issues_text = "\n".join(issue_lines)
                 else:
                     issues_text = "Задачи не найдены."
+
 
                 # Формируем сообщение
                 message = f"🎉 Релиз <b>{RELEASE_NAME}</b> выпущен!\n\n📝 Задачи релиза:\n{issues_text}"
