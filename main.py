@@ -21,7 +21,6 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
-from site_checker import site_checker
 
 # =======================
 # Настройка окружения
