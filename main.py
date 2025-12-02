@@ -89,6 +89,7 @@ async def handle_photo(message: types.Message):
         create_jira_ticket=create_jira_ticket
     )
 
+# Глобальный хендлер текста — пропускаем, если FSM активен
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -103,7 +104,6 @@ async def handle_text(message: Message, state: FSMContext):
         bot=bot,
         JIRA_URL=JIRA_URL
     )
-
 
 async def create_jira_ticket(
         text: str,
@@ -203,7 +203,7 @@ async def callback_jira_release_status(callback: CallbackQuery):
         JIRA_URL
     )
 
-# Новый FSM Jira по команде /jira
+# FSM для команды /jira
 
 class JiraFSM(StatesGroup):
     waiting_title = State()
@@ -218,20 +218,14 @@ async def jira_start(message: Message, state: FSMContext):
     await state.set_state(JiraFSM.waiting_title)
     await message.answer("📝 Введите заголовок дефекта")
 
-@dp.message(JiraFSM.waiting_title)
+@dp.message(JiraFSM.waiting_title, F.text)
 async def jira_title(message: Message, state: FSMContext):
-    if not message.text:
-        await message.answer("❌ Заголовок не может быть пустым. Введите ещё раз:")
-        return
     await state.update_data(title=message.text)
     await state.set_state(JiraFSM.waiting_description)
     await message.answer("📄 Введите описание дефекта")
 
-@dp.message(JiraFSM.waiting_description)
+@dp.message(JiraFSM.waiting_description, F.text)
 async def jira_description(message: Message, state: FSMContext):
-    if not message.text:
-        await message.answer("❌ Описание не может быть пустым. Введите ещё раз:")
-        return
     await state.update_data(description=message.text)
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔴 Высокий", callback_data="prio_high")],
@@ -263,7 +257,7 @@ async def jira_skip_links(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("🖼 Отправьте скриншоты. После загрузки нажмите «Готово».", reply_markup=kb)
     await callback.answer()
 
-@dp.message(JiraFSM.waiting_links)
+@dp.message(JiraFSM.waiting_links, F.text)
 async def jira_links(message: Message, state: FSMContext):
     await state.update_data(links=message.text)
     kb = InlineKeyboardMarkup(inline_keyboard=[
