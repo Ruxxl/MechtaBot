@@ -90,7 +90,10 @@ async def handle_photo(message: types.Message):
     )
 
 @dp.message(F.text & ~F.text.startswith("/"))
-async def handle_text(message: Message):
+async def handle_text(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state:  # если FSM активен — пропускаем
+        return
     await process_text_message(
         message=message,
         TRIGGER_TAGS=TRIGGER_TAGS,
@@ -100,6 +103,7 @@ async def handle_text(message: Message):
         bot=bot,
         JIRA_URL=JIRA_URL
     )
+
 
 async def create_jira_ticket(
         text: str,
