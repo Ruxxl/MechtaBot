@@ -216,12 +216,18 @@ async def jira_start(message: Message, state: FSMContext):
 
 @dp.message(JiraFSM.waiting_title)
 async def jira_title(message: Message, state: FSMContext):
+    if not message.text:
+        await message.answer("❌ Заголовок не может быть пустым. Введите ещё раз:")
+        return
     await state.update_data(title=message.text)
     await state.set_state(JiraFSM.waiting_description)
     await message.answer("📄 Введите описание дефекта")
 
 @dp.message(JiraFSM.waiting_description)
 async def jira_description(message: Message, state: FSMContext):
+    if not message.text:
+        await message.answer("❌ Описание не может быть пустым. Введите ещё раз:")
+        return
     await state.update_data(description=message.text)
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔴 Высокий", callback_data="prio_high")],
@@ -233,12 +239,8 @@ async def jira_description(message: Message, state: FSMContext):
 
 @dp.callback_query(JiraFSM.waiting_priority)
 async def jira_priority(callback: CallbackQuery, state: FSMContext):
-    if callback.data == "prio_high":
-        priority = "High"
-    elif callback.data == "prio_medium":
-        priority = "Medium"
-    else:
-        priority = "Low"
+    mapping = {"prio_high": "High", "prio_medium": "Medium", "prio_low": "Low"}
+    priority = mapping.get(callback.data, "Medium")
     await state.update_data(priority=priority)
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Пропустить", callback_data="skip_links")]
@@ -280,7 +282,7 @@ async def jira_finish(callback: CallbackQuery, state: FSMContext):
     ok, issue_key = await create_jira_ticket_extended(
         title=data["title"],
         description=data["description"],
-        priority=data["priority"],
+        priority=data.get("priority", "Medium"),
         links=data.get("links"),
         screenshots=data.get("screens", []),
         bot=bot
