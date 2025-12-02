@@ -312,7 +312,16 @@ async def create_jira_ticket_extended(
             "project": {"key": JIRA_PROJECT_KEY},
             "parent": {"key": JIRA_PARENT_KEY},
             "summary": title[:255],
-            "description": desc_text,
+            "description": {
+    "type": "doc",
+    "version": 1,
+    "content": [
+        {
+            "type": "paragraph",
+            "content": [{"type": "text", "text": desc_text}]
+        }
+    ]
+},
             "priority": {"name": priority},
             "issuetype": {"name": "Подзадача"}
         }
