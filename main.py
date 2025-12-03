@@ -297,10 +297,18 @@ async def create_jira_ticket_extended(
 
         for file_id in screenshots:
             try:
-                file = await bot.get_file(file_id)
-                file_bytes = await bot.download_file(file.file_path)
+                tg_file = await bot.get_file(file_id)
+                file_stream = await bot.download_file(tg_file.file_path)
+                file_bytes = file_stream.read()
+        
                 form = aiohttp.FormData()
-                form.add_field("file", file_bytes, filename="screenshot.jpg", content_type="image/jpeg")
+                form.add_field(
+                    "file",
+                    file_bytes,
+                    filename="screenshot.jpg",
+                    content_type="image/jpeg"
+                )
+        
                 async with session.post(
                     f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments",
                     data=form,
@@ -308,9 +316,11 @@ async def create_jira_ticket_extended(
                     ssl=ssl_ctx
                 ) as resp:
                     if resp.status not in (200, 201):
-                        logger.error("Ошибка прикрепления скрина: %s %s", resp.status, await resp.text())
+                        logger.error("Ошибка прикрепления скрина: %s %s",
+                                     resp.status, await resp.text())
             except Exception as e:
                 logger.exception(e)
+
 
     return True, issue_key
 
