@@ -1,13 +1,15 @@
-# main.py
+# Refactored main.py
+# Рабочий вариант с исправленным Jira FSM
+
 import asyncio
 import aiohttp
 import ssl
 import os
 import re
 import logging
+from functools import partial
 from dotenv import load_dotenv
 from typing import List, Tuple, Optional
-from functools import partial
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -111,17 +113,16 @@ async def handle_photo(message: types.Message):
         bot=bot,
         message=message,
         trigger_tags=TRIGGER_TAGS,
-        create_jira_ticket=create_jira_ticket_extended  # Используем FSM-версии
+        create_jira_ticket=create_jira_ticket_extended
     )
 
 # =======================
-# Обработка текста
+# Обработка текста вне FSM
 # =======================
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state:
-        return
+    if await state.get_state():
+        return  # пропускаем, если пользователь в FSM
     await process_text_message(
         message=message,
         TRIGGER_TAGS=TRIGGER_TAGS,
@@ -146,9 +147,10 @@ async def callback_jira_release_status(callback: CallbackQuery):
     )
 
 # =======================
-# Регистрация FSM /jira
+# Jira FSM регистрация
 # =======================
 dp.message.register(start_jira_fsm, Command(commands=["jira"]))
+
 dp.message.register(jira_title_step, JiraFSM.waiting_title)
 dp.message.register(jira_description_step, JiraFSM.waiting_description)
 dp.message.register(jira_priority_step, JiraFSM.waiting_priority)
@@ -164,7 +166,7 @@ dp.message.register(
         JIRA_URL=JIRA_URL
     ),
     JiraFSM.waiting_screenshots,
-    F.photo | F.text
+    F.text | F.photo
 )
 
 # =======================
@@ -187,17 +189,25 @@ async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
 async def main():
     logger.info("🚀 Бот стартует")
 
-    # Календарный сервис
-    asyncio.create_task(check_calendar_events(bot, TESTERS_CHANNEL_ID))
-    # Ежедневные напоминания
-    asyncio.create_task(start_reminders(bot, TESTERS_CHANNEL_ID))
-    # Мониторинг релизов Jira
-    asyncio.create_task(run_background_task(
-        jira_release_check, bot, TESTERS_CHANNEL_ID,
-        JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL,
-        logger, interval=1800
-    ))
+    # 1) Запускаем календарный сервис как таск (если check_calendar_events содержит свой loop)
+    try:
+        asyncio.create_task(check_calendar_events(bot, TESTERS_CHANNEL_ID))
+        logger.info("Запущен check_calendar_events в фоне")
+    except Exception as e:
+        logger.exception("Не удалось запустить check_calendar_events: %s", e)
 
+    # 2) Запускаем ежедневные напоминания тоже в фоне (не await!)
+    try:
+        asyncio.create_task(start_reminders(bot, TESTERS_CHANNEL_ID))
+        logger.info("Запущен start_reminders в фоне")
+    except Exception as e:
+        logger.exception("Не удалось запустить start_reminders: %s", e)
+
+    # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
+    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
+
+    # 5) Теперь запускаем polling — он держит главный цикл
+    logger.info("Запуск polling...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
