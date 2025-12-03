@@ -14,6 +14,8 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram import F
+from aiogram.filters import Command
 
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
@@ -261,11 +263,16 @@ async def callback_jira_release_status(callback: CallbackQuery):
     )
 
 # Регистрация FSM
-dp.message.register(start_jira_fsm, commands=["jira"])
+# Регистрация команды /jira
+dp.message.register(start_jira_fsm, Command(commands=["jira"]))
+
+# Регистрация FSM шагов
 dp.message.register(jira_title_step, JiraFSM.waiting_title)
 dp.message.register(jira_description_step, JiraFSM.waiting_description)
 dp.message.register(jira_priority_step, JiraFSM.waiting_priority)
 dp.message.register(jira_links_step, JiraFSM.waiting_links)
+
+# Для скриншотов учитываем и текст и фото
 dp.message.register(
     lambda m, s: jira_screenshots_step(
         m, s,
@@ -278,6 +285,7 @@ dp.message.register(
     JiraFSM.waiting_screenshots,
     F.photo | F.text
 )
+
 
 
 # =======================
