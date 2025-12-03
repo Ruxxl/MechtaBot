@@ -14,7 +14,6 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.fsm.context import FSMContext
 
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
@@ -22,7 +21,8 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
-from jira_fsm import JiraFSM, create_jira_ticket_extended
+from fsm import JiraFSM, start_jira_fsm, jira_title_step, jira_description_step, \
+                jira_priority_step, jira_links_step, jira_screenshots_step
 
 
 # =======================
@@ -61,6 +61,15 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 # Dispatcher без параметров — современный стиль
 dp = Dispatcher()
 
+# -----------------------
+# Регистрация FSM /jira
+# -----------------------
+dp.message.register(start_jira_fsm, commands=["jira"])
+dp.message.register(jira_title_step, JiraFSM.waiting_title)
+dp.message.register(jira_description_step, JiraFSM.waiting_description)
+dp.message.register(jira_priority_step, JiraFSM.waiting_priority)
+dp.message.register(jira_links_step, JiraFSM.waiting_links)
+dp.message.register(jira_screenshots_step, JiraFSM.waiting_screenshots, F.photo | F.text)
 
 # =======================
 # Утилиты
@@ -234,87 +243,6 @@ async def create_jira_ticket(
                 return False, None
 
     return True, issue_key
-
-# Старт FSM
-@dp.message(commands=["jira"])
-async def start_jira_fsm(message: Message, state: FSMContext):
-    await state.set_state(JiraFSM.waiting_title)
-    await message.reply("📝 Введите заголовок задачи:")
-
-# Заголовок
-@dp.message(JiraFSM.waiting_title)
-async def jira_title_step(message: Message, state: FSMContext):
-    await state.update_data(title=message.text)
-    await state.set_state(JiraFSM.waiting_description)
-    await message.reply("✏️ Введите описание задачи:")
-
-# Описание
-@dp.message(JiraFSM.waiting_description)
-async def jira_description_step(message: Message, state: FSMContext):
-    await state.update_data(description=message.text)
-    await state.set_state(JiraFSM.waiting_priority)
-    await message.reply("⚡ Укажите приоритет (Low, Medium, High, Highest):")
-
-# Приоритет
-@dp.message(JiraFSM.waiting_priority)
-async def jira_priority_step(message: Message, state: FSMContext):
-    valid_priorities = ["Low", "Medium", "High", "Highest"]
-    if message.text not in valid_priorities:
-        await message.reply(f"❌ Неверный приоритет. Выберите: {', '.join(valid_priorities)}")
-        return
-    await state.update_data(priority=message.text)
-    await state.set_state(JiraFSM.waiting_links)
-    await message.reply("🔗 Укажите дополнительные ссылки (или '-' если нет):")
-
-# Ссылки
-@dp.message(JiraFSM.waiting_links)
-async def jira_links_step(message: Message, state: FSMContext):
-    links = None if message.text.strip() in ["-", "—"] else message.text.strip()
-    await state.update_data(links=links)
-    await state.set_state(JiraFSM.waiting_screenshots)
-    await message.reply("📸 Прикрепите скриншоты (можно несколько) или отправьте '-' если нет:")
-
-# Скриншоты и финализация
-@dp.message(JiraFSM.waiting_screenshots, F.photo | F.text)
-async def jira_screenshots_step(message: Message, state: FSMContext):
-    data = await state.get_data()
-    screenshots = data.get("screenshots", [])
-
-    # Если '-' значит скринов нет
-    if hasattr(message, "text") and message.text.strip() in ["-", "—"]:
-        screenshots = []
-    elif hasattr(message, "photo") and message.photo:
-        screenshots.append(message.photo[-1].file_id)
-
-    await state.update_data(screenshots=screenshots)
-
-    # Создаем задачу
-    await finalize_jira_creation(message, state)
-
-async def finalize_jira_creation(message: Message, state: FSMContext):
-    data = await state.get_data()
-    title = data.get("title")
-    description = data.get("description")
-    priority = data.get("priority")
-    links = data.get("links")
-    screenshots = data.get("screenshots", [])
-
-    success, issue_key = await create_jira_ticket_extended(
-        title=title,
-        description=description,
-        priority=priority,
-        links=links,
-        screenshots=screenshots,
-        bot=bot
-    )
-
-    if success:
-        await message.reply(f"✅ Jira задача создана: <b>{issue_key}</b>\n🔗 {JIRA_URL}/browse/{issue_key}")
-    else:
-        await message.reply("❌ Ошибка при создании Jira задачи. Проверьте лог.")
-
-    await state.clear()
-
 
 
 # =======================
