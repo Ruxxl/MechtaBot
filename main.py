@@ -21,8 +21,8 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
-from fsm import JiraFSM, start_jira_fsm, jira_title_step, jira_description_step, \
-                jira_priority_step, jira_links_step, jira_screenshots_step
+from jira_fsm import JiraFSM, start_jira_fsm, jira_title_step, jira_description_step, \
+                     jira_priority_step, jira_links_step, jira_screenshots_step
 
 
 # =======================
@@ -70,6 +70,7 @@ dp.message.register(jira_description_step, JiraFSM.waiting_description)
 dp.message.register(jira_priority_step, JiraFSM.waiting_priority)
 dp.message.register(jira_links_step, JiraFSM.waiting_links)
 dp.message.register(jira_screenshots_step, JiraFSM.waiting_screenshots, F.photo | F.text)
+
 
 # =======================
 # Утилиты
