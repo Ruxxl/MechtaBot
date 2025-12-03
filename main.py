@@ -1,5 +1,5 @@
 # Refactored main.py
-# Рабочий вариант с исправленным Jira FSM
+# Улучшенная структура, безопасные фильтры, обработка фоновой задачи и логирование.
 
 import asyncio
 import aiohttp
@@ -7,7 +7,6 @@ import ssl
 import os
 import re
 import logging
-from functools import partial
 from dotenv import load_dotenv
 from typing import List, Tuple, Optional
 
@@ -15,8 +14,6 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
 
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
@@ -24,8 +21,8 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
-from jira_fsm import JiraFSM, start_jira_fsm, jira_title_step, jira_description_step, \
-                     jira_priority_step, jira_links_step, jira_screenshots_step, create_jira_ticket_extended
+from jira_fsm import JiraFSM, start_jira_fsm, jira_title_step, jira_description_step, jira_priority_step, jira_links_step, jira_screenshots_step, jira_finish
+from aiogram.fsm.storage.memory import MemoryStorage
 
 # =======================
 # Настройка окружения
@@ -44,8 +41,9 @@ TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
 THREAD_PREFIXES = {1701: '[Back]', 1703: '[Front]'}
 
+
 # =======================
-# Логирование
+# Логирование (встроенное)
 # =======================
 def setup_logger():
     fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -54,22 +52,40 @@ def setup_logger():
 
 logger = setup_logger()
 
+
 # =======================
 # Инициализация бота
 # =======================
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher()
+# Dispatcher без параметров — современный стиль
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
+dp.message.register(start_jira_fsm, commands=["jira"])
+
+dp.message.register(jira_title_step, state=JiraFSM.waiting_title)
+dp.message.register(jira_description_step, state=JiraFSM.waiting_description)
+dp.callback_query.register(jira_priority_step, state=JiraFSM.waiting_priority)
+dp.message.register(jira_links_step, state=JiraFSM.waiting_links)
+dp.message.register(jira_screenshots_step, state=JiraFSM.waiting_screenshots)
+dp.callback_query.register(jira_finish, state=JiraFSM.waiting_screenshots)
+
+
 
 # =======================
 # Утилиты
 # =======================
+
 def clean_summary(text: str, tags: List[str]) -> str:
+    """Удаляет заданные теги из текста"""
     for tag in tags:
         text = re.sub(re.escape(tag), '', text, flags=re.IGNORECASE)
     return ' '.join(text.split()).strip()
 
+
 def get_thread_prefix(message: Message) -> str:
+    """Возвращает префикс подзадачи по thread_id"""
     return THREAD_PREFIXES.get(getattr(message, 'message_thread_id', None), '')
+
 
 async def send_safe(chat_id: int, text: str):
     try:
@@ -77,12 +93,14 @@ async def send_safe(chat_id: int, text: str):
     except Exception as e:
         logger.error("Не удалось отправить сообщение %s: %s", chat_id, e)
 
+
 # =======================
 # Команды
 # =======================
 @dp.message(F.text == "/getid")
 async def get_chat_id(message: Message):
     await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
+
 
 # =======================
 # HR Меню
@@ -97,80 +115,138 @@ async def hr_menu(message: Message):
     ])
     await message.reply("📋 Выберите интересующую тему:", reply_markup=kb)
 
+
 @dp.callback_query(F.data.startswith("hr_"))
 async def hr_topic_detail(callback: CallbackQuery):
     topic_key = callback.data.split("_", 1)[1]
     text = HR_TOPICS.get(topic_key, {}).get("text", "❌ Неизвестная тема.")
+    # Отвечаем в том же чате
     await callback.message.answer(text)
     await callback.answer()
+
 
 # =======================
 # Обработка фото
 # =======================
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
+    # передаём create_jira_ticket как callback
     await handle_photo_message(
         bot=bot,
         message=message,
         trigger_tags=TRIGGER_TAGS,
-        create_jira_ticket=create_jira_ticket_extended
+        create_jira_ticket=create_jira_ticket
     )
 
+
 # =======================
-# Обработка текста вне FSM
+# Обработка текста
 # =======================
+# Исключаем команды (начинающиеся с '/') чтобы не мешать стандартным командам
 @dp.message(F.text & ~F.text.startswith("/"))
-async def handle_text(message: Message, state: FSMContext):
-    if await state.get_state():
-        return  # пропускаем, если пользователь в FSM
+async def handle_text(message: Message):
     await process_text_message(
         message=message,
         TRIGGER_TAGS=TRIGGER_TAGS,
         CHECK_TAG=CHECK_TAG,
         THREAD_PREFIXES=THREAD_PREFIXES,
-        create_jira_ticket=create_jira_ticket_extended,
+        create_jira_ticket=create_jira_ticket,
         bot=bot,
         JIRA_URL=JIRA_URL
     )
 
-# =======================
-# Callback Jira Release
-# =======================
-@dp.callback_query(F.data == "jira_release_status")
-async def callback_jira_release_status(callback: CallbackQuery):
-    await handle_jira_release_status(
-        callback,
-        JIRA_EMAIL,
-        JIRA_API_TOKEN,
-        JIRA_PROJECT_KEY,
-        JIRA_URL
-    )
 
 # =======================
-# Jira FSM регистрация
+# Создание задачи Jira
 # =======================
-dp.message.register(start_jira_fsm, Command(commands=["jira"]))
+async def create_jira_ticket(
+        text: str,
+        author: str,
+        file_bytes: Optional[bytes] = None,
+        filename: Optional[str] = None,
+        thread_prefix: str = ""
+) -> Tuple[bool, Optional[str]]:
 
-dp.message.register(jira_title_step, JiraFSM.waiting_title)
-dp.message.register(jira_description_step, JiraFSM.waiting_description)
-dp.message.register(jira_priority_step, JiraFSM.waiting_priority)
-dp.message.register(jira_links_step, JiraFSM.waiting_links)
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+    cleaned_text = clean_summary(text, TRIGGER_TAGS)
+    # Включаем префикс, если он передан
+    summary = f"{thread_prefix} [Telegram] {cleaned_text}".strip()[:255]
 
-dp.message.register(
-    partial(
-        jira_screenshots_step,
-        JIRA_EMAIL=JIRA_EMAIL,
-        JIRA_API_TOKEN=JIRA_API_TOKEN,
-        JIRA_PROJECT_KEY=JIRA_PROJECT_KEY,
-        JIRA_PARENT_KEY=JIRA_PARENT_KEY,
-        JIRA_URL=JIRA_URL
-    ),
-    JiraFSM.waiting_screenshots,
-    F.text | F.photo
-)
+    payload = {
+        "fields": {
+            "project": {"key": JIRA_PROJECT_KEY},
+            "parent": {"key": JIRA_PARENT_KEY},
+            "summary": summary,
+            "description": {
+                "type": "doc",
+                "version": 1,
+                "content": [{
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": f"[Telegram] Автор: {author}\n{text}"}]
+                }]
+            },
+            "issuetype": {"name": "Подзадача"}
+        }
+    }
+
+    # Если нужно отключить верификацию (в dev/railway), делаем контекст
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
+    async with aiohttp.ClientSession(auth=auth) as session:
+        # Создание задачи
+        try:
+            async with session.post(f"{JIRA_URL}/rest/api/3/issue", json=payload, ssl=ssl_context) as resp:
+                if resp.status != 201:
+                    error = await resp.text()
+                    logger.error("❌ Ошибка при создании задачи: %s — %s", resp.status, error)
+                    return False, None
+
+                result = await resp.json()
+                issue_key = result.get("key")
+                logger.info("✅ Задача %s создана", issue_key)
+        except Exception as e:
+            logger.exception("Ошибка при запросе к Jira: %s", e)
+            return False, None
+
+        # Формирование уведомления
+        notify_text = (
+            f"📨 Создан новый баг!\n"
+            f"🔑 <b>{issue_key}</b>\n"
+            f"👤 Автор: <b>{author}</b>\n\n"
+            f"🔗 <a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу</a>\n\n"
+            f"📝 <b>Описание:</b>\n{text}"
+        )
+
+        # Отправка уведомлений безопасно
+        await send_safe(ADMIN_ID, notify_text)
+        await send_safe(TESTERS_CHANNEL_ID, notify_text)
+
+        # Прикрепление файла (если есть)
+        if file_bytes and filename:
+            attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
+            attach_headers = {"X-Atlassian-Token": "no-check"}
+            data = aiohttp.FormData()
+            data.add_field('file', file_bytes, filename=filename, content_type='image/jpeg')
+
+            try:
+                async with session.post(attach_url, data=data, headers=attach_headers, ssl=ssl_context) as attach_resp:
+                    if attach_resp.status in (200, 201):
+                        logger.info("📎 Фото прикреплено к задаче %s", issue_key)
+                    else:
+                        error = await attach_resp.text()
+                        logger.error("❌ Ошибка при вложении: %s — %s", attach_resp.status, error)
+                        return False, None
+            except Exception as e:
+                logger.exception("Ошибка при прикреплении файла: %s", e)
+                return False, None
+
+    return True, issue_key
+
 
 # =======================
-# Фоновая задача
+# Фоновая задача — биндер
 # =======================
 async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
     while True:
@@ -182,6 +258,18 @@ async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
         except Exception as e:
             logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
         await asyncio.sleep(interval)
+
+# callback для кнопки Jira Release
+@dp.callback_query(F.data == "jira_release_status")
+async def callback_jira_release_status(callback: CallbackQuery):
+    await handle_jira_release_status(
+        callback,
+        JIRA_EMAIL,
+        JIRA_API_TOKEN,
+        JIRA_PROJECT_KEY,
+        JIRA_URL
+    )
+
 
 # =======================
 # Запуск бота
@@ -209,6 +297,7 @@ async def main():
     # 5) Теперь запускаем polling — он держит главный цикл
     logger.info("Запуск polling...")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     try:
