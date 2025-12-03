@@ -16,6 +16,7 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram import F
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
@@ -262,7 +263,21 @@ async def callback_jira_release_status(callback: CallbackQuery):
         JIRA_URL
     )
 
-# Регистрация FSM
+# Jira FSM
+@dp.message(F.text & ~F.text.startswith("/"))
+async def handle_text(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state:  # если FSM активен, пропускаем
+        return
+    await process_text_message(
+        message=message,
+        TRIGGER_TAGS=TRIGGER_TAGS,
+        CHECK_TAG=CHECK_TAG,
+        THREAD_PREFIXES=THREAD_PREFIXES,
+        create_jira_ticket=create_jira_ticket,
+        bot=bot,
+        JIRA_URL=JIRA_URL
+    )
 # Регистрация команды /jira
 dp.message.register(start_jira_fsm, Command(commands=["jira"]))
 
