@@ -61,17 +61,6 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 # Dispatcher без параметров — современный стиль
 dp = Dispatcher()
 
-# -----------------------
-# Регистрация FSM /jira
-# -----------------------
-dp.message.register(start_jira_fsm, commands=["jira"])
-dp.message.register(jira_title_step, JiraFSM.waiting_title)
-dp.message.register(jira_description_step, JiraFSM.waiting_description)
-dp.message.register(jira_priority_step, JiraFSM.waiting_priority)
-dp.message.register(jira_links_step, JiraFSM.waiting_links)
-dp.message.register(jira_screenshots_step, JiraFSM.waiting_screenshots, F.photo | F.text)
-
-
 # =======================
 # Утилиты
 # =======================
@@ -270,6 +259,25 @@ async def callback_jira_release_status(callback: CallbackQuery):
         JIRA_PROJECT_KEY,
         JIRA_URL
     )
+
+# Регистрация FSM
+dp.message.register(start_jira_fsm, commands=["jira"])
+dp.message.register(jira_title_step, JiraFSM.waiting_title)
+dp.message.register(jira_description_step, JiraFSM.waiting_description)
+dp.message.register(jira_priority_step, JiraFSM.waiting_priority)
+dp.message.register(jira_links_step, JiraFSM.waiting_links)
+dp.message.register(
+    lambda m, s: jira_screenshots_step(
+        m, s,
+        JIRA_EMAIL=JIRA_EMAIL,
+        JIRA_API_TOKEN=JIRA_API_TOKEN,
+        JIRA_PROJECT_KEY=JIRA_PROJECT_KEY,
+        JIRA_PARENT_KEY=JIRA_PARENT_KEY,
+        JIRA_URL=JIRA_URL
+    ),
+    JiraFSM.waiting_screenshots,
+    F.photo | F.text
+)
 
 
 # =======================
