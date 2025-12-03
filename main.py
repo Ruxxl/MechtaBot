@@ -89,22 +89,6 @@ async def handle_photo(message: types.Message):
         create_jira_ticket=create_jira_ticket
     )
 
-# Глобальный хендлер текста — пропускаем, если FSM активен
-@dp.message(F.text & ~F.text.startswith("/"))
-async def handle_text(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state:  # если FSM активен — пропускаем
-        return
-    await process_text_message(
-        message=message,
-        TRIGGER_TAGS=TRIGGER_TAGS,
-        CHECK_TAG=CHECK_TAG,
-        THREAD_PREFIXES=THREAD_PREFIXES,
-        create_jira_ticket=create_jira_ticket,
-        bot=bot,
-        JIRA_URL=JIRA_URL
-    )
-
 async def create_jira_ticket(
         text: str,
         author: str,
@@ -147,7 +131,6 @@ async def create_jira_ticket(
                     return False, None
                 result = await resp.json()
                 issue_key = result.get("key")
-                logger.info("✅ Задача %s создана", issue_key)
         except Exception as e:
             logger.exception("Ошибка при запросе к Jira: %s", e)
             return False, None
@@ -170,9 +153,7 @@ async def create_jira_ticket(
             data.add_field('file', file_bytes, filename=filename, content_type='image/jpeg')
             try:
                 async with session.post(attach_url, data=data, headers=attach_headers, ssl=ssl_context) as attach_resp:
-                    if attach_resp.status in (200, 201):
-                        logger.info("📎 Фото прикреплено к задаче %s", issue_key)
-                    else:
+                    if attach_resp.status not in (200, 201):
                         error = await attach_resp.text()
                         logger.error("❌ Ошибка при вложении: %s — %s", attach_resp.status, error)
                         return False, None
@@ -181,29 +162,6 @@ async def create_jira_ticket(
                 return False, None
 
     return True, issue_key
-
-async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
-    while True:
-        try:
-            await coro_func(*args, **kwargs)
-        except asyncio.CancelledError:
-            logger.info("Фоновая задача отменена")
-            raise
-        except Exception as e:
-            logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
-        await asyncio.sleep(interval)
-
-@dp.callback_query(F.data == "jira_release_status")
-async def callback_jira_release_status(callback: CallbackQuery):
-    await handle_jira_release_status(
-        callback,
-        JIRA_EMAIL,
-        JIRA_API_TOKEN,
-        JIRA_PROJECT_KEY,
-        JIRA_URL
-    )
-
-# FSM для команды /jira
 
 class JiraFSM(StatesGroup):
     waiting_title = State()
@@ -240,9 +198,7 @@ async def jira_priority(callback: CallbackQuery, state: FSMContext):
     mapping = {"prio_high": "High", "prio_medium": "Medium", "prio_low": "Low"}
     priority = mapping.get(callback.data, "Medium")
     await state.update_data(priority=priority)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Пропустить", callback_data="skip_links")]
-    ])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Пропустить", callback_data="skip_links")]])
     await state.set_state(JiraFSM.waiting_links)
     await callback.message.answer("🔗 Отправьте ссылки или нажмите «Пропустить»", reply_markup=kb)
     await callback.answer()
@@ -251,18 +207,14 @@ async def jira_priority(callback: CallbackQuery, state: FSMContext):
 async def jira_skip_links(callback: CallbackQuery, state: FSMContext):
     await state.update_data(links=None)
     await state.set_state(JiraFSM.waiting_screenshots)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Готово", callback_data="screens_done")]
-    ])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Готово", callback_data="screens_done")]])
     await callback.message.answer("🖼 Отправьте скриншоты. После загрузки нажмите «Готово».", reply_markup=kb)
     await callback.answer()
 
 @dp.message(JiraFSM.waiting_links, F.text)
 async def jira_links(message: Message, state: FSMContext):
     await state.update_data(links=message.text)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Готово", callback_data="screens_done")]
-    ])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Готово", callback_data="screens_done")]])
     await state.set_state(JiraFSM.waiting_screenshots)
     await message.answer("🖼 Отправьте скриншоты. После загрузки нажмите «Готово».", reply_markup=kb)
 
@@ -313,19 +265,20 @@ async def create_jira_ticket_extended(
             "parent": {"key": JIRA_PARENT_KEY},
             "summary": title[:255],
             "description": {
-    "type": "doc",
-    "version": 1,
-    "content": [
-        {
-            "type": "paragraph",
-            "content": [{"type": "text", "text": desc_text}]
-        }
-    ]
-},
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": desc_text}]
+                    }
+                ]
+            },
             "priority": {"name": priority},
             "issuetype": {"name": "Подзадача"}
         }
     }
+
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -347,12 +300,7 @@ async def create_jira_ticket_extended(
                 file = await bot.get_file(file_id)
                 file_bytes = await bot.download_file(file.file_path)
                 form = aiohttp.FormData()
-                form.add_field(
-                    "file",
-                    file_bytes,
-                    filename="screenshot.jpg",
-                    content_type="image/jpeg"
-                )
+                form.add_field("file", file_bytes, filename="screenshot.jpg", content_type="image/jpeg")
                 async with session.post(
                     f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments",
                     data=form,
@@ -366,17 +314,59 @@ async def create_jira_ticket_extended(
 
     return True, issue_key
 
+@dp.message(F.text & ~F.text.startswith("/"))
+async def handle_text(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state:
+        return
+    await process_text_message(
+        message=message,
+        TRIGGER_TAGS=TRIGGER_TAGS,
+        CHECK_TAG=CHECK_TAG,
+        THREAD_PREFIXES=THREAD_PREFIXES,
+        create_jira_ticket=create_jira_ticket,
+        bot=bot,
+        JIRA_URL=JIRA_URL
+    )
+
+async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
+    while True:
+        try:
+            await coro_func(*args, **kwargs)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
+        await asyncio.sleep(interval)
+
+@dp.callback_query(F.data == "jira_release_status")
+async def callback_jira_release_status(callback: CallbackQuery):
+    await handle_jira_release_status(
+        callback,
+        JIRA_EMAIL,
+        JIRA_API_TOKEN,
+        JIRA_PROJECT_KEY,
+        JIRA_URL
+    )
+
 async def main():
-    logger.info("🚀 Бот стартует")
     asyncio.create_task(check_calendar_events(bot, TESTERS_CHANNEL_ID))
     asyncio.create_task(start_reminders(bot, TESTERS_CHANNEL_ID))
-    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
+    asyncio.create_task(run_background_task(
+        jira_release_check,
+        bot,
+        TESTERS_CHANNEL_ID,
+        JIRA_EMAIL,
+        JIRA_API_TOKEN,
+        JIRA_PROJECT_KEY,
+        JIRA_URL,
+        logger,
+        interval=500
+    ))
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Остановка по Ctrl+C")
-    except Exception:
-        logger.exception("Критическая ошибка при запуске")
+        pass
