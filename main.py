@@ -21,8 +21,6 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
-from jira_fsm import JiraFSM, start_jira_fsm, jira_title_step, jira_description_step, jira_priority_step, jira_links_step, jira_screenshots_step, jira_finish
-from aiogram.fsm.storage.memory import MemoryStorage
 
 # =======================
 # Настройка окружения
@@ -58,17 +56,7 @@ logger = setup_logger()
 # =======================
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 # Dispatcher без параметров — современный стиль
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
-dp.message.register(start_jira_fsm, commands=["jira"])
-
-dp.message.register(jira_title_step, state=JiraFSM.waiting_title)
-dp.message.register(jira_description_step, state=JiraFSM.waiting_description)
-dp.callback_query.register(jira_priority_step, state=JiraFSM.waiting_priority)
-dp.message.register(jira_links_step, state=JiraFSM.waiting_links)
-dp.message.register(jira_screenshots_step, state=JiraFSM.waiting_screenshots)
-dp.callback_query.register(jira_finish, state=JiraFSM.waiting_screenshots)
-
+dp = Dispatcher()
 
 
 # =======================
