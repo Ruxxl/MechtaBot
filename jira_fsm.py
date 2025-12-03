@@ -7,7 +7,6 @@ from aiogram import Bot, types, F
 from aiogram.types import Message
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from main import JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_PARENT_KEY, JIRA_URL
 
 logger = logging.getLogger("bot")
 
@@ -30,7 +29,12 @@ async def create_jira_ticket_extended(
         priority: str,
         links: Optional[str],
         screenshots: List[str],
-        bot: Bot
+        bot: Bot,
+        JIRA_EMAIL: str,
+        JIRA_API_TOKEN: str,
+        JIRA_PROJECT_KEY: str,
+        JIRA_PARENT_KEY: str,
+        JIRA_URL: str
 ) -> Tuple[bool, Optional[str]]:
 
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
@@ -122,7 +126,10 @@ async def jira_links_step(message: Message, state: FSMContext):
     await state.set_state(JiraFSM.waiting_screenshots)
     await message.reply("📸 Прикрепите скриншоты (можно несколько) или отправьте '-' если нет:")
 
-async def jira_screenshots_step(message: Message, state: FSMContext):
+async def jira_screenshots_step(message: Message, state: FSMContext,
+                                 JIRA_EMAIL: str = None, JIRA_API_TOKEN: str = None,
+                                 JIRA_PROJECT_KEY: str = None, JIRA_PARENT_KEY: str = None,
+                                 JIRA_URL: str = None):
     data = await state.get_data()
     screenshots = data.get("screenshots", [])
 
@@ -132,15 +139,12 @@ async def jira_screenshots_step(message: Message, state: FSMContext):
         screenshots.append(message.photo[-1].file_id)
 
     await state.update_data(screenshots=screenshots)
-    await finalize_jira_creation(message, state)
 
-async def finalize_jira_creation(message: Message, state: FSMContext):
-    data = await state.get_data()
+    # Вызов финальной функции с передачей параметров Jira
     title = data.get("title")
     description = data.get("description")
     priority = data.get("priority")
     links = data.get("links")
-    screenshots = data.get("screenshots", [])
 
     success, issue_key = await create_jira_ticket_extended(
         title=title,
@@ -148,7 +152,12 @@ async def finalize_jira_creation(message: Message, state: FSMContext):
         priority=priority,
         links=links,
         screenshots=screenshots,
-        bot=message.bot
+        bot=message.bot,
+        JIRA_EMAIL=JIRA_EMAIL,
+        JIRA_API_TOKEN=JIRA_API_TOKEN,
+        JIRA_PROJECT_KEY=JIRA_PROJECT_KEY,
+        JIRA_PARENT_KEY=JIRA_PARENT_KEY,
+        JIRA_URL=JIRA_URL
     )
 
     if success:
