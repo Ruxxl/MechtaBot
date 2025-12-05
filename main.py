@@ -279,8 +279,9 @@ class JiraFSM(StatesGroup):
 # =======================
 
 # Обработка текста, только если FSM не активен
-@dp.message(F.text & ~F.text.startswith("/") & StateFilter(None))
-async def handle_text(message: Message):
+# ловим текстовые сообщения без команд, только если FSM не активен
+@dp.message(F.text & ~F.text.startswith("/"), StateFilter(None))
+async def handle_text(message: types.Message):
     await process_text_message(
         message=message,
         TRIGGER_TAGS=TRIGGER_TAGS,
