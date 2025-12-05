@@ -253,16 +253,27 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
     data = await state.get_data()
     files = data.get("files", [])
 
+    kb_skip = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Пропустить", callback_data="skip_screenshots")]
+    ])
+
     if message.photo:
         for photo in message.photo[-1:]:
             if photo.file_id not in files:
                 files.append(photo.file_id)
         await state.update_data(files=files)
-        await message.answer(f"✅ Скриншот добавлен. Всего файлов: {len(files)}\nПрикрепите ещё или нажмите 'Пропустить'.")
+        await message.answer(
+            f"✅ Скриншот добавлен. Всего файлов: {len(files)}\nПрикрепите ещё или нажмите 'Пропустить'.",
+            reply_markup=kb_skip
+        )
         return
     else:
-        await message.answer("⚠️ Пожалуйста, отправьте фото или нажмите 'Пропустить'.")
+        await message.answer(
+            "⚠️ Пожалуйста, отправьте фото или нажмите 'Пропустить'.",
+            reply_markup=kb_skip
+        )
         return
+
 
 # =======================
 # Остальной функционал (HR, фото, текст, фоновые таски)
