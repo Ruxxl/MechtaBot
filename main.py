@@ -93,8 +93,8 @@ class JiraFSM(StatesGroup):
 async def start_jira_fsm(message: Message, state: FSMContext):
     await state.clear()
     await state.update_data(files=[])
-    await message.answer("🚀 <b>Создание подзадачи Jira</b>\n\n"
-                         "📌 <b>Шаг 1:</b> Введите заголовок задачи (коротко и ясно):",
+    await message.answer("🚀 <b>Регистрация дефекта</b>\n\n"
+                         "📌 <b>Шаг 1:</b> Введите заголовок дефекта (коротко и ясно):",
                          parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_title)
 
@@ -105,7 +105,7 @@ async def jira_title_handler(message: Message, state: FSMContext):
         await message.answer("⚠️ Заголовок не может быть пустым. Попробуйте ещё раз:")
         return
     await state.update_data(title=title)
-    await message.answer("📝 <b>Шаг 2:</b> Введите описание задачи.\n"
+    await message.answer("📝 <b>Шаг 2:</b> Введите описание дефекта.\n"
                          "Опишите суть, что нужно сделать и любые детали, которые помогут разработчику.",
                          parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_description)
@@ -115,19 +115,19 @@ async def jira_description_handler(message: Message, state: FSMContext):
     description = message.text.strip()
     await state.update_data(description=description)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🟢 Low", callback_data="priority_low"),
-         InlineKeyboardButton(text="🟡 Medium", callback_data="priority_medium"),
-         InlineKeyboardButton(text="🔴 High", callback_data="priority_high")]
+        [InlineKeyboardButton(text="🟢 Низкий", callback_data="priority_low"),
+         InlineKeyboardButton(text="🟡 Средний", callback_data="priority_medium"),
+         InlineKeyboardButton(text="🔴 Высокий", callback_data="priority_high")]
     ])
     await message.answer("⚡ <b>Шаг 3:</b> Выберите приоритет задачи:", reply_markup=kb, parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_priority)
 
 @dp.callback_query(JiraFSM.waiting_priority)
 async def jira_priority_handler(callback: CallbackQuery, state: FSMContext):
-    priority_map = {"priority_low": "Low", "priority_medium": "Medium", "priority_high": "High"}
+    priority_map = {"priority_low": "Низкий", "priority_medium": "Средний", "priority_high": "Высокий"}
     priority = priority_map.get(callback.data, "Medium")
     await state.update_data(priority=priority)
-    await callback.message.answer("🔗 <b>Шаг 4:</b> Введите ссылки, если есть (через пробел), или напишите 'нет':",
+    await callback.message.answer("🔗 <b>Шаг 4:</b> Введите ссылки на страницу или JAM, или напишите 'нет':",
                                   parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_links)
     await callback.answer()
@@ -152,7 +152,7 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
         issue_key = await create_jira_ticket_fsm(await state.get_data(), author=message.from_user.full_name)
         if issue_key:
             text_notify = (
-                f"✅ <b>Подзадача создана!</b>\n"
+                f"✅ <b>Дефект создан!</b>\n"
                 f"🔑 <b>{issue_key}</b>\n"
                 f"👤 Автор: <b>{message.from_user.full_name}</b>\n"
                 f"📝 Описание: {data.get('description', '-')}\n"
