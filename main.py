@@ -156,8 +156,8 @@ async def create_jira_ticket_fsm(data: dict, author: str) -> Optional[str]:
 async def start_jira_fsm(message: Message, state: FSMContext):
     await state.clear()
     await state.update_data(files=[])
-    await message.answer("🚀 <b>Создание подзадачи Jira</b>\n\n"
-                         "📌 <b>Шаг 1:</b> Введите заголовок задачи (коротко и ясно):")
+    await message.answer("🚀 <b>Регистрация дефекта</b>\n\n"
+                         "📌 <b>Шаг 1:</b> Введите заголовок дефекта (коротко и ясно):")
     await state.set_state(JiraFSM.waiting_title)
 
 @dp.message(JiraFSM.waiting_title)
@@ -167,7 +167,7 @@ async def jira_title_handler(message: Message, state: FSMContext):
         await message.answer("⚠️ Заголовок не может быть пустым. Попробуйте ещё раз:")
         return
     await state.update_data(title=title)
-    await message.answer("📝 <b>Шаг 2:</b> Введите описание задачи.\nОпишите суть, что нужно сделать и любые детали.")
+    await message.answer("📝 <b>Шаг 2:</b> Введите описание дефекта.\nОпишите суть, что нужно сделать и любые детали.")
     await state.set_state(JiraFSM.waiting_description)
 
 @dp.message(JiraFSM.waiting_description)
@@ -175,9 +175,9 @@ async def jira_description_handler(message: Message, state: FSMContext):
     description = message.text.strip()
     await state.update_data(description=description)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🟢 Low", callback_data="priority_low"),
-         InlineKeyboardButton(text="🟡 Medium", callback_data="priority_medium"),
-         InlineKeyboardButton(text="🔴 High", callback_data="priority_high")]
+        [InlineKeyboardButton(text="🟢 Низкий", callback_data="priority_low"),
+         InlineKeyboardButton(text="🟡 Средний", callback_data="priority_medium"),
+         InlineKeyboardButton(text="🔴 Высокий", callback_data="priority_high")]
     ])
     await message.answer("⚡ <b>Шаг 3:</b> Выберите приоритет задачи:", reply_markup=kb)
     await state.set_state(JiraFSM.waiting_priority)
