@@ -79,7 +79,7 @@ async def send_safe(chat_id: int, text: str):
 
 
 # =======================
-# FSM для Jira с правильной подзадачей и файлами
+# FSM для Jira с красивыми инструкциями
 # =======================
 class JiraFSM(StatesGroup):
     waiting_title = State()
@@ -88,21 +88,26 @@ class JiraFSM(StatesGroup):
     waiting_links = State()
     waiting_screenshots = State()
 
+# ===== START FSM =====
 @dp.message(F.text == "/jira")
 async def start_jira_fsm(message: Message, state: FSMContext):
     await state.clear()
-    await state.update_data(files=[])  # инициализируем список файлов
-    await message.answer("Введите заголовок задачи для Jira:")
+    await state.update_data(files=[])
+    await message.answer("🚀 <b>Создание подзадачи Jira</b>\n\n"
+                         "📌 <b>Шаг 1:</b> Введите заголовок задачи (коротко и ясно):",
+                         parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_title)
 
 @dp.message(JiraFSM.waiting_title)
 async def jira_title_handler(message: Message, state: FSMContext):
     title = message.text.strip()
     if not title:
-        await message.answer("Заголовок не может быть пустым. Введите заново:")
+        await message.answer("⚠️ Заголовок не может быть пустым. Попробуйте ещё раз:")
         return
     await state.update_data(title=title)
-    await message.answer("Введите описание задачи:")
+    await message.answer("📝 <b>Шаг 2:</b> Введите описание задачи.\n"
+                         "Опишите суть, что нужно сделать и любые детали, которые помогут разработчику.",
+                         parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_description)
 
 @dp.message(JiraFSM.waiting_description)
@@ -110,11 +115,11 @@ async def jira_description_handler(message: Message, state: FSMContext):
     description = message.text.strip()
     await state.update_data(description=description)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Low", callback_data="priority_low"),
-         InlineKeyboardButton(text="Medium", callback_data="priority_medium"),
-         InlineKeyboardButton(text="High", callback_data="priority_high")]
+        [InlineKeyboardButton(text="🟢 Low", callback_data="priority_low"),
+         InlineKeyboardButton(text="🟡 Medium", callback_data="priority_medium"),
+         InlineKeyboardButton(text="🔴 High", callback_data="priority_high")]
     ])
-    await message.answer("Выберите приоритет задачи:", reply_markup=kb)
+    await message.answer("⚡ <b>Шаг 3:</b> Выберите приоритет задачи:", reply_markup=kb, parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_priority)
 
 @dp.callback_query(JiraFSM.waiting_priority)
@@ -122,7 +127,8 @@ async def jira_priority_handler(callback: CallbackQuery, state: FSMContext):
     priority_map = {"priority_low": "Low", "priority_medium": "Medium", "priority_high": "High"}
     priority = priority_map.get(callback.data, "Medium")
     await state.update_data(priority=priority)
-    await callback.message.answer("Введите ссылки (если есть) через пробел, или напишите 'нет':")
+    await callback.message.answer("🔗 <b>Шаг 4:</b> Введите ссылки, если есть (через пробел), или напишите 'нет':",
+                                  parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_links)
     await callback.answer()
 
@@ -131,7 +137,9 @@ async def jira_links_handler(message: Message, state: FSMContext):
     links_text = message.text.strip()
     links = [] if links_text.lower() == "нет" else links_text.split()
     await state.update_data(links=links)
-    await message.answer("Прикрепите скриншоты (можно несколько) или напишите 'нет':")
+    await message.answer("📸 <b>Шаг 5:</b> Прикрепите скриншоты (можно несколько).\n"
+                         "Когда закончите, напишите 'нет'.",
+                         parse_mode="HTML")
     await state.set_state(JiraFSM.waiting_screenshots)
 
 @dp.message(JiraFSM.waiting_screenshots)
@@ -140,22 +148,20 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
     files = data.get("files", [])
 
     if message.text and message.text.lower() == "нет":
-        # пользователь закончил прикреплять фото → создаём задачу
         await state.update_data(files=files)
         issue_key = await create_jira_ticket_fsm(await state.get_data(), author=message.from_user.full_name)
         if issue_key:
-            text_notify = f"✅ <b>Подзадача создана</b>\n" \
-                        f"🔑 <b>{issue_key}</b>\n" \
-                        f"👤 Автор: <b>{message.from_user.full_name}</b>\n" \
-                        f"📝 Описание: {data.get('description', '-')}\n"
+            text_notify = (
+                f"✅ <b>Подзадача создана!</b>\n"
+                f"🔑 <b>{issue_key}</b>\n"
+                f"👤 Автор: <b>{message.from_user.full_name}</b>\n"
+                f"📝 Описание: {data.get('description', '-')}\n"
+            )
             if data.get("links"):
                 text_notify += "🔗 Ссылки:\n" + "\n".join(data["links"]) + "\n"
             if files:
                 text_notify += f"📎 Прикреплено файлов: {len(files)}\n"
-            
-            # Добавляем ссылку на задачу
             text_notify += f"\n<a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу в Jira</a>"
-
             await message.answer(text_notify, parse_mode="HTML")
         else:
             await message.answer("❌ Ошибка при создании подзадачи.")
@@ -163,17 +169,18 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
         return
 
     elif message.photo:
-        # Берем только самый большой размер фото ([-1])
         for photo in message.photo[-1:]:
             if photo.file_id not in files:
                 files.append(photo.file_id)
         await state.update_data(files=files)
-        await message.answer(f"Скриншот добавлен. Всего файлов: {len(files)}\nПрикрепите ещё или напишите 'нет'")
+        await message.answer(f"✅ Скриншот добавлен. Всего файлов: {len(files)}\n"
+                             "Прикрепите ещё или напишите 'нет'",
+                             parse_mode="HTML")
+        return
+    else:
+        await message.answer("⚠️ Пожалуйста, отправьте фото или напишите 'нет'.", parse_mode="HTML")
         return
 
-    else:
-        await message.answer("Пожалуйста, отправьте фото или 'нет':")
-        return
 
 
     # Создаём задачу один раз
