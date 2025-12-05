@@ -265,6 +265,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.filter import StateFilter
 
+
 class JiraFSM(StatesGroup):
     waiting_title = State()
     waiting_description = State()
@@ -273,14 +274,29 @@ class JiraFSM(StatesGroup):
     waiting_screenshot = State()
 
 
+# =======================
+# ОБНОВЛЁННЫЙ handle_text
+# =======================
 @dp.message(
     F.text
     & ~F.text.startswith("/")
-    & StateFilter(None)       # <-- ДОБАВЛЕНО!
+    & StateFilter(None)
 )
 async def handle_text(message: Message):
+    await process_text_message(
+        message=message,
+        TRIGGER_TAGS=TRIGGER_TAGS,
+        CHECK_TAG=CHECK_TAG,
+        THREAD_PREFIXES=THREAD_PREFIXES,
+        create_jira_ticket=create_jira_ticket,
+        bot=bot,
+        JIRA_URL=JIRA_URL
+    )
 
 
+# =======================
+# /jira → старт
+# =======================
 @dp.message(F.text == "/jira")
 async def start_jira_fsm(message: Message, state: FSMContext):
     await state.clear()
