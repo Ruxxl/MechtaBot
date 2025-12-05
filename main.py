@@ -263,6 +263,7 @@ async def callback_jira_release_status(callback: CallbackQuery):
 # =======================
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.filter import StateFilter
 
 class JiraFSM(StatesGroup):
     waiting_title = State()
@@ -270,6 +271,14 @@ class JiraFSM(StatesGroup):
     waiting_priority = State()
     waiting_link = State()
     waiting_screenshot = State()
+
+
+@dp.message(
+    F.text
+    & ~F.text.startswith("/")
+    & StateFilter(None)       # <-- ДОБАВЛЕНО!
+)
+async def handle_text(message: Message):
 
 
 @dp.message(F.text == "/jira")
