@@ -15,7 +15,6 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
-
 from jira_fsm import register_jira_handlers
 
 # =======================
@@ -36,7 +35,7 @@ CHECK_TAG = '#check'
 THREAD_PREFIXES = {1701: '[Back]', 1703: '[Front]'}
 
 # =======================
-# Логирование
+# Логирование (встроенное)
 # =======================
 def setup_logger():
     fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -45,10 +44,12 @@ def setup_logger():
 
 logger = setup_logger()
 
+
 # =======================
 # Инициализация бота
 # =======================
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+# Dispatcher без параметров — современный стиль
 dp = Dispatcher()
 
 # =======================
@@ -123,20 +124,58 @@ async def callback_jira_release_status(callback: CallbackQuery):
     )
 
 # =======================
+# Фоновая задача — биндер
+# =======================
+async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
+    while True:
+        try:
+            await coro_func(*args, **kwargs)
+        except asyncio.CancelledError:
+            logger.info("Фоновая задача отменена")
+            raise
+        except Exception as e:
+            logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
+        await asyncio.sleep(interval)
+
+# callback для кнопки Jira Release
+@dp.callback_query(F.data == "jira_release_status")
+async def callback_jira_release_status(callback: CallbackQuery):
+    await handle_jira_release_status(
+        callback,
+        JIRA_EMAIL,
+        JIRA_API_TOKEN,
+        JIRA_PROJECT_KEY,
+        JIRA_URL
+    )
+
+
+# =======================
 # Запуск бота
 # =======================
 async def main():
     logger.info("🚀 Бот стартует")
+
+    # 1) Запускаем календарный сервис как таск (если check_calendar_events содержит свой loop)
     try:
         asyncio.create_task(check_calendar_events(bot, TESTERS_CHANNEL_ID))
-        asyncio.create_task(start_reminders(bot, TESTERS_CHANNEL_ID))
-        asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID,
-                                                JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY,
-                                                JIRA_URL, logger, interval=500))
+        logger.info("Запущен check_calendar_events в фоне")
     except Exception as e:
-        logger.exception("Ошибка запуска фоновых тасков: %s", e)
+        logger.exception("Не удалось запустить check_calendar_events: %s", e)
 
+    # 2) Запускаем ежедневные напоминания тоже в фоне (не await!)
+    try:
+        asyncio.create_task(start_reminders(bot, TESTERS_CHANNEL_ID))
+        logger.info("Запущен start_reminders в фоне")
+    except Exception as e:
+        logger.exception("Не удалось запустить start_reminders: %s", e)
+
+    # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
+    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
+
+    # 5) Теперь запускаем polling — он держит главный цикл
+    logger.info("Запуск polling...")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     try:
