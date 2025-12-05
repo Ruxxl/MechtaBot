@@ -14,9 +14,6 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import StateFilter
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.context import FSMContext
 
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
@@ -264,9 +261,9 @@ async def callback_jira_release_status(callback: CallbackQuery):
 # =======================
 # FSM для /jira
 # =======================
+from aiogram.filters import StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.filter import StateFilter
 
 
 class JiraFSM(StatesGroup):
