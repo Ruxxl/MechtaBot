@@ -171,7 +171,7 @@ def register_jira_handlers(dp, bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str, J
                                                  JIRA_PARENT_KEY, JIRA_URL, data, author=callback.from_user.full_name)
         await state.clear()
         if issue_key:
-            text_notify = f"✅ <b>Подзадача создана!</b>\n🔑 <b>{issue_key}</b>\n👤 Автор: <b>{callback.from_user.full_name}</b>\n"
+            text_notify = f"✅ <b>Создан новый дефект!</b>\n🔑 <b>{issue_key}</b>\n👤 Автор: <b>{callback.from_user.full_name}</b>\n"
             if data.get("links"):
                 text_notify += "🔗 Ссылки:\n" + "\n".join(data["links"]) + "\n"
             files = data.get("files", [])
