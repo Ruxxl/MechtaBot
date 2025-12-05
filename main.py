@@ -257,6 +257,7 @@ async def callback_jira_release_status(callback: CallbackQuery):
         JIRA_PROJECT_KEY,
         JIRA_URL
     )
+    asdasd
 
 
 # =======================
