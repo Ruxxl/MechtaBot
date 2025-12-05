@@ -164,11 +164,13 @@ async def create_jira_ticket_fsm(data: dict, files: list):
     payload = {
         "fields": {
             "project": {"key": JIRA_PROJECT_KEY},
+            "parent": {"key": "AS-3255"},  # <-- ключ родителя
             "summary": data["title"],
             "description": data["description"],
-            "issuetype": {"name": "Task"},
+            "issuetype": {"name": "Подзадача"},  # <-- важно точное имя подзадачи
             "priority": {"name": data["priority"]}
         }
+
     }
 
     ssl_context = ssl.create_default_context()
