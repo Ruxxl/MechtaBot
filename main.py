@@ -58,7 +58,7 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 dp = Dispatcher()
 
 # =======================
-# FSM для Jira
+# FSM для Jira с красивыми инструкциями
 # =======================
 class JiraFSM(StatesGroup):
     waiting_title = State()
@@ -80,38 +80,37 @@ def get_thread_prefix(message: Message) -> str:
 
 async def send_safe(chat_id: int, text: str):
     try:
-        await bot.send_message(chat_id, text)
+        await bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error("Не удалось отправить сообщение %s: %s", chat_id, e)
 
 # =======================
-# Создание задачи Jira
+# Создание задачи Jira (для FSM)
 # =======================
-async def create_jira_ticket(
-        text: str,
-        author: str,
-        file_bytes: Optional[bytes] = None,
-        filename: Optional[str] = None,
-        thread_prefix: str = ""
-) -> Optional[str]:
-    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
-    cleaned_text = clean_summary(text, TRIGGER_TAGS)
-    summary = f"{thread_prefix} [Telegram] {cleaned_text}".strip()[:255]
+async def create_jira_ticket_fsm(data: dict, author: str) -> Optional[str]:
+    title = data.get("title", "Без заголовка")
+    description = data.get("description", "")
+    priority = data.get("priority", "Medium")
+    links = data.get("links", [])
+    files = data.get("files", [])
 
+    full_text = description
+    if links:
+        full_text += "\n\n🔗 Ссылки:\n" + "\n".join(links)
+
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
     payload = {
         "fields": {
             "project": {"key": JIRA_PROJECT_KEY},
             "parent": {"key": JIRA_PARENT_KEY},
-            "summary": summary,
+            "summary": f"[Telegram] {title}"[:255],
             "description": {
                 "type": "doc",
                 "version": 1,
-                "content": [{
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": f"[Telegram] Автор: {author}\n{text}"}]
-                }]
+                "content": [{"type": "paragraph", "content": [{"type": "text", "text": f"[Telegram] Автор: {author}\n{full_text}"}]}]
             },
-            "issuetype": {"name": "Подзадача"}
+            "issuetype": {"name": "Подзадача"},
+            "priority": {"name": priority}
         }
     }
 
@@ -133,115 +132,102 @@ async def create_jira_ticket(
             logger.exception("Ошибка запроса к Jira: %s", e)
             return None
 
-        notify_text = (
-            f"📨 Создан новый баг!\n"
-            f"🔑 <b>{issue_key}</b>\n"
-            f"👤 Автор: <b>{author}</b>\n\n"
-            f"🔗 <a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу</a>\n\n"
-            f"📝 <b>Описание:</b>\n{text}"
-        )
-        await send_safe(ADMIN_ID, notify_text)
-        await send_safe(TESTERS_CHANNEL_ID, notify_text)
-
-        if file_bytes and filename:
-            attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
-            attach_headers = {"X-Atlassian-Token": "no-check"}
-            data = aiohttp.FormData()
-            data.add_field('file', file_bytes, filename=filename, content_type='image/jpeg')
-            try:
-                async with session.post(attach_url, data=data, headers=attach_headers, ssl=ssl_context) as attach_resp:
-                    if attach_resp.status in (200, 201):
-                        logger.info("Фото прикреплено к подзадаче %s", issue_key)
-            except Exception as e:
-                logger.exception("Ошибка при прикреплении файла: %s", e)
-
+        # Прикрепление файлов
+        if files:
+            for i, file_id in enumerate(files):
+                file = await bot.get_file(file_id)
+                file_bytes = await bot.download_file(file.file_path)
+                attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
+                data_attach = aiohttp.FormData()
+                data_attach.add_field('file', file_bytes.read(), filename=f"screenshot_{i+1}.jpg", content_type='image/jpeg')
+                headers = {"X-Atlassian-Token": "no-check"}
+                try:
+                    async with session.post(attach_url, data=data_attach, headers=headers, ssl=ssl_context) as attach_resp:
+                        if attach_resp.status in (200, 201):
+                            logger.info("Скриншот %s прикреплён к подзадаче %s", i+1, issue_key)
+                except Exception as e:
+                    logger.exception("Ошибка прикрепления скриншота: %s", e)
     return issue_key
 
 # =======================
 # FSM Handlers
 # =======================
 @dp.message(F.text == "/jira")
-async def start_jira(message: Message, state: FSMContext):
+async def start_jira_fsm(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("📝 Введите заголовок подзадачи:")
+    await state.update_data(files=[])
+    await message.answer("🚀 <b>Создание подзадачи Jira</b>\n\n"
+                         "📌 <b>Шаг 1:</b> Введите заголовок задачи (коротко и ясно):")
     await state.set_state(JiraFSM.waiting_title)
 
 @dp.message(JiraFSM.waiting_title)
-async def jira_title(message: Message, state: FSMContext):
-    await state.update_data(title=message.text)
-    await message.answer("✍️ Введите описание задачи:")
+async def jira_title_handler(message: Message, state: FSMContext):
+    title = message.text.strip()
+    if not title:
+        await message.answer("⚠️ Заголовок не может быть пустым. Попробуйте ещё раз:")
+        return
+    await state.update_data(title=title)
+    await message.answer("📝 <b>Шаг 2:</b> Введите описание задачи.\nОпишите суть, что нужно сделать и любые детали.")
     await state.set_state(JiraFSM.waiting_description)
 
 @dp.message(JiraFSM.waiting_description)
-async def jira_description(message: Message, state: FSMContext):
-    await state.update_data(description=message.text)
+async def jira_description_handler(message: Message, state: FSMContext):
+    description = message.text.strip()
+    await state.update_data(description=description)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("Высокий", callback_data="priority_high"),
-         InlineKeyboardButton("Средний", callback_data="priority_medium"),
-         InlineKeyboardButton("Низкий", callback_data="priority_low")]
+        [InlineKeyboardButton(text="🟢 Low", callback_data="priority_low"),
+         InlineKeyboardButton(text="🟡 Medium", callback_data="priority_medium"),
+         InlineKeyboardButton(text="🔴 High", callback_data="priority_high")]
     ])
-    await message.answer("⚡ Выберите приоритет:", reply_markup=kb)
+    await message.answer("⚡ <b>Шаг 3:</b> Выберите приоритет задачи:", reply_markup=kb)
+    await state.set_state(JiraFSM.waiting_priority)
 
-@dp.callback_query(F.data.startswith("priority_"), state=JiraFSM.waiting_description)
-async def jira_priority(callback: CallbackQuery, state: FSMContext):
-    mapping = {"priority_high": "High", "priority_medium": "Medium", "priority_low": "Low"}
+@dp.callback_query(JiraFSM.waiting_priority)
+async def jira_priority_handler(callback: CallbackQuery, state: FSMContext):
+    mapping = {"priority_low": "Low", "priority_medium": "Medium", "priority_high": "High"}
     await state.update_data(priority=mapping.get(callback.data, "Medium"))
-    await callback.message.answer("🔗 Введите ссылки через запятую или '-' если нет:")
-    await JiraFSM.waiting_links.set()
+    await callback.message.answer("🔗 <b>Шаг 4:</b> Введите ссылки через пробел или 'нет', если нет.")
+    await state.set_state(JiraFSM.waiting_links)
     await callback.answer()
 
 @dp.message(JiraFSM.waiting_links)
-async def jira_links(message: Message, state: FSMContext):
-    links = [] if message.text.strip() == '-' else [l.strip() for l in message.text.split(',')]
+async def jira_links_handler(message: Message, state: FSMContext):
+    links_text = message.text.strip()
+    links = [] if links_text.lower() == "нет" else links_text.split()
     await state.update_data(links=links)
-    await message.answer("📸 Пришлите скриншоты (фото). После каждого фото бот спросит, хотите ли отправить ещё.")
-    await state.update_data(screenshots=[])
-    await JiraFSM.waiting_screenshots.set()
+    await message.answer("📸 <b>Шаг 5:</b> Прикрепите скриншоты (можно несколько).\nНапишите 'нет', если больше не хотите добавлять.")
+    await state.set_state(JiraFSM.waiting_screenshots)
 
-@dp.message(JiraFSM.waiting_screenshots, F.photo)
-async def jira_screenshots(message: Message, state: FSMContext):
+@dp.message(JiraFSM.waiting_screenshots)
+async def jira_screenshots_handler(message: Message, state: FSMContext):
     data = await state.get_data()
-    screenshots = data.get("screenshots", [])
+    files = data.get("files", [])
 
-    photo = message.photo[-1]
-    file_bytes = await photo.download(destination=bytes)
-    screenshots.append(file_bytes)
-    await state.update_data(screenshots=screenshots)
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("Отправить ещё", callback_data="more_screens")],
-        [InlineKeyboardButton("Пропустить", callback_data="skip_screens")]
-    ])
-    await message.answer("✅ Фото сохранено. Хотите отправить ещё?", reply_markup=kb)
-
-@dp.callback_query(F.data == "more_screens", state=JiraFSM.waiting_screenshots)
-async def more_screens(callback: CallbackQuery, state: FSMContext):
-    await callback.message.answer("📸 Пришлите следующий скриншот.")
-    await callback.answer()
-
-@dp.callback_query(F.data == "skip_screens", state=JiraFSM.waiting_screenshots)
-async def skip_screens(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    title = data.get("title")
-    description = data.get("description")
-    links = data.get("links", [])
-    screenshots = data.get("screenshots", [])
-    full_text = description
-    if links:
-        full_text += "\n\n🔗 Ссылки:\n" + "\n".join(links)
-
-    for i, file_bytes in enumerate(screenshots):
-        await create_jira_ticket(
-            text=full_text,
-            author=callback.from_user.full_name,
-            file_bytes=file_bytes,
-            filename=f"screenshot_{i+1}.jpg",
-            thread_prefix=""
-        )
-
-    await callback.message.answer("✅ Подзадача создана! Ссылка на неё будет в уведомлении.")
-    await state.clear()
-    await callback.answer()
+    if message.text and message.text.lower() == "нет":
+        await state.update_data(files=files)
+        issue_key = await create_jira_ticket_fsm(await state.get_data(), author=message.from_user.full_name)
+        if issue_key:
+            text_notify = f"✅ <b>Подзадача создана!</b>\n🔑 <b>{issue_key}</b>\n👤 Автор: <b>{message.from_user.full_name}</b>\n"
+            if data.get("links"):
+                text_notify += "🔗 Ссылки:\n" + "\n".join(data["links"]) + "\n"
+            if files:
+                text_notify += f"📎 Прикреплено файлов: {len(files)}\n"
+            text_notify += f"\n<a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу в Jira</a>"
+            await message.answer(text_notify)
+        else:
+            await message.answer("❌ Ошибка при создании подзадачи.")
+        await state.clear()
+        return
+    elif message.photo:
+        for photo in message.photo[-1:]:
+            if photo.file_id not in files:
+                files.append(photo.file_id)
+        await state.update_data(files=files)
+        await message.answer(f"✅ Скриншот добавлен. Всего файлов: {len(files)}\nПрикрепите ещё или напишите 'нет'.")
+        return
+    else:
+        await message.answer("⚠️ Пожалуйста, отправьте фото или напишите 'нет'.")
+        return
 
 # =======================
 # Остальной функционал (HR, фото, текст, фоновые таски)
@@ -273,7 +259,7 @@ async def handle_photo(message: types.Message):
         bot=bot,
         message=message,
         trigger_tags=TRIGGER_TAGS,
-        create_jira_ticket=create_jira_ticket
+        create_jira_ticket=create_jira_ticket_fsm
     )
 
 @dp.message(F.text & ~F.text.startswith("/"))
@@ -283,7 +269,7 @@ async def handle_text(message: Message):
         TRIGGER_TAGS=TRIGGER_TAGS,
         CHECK_TAG=CHECK_TAG,
         THREAD_PREFIXES=THREAD_PREFIXES,
-        create_jira_ticket=create_jira_ticket,
+        create_jira_ticket=create_jira_ticket_fsm,
         bot=bot,
         JIRA_URL=JIRA_URL
     )
