@@ -140,15 +140,37 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
     files = data.get("files", [])
 
     if message.text and message.text.lower() == "нет":
-        pass
+        # пользователь закончил прикреплять фото → создаём задачу
+        await state.update_data(files=files)
+        issue_key = await create_jira_ticket_fsm(await state.get_data(), author=message.from_user.full_name)
+        if issue_key:
+            text_notify = f"✅ <b>Подзадача создана</b>\n" \
+                          f"🔑 <b>{issue_key}</b>\n" \
+                          f"👤 Автор: <b>{message.from_user.full_name}</b>\n" \
+                          f"📝 Описание: {data.get('description', '-')}\n"
+            if data.get("links"):
+                text_notify += "🔗 Ссылки:\n" + "\n".join(data["links"]) + "\n"
+            if files:
+                text_notify += f"📎 Прикреплено файлов: {len(files)}"
+            await message.answer(text_notify, parse_mode="HTML")
+        else:
+            await message.answer("❌ Ошибка при создании подзадачи.")
+        await state.clear()
+        return
+
     elif message.photo:
-        for photo in message.photo:
-            files.append(photo.file_id)
+        # Берем только самый большой размер фото ([-1])
+        for photo in message.photo[-1:]:
+            if photo.file_id not in files:
+                files.append(photo.file_id)
+        await state.update_data(files=files)
+        await message.answer(f"Скриншот добавлен. Всего файлов: {len(files)}\nПрикрепите ещё или напишите 'нет'")
+        return
+
     else:
         await message.answer("Пожалуйста, отправьте фото или 'нет':")
         return
 
-    await state.update_data(files=files)
 
     # Создаём задачу один раз
     issue_key = await create_jira_ticket_fsm(data, author=message.from_user.full_name)
