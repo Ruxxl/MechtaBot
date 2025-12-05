@@ -8,10 +8,10 @@ import os
 import re
 import logging
 from dotenv import load_dotenv
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.context import FSMContext
@@ -58,13 +58,14 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 dp = Dispatcher()
 
 # =======================
-# FSM для Jira с красивыми инструкциями
+# FSM для Jira
 # =======================
 class JiraFSM(StatesGroup):
     waiting_title = State()
     waiting_description = State()
     waiting_priority = State()
     waiting_links = State()
+    waiting_links_input = State()
     waiting_screenshots = State()
 
 # =======================
@@ -156,8 +157,7 @@ async def create_jira_ticket_fsm(data: dict, author: str) -> Optional[str]:
 async def start_jira_fsm(message: Message, state: FSMContext):
     await state.clear()
     await state.update_data(files=[])
-    await message.answer("🚀 <b>Регистрация дефекта</b>\n\n"
-                         "📌 <b>Шаг 1:</b> Введите заголовок дефекта (коротко и ясно):")
+    await message.answer("🚀 <b>Регистрация дефекта</b>\n\n📌 <b>Шаг 1:</b> Введите заголовок дефекта (коротко и ясно):")
     await state.set_state(JiraFSM.waiting_title)
 
 @dp.message(JiraFSM.waiting_title)
@@ -186,16 +186,22 @@ async def jira_description_handler(message: Message, state: FSMContext):
 async def jira_priority_handler(callback: CallbackQuery, state: FSMContext):
     mapping = {"priority_low": "Low", "priority_medium": "Medium", "priority_high": "High"}
     await state.update_data(priority=mapping.get(callback.data, "Medium"))
-    await callback.message.answer("🔗 <b>Шаг 4:</b> Введите ссылки через пробел или 'нет', если нет.")
-    await state.set_state(JiraFSM.waiting_links)
+
+    # Шаг 4: ссылки
+    kb_skip = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Пропустить")]], resize_keyboard=True)
+    await callback.message.answer("🔗 <b>Шаг 4:</b> Введите ссылки через пробел или нажмите 'Пропустить'", reply_markup=kb_skip)
+    await state.set_state(JiraFSM.waiting_links_input)
     await callback.answer()
 
-@dp.message(JiraFSM.waiting_links)
-async def jira_links_handler(message: Message, state: FSMContext):
+@dp.message(JiraFSM.waiting_links_input)
+async def jira_links_input_handler(message: Message, state: FSMContext):
     links_text = message.text.strip()
-    links = [] if links_text.lower() == "нет" else links_text.split()
+    links = [] if links_text.lower() == "пропустить" else links_text.split()
     await state.update_data(links=links)
-    await message.answer("📸 <b>Шаг 5:</b> Прикрепите скриншоты (можно несколько).\nНапишите 'нет', если больше не хотите добавлять.")
+
+    # Шаг 5: скриншоты
+    kb_skip = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Пропустить")]], resize_keyboard=True)
+    await message.answer("📸 <b>Шаг 5:</b> Прикрепите скриншоты (можно несколько) или нажмите 'Пропустить'", reply_markup=kb_skip)
     await state.set_state(JiraFSM.waiting_screenshots)
 
 @dp.message(JiraFSM.waiting_screenshots)
@@ -203,9 +209,10 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
     data = await state.get_data()
     files = data.get("files", [])
 
-    if message.text and message.text.lower() == "нет":
+    if message.text and message.text.lower() == "пропустить":
         await state.update_data(files=files)
         issue_key = await create_jira_ticket_fsm(await state.get_data(), author=message.from_user.full_name)
+        await state.clear()
         if issue_key:
             text_notify = f"✅ <b>Подзадача создана!</b>\n🔑 <b>{issue_key}</b>\n👤 Автор: <b>{message.from_user.full_name}</b>\n"
             if data.get("links"):
@@ -213,20 +220,19 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
             if files:
                 text_notify += f"📎 Прикреплено файлов: {len(files)}\n"
             text_notify += f"\n<a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу в Jira</a>"
-            await message.answer(text_notify)
+            await message.answer(text_notify, reply_markup=ReplyKeyboardRemove())
         else:
-            await message.answer("❌ Ошибка при создании подзадачи.")
-        await state.clear()
+            await message.answer("❌ Ошибка при создании подзадачи.", reply_markup=ReplyKeyboardRemove())
         return
     elif message.photo:
         for photo in message.photo[-1:]:
             if photo.file_id not in files:
                 files.append(photo.file_id)
         await state.update_data(files=files)
-        await message.answer(f"✅ Скриншот добавлен. Всего файлов: {len(files)}\nПрикрепите ещё или напишите 'нет'.")
+        await message.answer(f"✅ Скриншот добавлен. Всего файлов: {len(files)}\nПрикрепите ещё или нажмите 'Пропустить'.")
         return
     else:
-        await message.answer("⚠️ Пожалуйста, отправьте фото или напишите 'нет'.")
+        await message.answer("⚠️ Пожалуйста, отправьте фото или нажмите 'Пропустить'.")
         return
 
 # =======================
