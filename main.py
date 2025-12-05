@@ -261,10 +261,10 @@ async def callback_jira_release_status(callback: CallbackQuery):
 # =======================
 # FSM для /jira
 # =======================
-from aiogram.filters import StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-
+from aiogram.filters import StateFilter
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 class JiraFSM(StatesGroup):
     waiting_title = State()
@@ -278,9 +278,9 @@ class JiraFSM(StatesGroup):
 # ОБНОВЛЁННЫЙ handle_text
 # =======================
 @dp.message(
-    F.text
-    & ~F.text.startswith("/")
-    & StateFilter(None)
+    F.text,
+    ~F.text.startswith("/"),
+    StateFilter(None)  # обрабатываем только когда FSM не активен
 )
 async def handle_text(message: Message):
     await process_text_message(
@@ -295,7 +295,7 @@ async def handle_text(message: Message):
 
 
 # =======================
-# /jira → старт
+# /jira → старт FSM
 # =======================
 @dp.message(F.text == "/jira")
 async def start_jira_fsm(message: Message, state: FSMContext):
@@ -388,6 +388,7 @@ async def jira_screenshot(message: Message, state: FSMContext):
 @dp.message(JiraFSM.waiting_screenshot)
 async def no_photo_warning(message: Message):
     await message.answer("Отправьте, пожалуйста, именно фото.")
+
 
 
 # =======================
