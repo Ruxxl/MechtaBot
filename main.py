@@ -79,7 +79,7 @@ async def send_safe(chat_id: int, text: str):
 
 
 # =======================
-# FSM для Jira
+# FSM для Jira с правильной подзадачей и файлами
 # =======================
 class JiraFSM(StatesGroup):
     waiting_title = State()
@@ -88,10 +88,10 @@ class JiraFSM(StatesGroup):
     waiting_links = State()
     waiting_screenshots = State()
 
-# ===== START FSM =====
 @dp.message(F.text == "/jira")
 async def start_jira_fsm(message: Message, state: FSMContext):
     await state.clear()
+    await state.update_data(files=[])  # инициализируем список файлов
     await message.answer("Введите заголовок задачи для Jira:")
     await state.set_state(JiraFSM.waiting_title)
 
@@ -120,12 +120,9 @@ async def jira_description_handler(message: Message, state: FSMContext):
 @dp.callback_query(JiraFSM.waiting_priority)
 async def jira_priority_handler(callback: CallbackQuery, state: FSMContext):
     priority_map = {"priority_low": "Low", "priority_medium": "Medium", "priority_high": "High"}
-    priority = priority_map.get(callback.data)
-    if not priority:
-        await callback.message.answer("Некорректный приоритет. Выберите заново.")
-        return
+    priority = priority_map.get(callback.data, "Medium")
     await state.update_data(priority=priority)
-    await callback.message.answer("Введите ссылки (если есть) или напишите 'нет':")
+    await callback.message.answer("Введите ссылки (если есть) через пробел, или напишите 'нет':")
     await state.set_state(JiraFSM.waiting_links)
     await callback.answer()
 
@@ -140,9 +137,8 @@ async def jira_links_handler(message: Message, state: FSMContext):
 @dp.message(JiraFSM.waiting_screenshots)
 async def jira_screenshots_handler(message: Message, state: FSMContext):
     data = await state.get_data()
-
-    # Собираем файлы
     files = data.get("files", [])
+
     if message.text and message.text.lower() == "нет":
         pass
     elif message.photo:
@@ -152,30 +148,44 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
         await message.answer("Пожалуйста, отправьте фото или 'нет':")
         return
 
-    # Обновляем данные state
     await state.update_data(files=files)
 
-    # Создаём Jira задачу один раз
-    await create_jira_ticket_fsm(data)
-    await message.answer("Задача создана!")
+    # Создаём задачу один раз
+    issue_key = await create_jira_ticket_fsm(data, author=message.from_user.full_name)
+    if issue_key:
+        text_notify = f"✅ <b>Подзадача создана</b>\n" \
+                      f"🔑 <b>{issue_key}</b>\n" \
+                      f"👤 Автор: <b>{message.from_user.full_name}</b>\n" \
+                      f"📝 Описание: {data.get('description', '-')}\n"
+        if data.get("links"):
+            text_notify += "🔗 Ссылки:\n" + "\n".join(data["links"]) + "\n"
+        if files:
+            text_notify += f"📎 Прикреплено файлов: {len(files)}"
+        await message.answer(text_notify, parse_mode="HTML")
+    else:
+        await message.answer("❌ Ошибка при создании подзадачи.")
     await state.clear()
 
-
-async def create_jira_ticket_fsm(data: dict):
+# =======================
+# Функция создания подзадачи
+# =======================
+async def create_jira_ticket_fsm(data: dict, author: str) -> Optional[str]:
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
 
-    # Формируем описание: текст + ссылки
-    description_text = data.get("description", "")
-    links = data.get("links", [])
-    if links:
-        description_text += "\n\nСсылки:\n" + "\n".join(links)
+    description_text = f"[Telegram] Автор: {author}\n{data.get('description', '')}"
+    if data.get("links"):
+        description_text += "\n\nСсылки:\n" + "\n".join(data["links"])
 
     payload = {
         "fields": {
             "project": {"key": JIRA_PROJECT_KEY},
             "parent": {"key": JIRA_PARENT_KEY},
             "summary": data.get("title", "Без заголовка"),
-            "description": description_text,
+            "description": {
+                "type": "doc",
+                "version": 1,
+                "content": [{"type": "paragraph", "content": [{"type": "text", "text": description_text}]}]
+            },
             "issuetype": {"name": "Подзадача"},
             "priority": {"name": data.get("priority", "Medium")}
         }
@@ -186,29 +196,33 @@ async def create_jira_ticket_fsm(data: dict):
     ssl_context.verify_mode = ssl.CERT_NONE
 
     async with aiohttp.ClientSession(auth=auth) as session:
-        async with session.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, ssl=ssl_context) as resp:
-            if resp.status != 201:
-                error = await resp.text()
-                logger.error("Ошибка при создании задачи: %s — %s", resp.status, error)
-                return
-            result = await resp.json()
-            issue_key = result.get("key")
-            logger.info(f"Создана подзадача: {issue_key}")
+        try:
+            async with session.post(f"{JIRA_URL}/rest/api/3/issue", json=payload, ssl=ssl_context) as resp:
+                if resp.status != 201:
+                    error = await resp.text()
+                    logger.error("Ошибка создания подзадачи: %s — %s", resp.status, error)
+                    return None
+                result = await resp.json()
+                issue_key = result.get("key")
+                logger.info(f"Создана подзадача {issue_key}")
 
-            # Прикрепление файлов
-            files = data.get("files", [])
-            attach_url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
-            attach_headers = {"X-Atlassian-Token": "no-check"}
-            for file_id in files:
-                file_obj = await bot.get_file(file_id)
-                file_bytes = await bot.download_file(file_obj.file_path)
-                form = aiohttp.FormData()
-                form.add_field('file', file_bytes, filename=f"{file_id}.jpg", content_type='image/jpeg')
-                async with session.post(attach_url, data=form, headers=attach_headers, ssl=ssl_context) as attach_resp:
-                    if attach_resp.status in (200, 201):
-                        logger.info(f"Файл {file_id} прикреплен к {issue_key}")
-                    else:
-                        logger.error(f"Ошибка прикрепления файла {file_id}: {await attach_resp.text()}")
+                # Прикрепление файлов
+                attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
+                attach_headers = {"X-Atlassian-Token": "no-check"}
+                for file_id in data.get("files", []):
+                    file_obj = await bot.get_file(file_id)
+                    file_bytes = await bot.download_file(file_obj.file_path)
+                    form = aiohttp.FormData()
+                    form.add_field('file', file_bytes, filename=f"{file_id}.jpg", content_type='image/jpeg')
+                    async with session.post(attach_url, data=form, headers=attach_headers, ssl=ssl_context) as attach_resp:
+                        if attach_resp.status in (200, 201):
+                            logger.info(f"Файл {file_id} прикреплен к {issue_key}")
+                        else:
+                            logger.error(f"Ошибка прикрепления файла {file_id}: {await attach_resp.text()}")
+                return issue_key
+        except Exception as e:
+            logger.exception("Ошибка при создании подзадачи: %s", e)
+            return None
 
 
 # =======================
