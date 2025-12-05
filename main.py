@@ -258,13 +258,13 @@ async def callback_jira_release_status(callback: CallbackQuery):
         JIRA_URL
     )
 
-from aiogram import types, F
+from aiogram.filters import Command, StateFilter
+from aiogram import types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.filters import StateFilter
 
 # ==========================
-# FSM состояния для Jira
+# FSM состояния
 # ==========================
 class JiraFSM(StatesGroup):
     waiting_title = State()
@@ -274,12 +274,21 @@ class JiraFSM(StatesGroup):
     waiting_screenshots = State()
 
 # ==========================
-# Старт FSM командой /jira
+# Старт FSM
 # ==========================
-@dp.message(commands=["jira"])
+@dp.message(Command("jira"))
 async def start_jira_fsm(message: types.Message, state: FSMContext):
-    await message.answer("Введите заголовок задачи:")
     await state.set_state(JiraFSM.waiting_title)
+    await message.answer("Введите заголовок задачи:")
+
+# ==========================
+# Пример шага FSM
+# ==========================
+@dp.message(StateFilter(JiraFSM.waiting_title))
+async def jira_title(message: types.Message, state: FSMContext):
+    await state.update_data(title=message.text)
+    await state.set_state(JiraFSM.waiting_description)
+    await message.answer("Введите описание задачи:")
 
 # ==========================
 # Получение заголовка
