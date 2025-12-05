@@ -2,6 +2,7 @@ import aiohttp
 import ssl
 import logging
 import re
+import os
 from typing import List, Optional
 
 from aiogram import Bot, F, types
@@ -164,24 +165,51 @@ def register_jira_handlers(dp, bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str, J
         await callback.answer()
 
     # ======= Пропустить скриншоты =======
-    @dp.callback_query(F.data == "skip_screenshots")
-    async def skip_screenshots(callback: CallbackQuery, state: FSMContext):
-        data = await state.get_data()
-        issue_key = await create_jira_ticket_fsm(bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY,
-                                                 JIRA_PARENT_KEY, JIRA_URL, data, author=callback.from_user.full_name)
-        await state.clear()
-        if issue_key:
-            text_notify = f"✅ <b>Создан новый дефект!</b>\n🔑 <b>{issue_key}</b>\n👤 Автор: <b>{callback.from_user.full_name}</b>\n"
-            if data.get("links"):
-                text_notify += "🔗 Ссылки:\n" + "\n".join(data["links"]) + "\n"
-            files = data.get("files", [])
-            if files:
-                text_notify += f"📎 Прикреплено файлов: {len(files)}\n"
-            text_notify += f"\n<a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу в Jira</a>"
-            await callback.message.answer(text_notify, reply_markup=ReplyKeyboardRemove())
-        else:
-            await callback.message.answer("❌ Ошибка при создании подзадачи.", reply_markup=ReplyKeyboardRemove())
-        await callback.answer()
+@dp.callback_query(F.data == "skip_screenshots")
+async def skip_screenshots(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    issue_key = await create_jira_ticket_fsm(bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY,
+                                             JIRA_PARENT_KEY, JIRA_URL, data, author=callback.from_user.full_name)
+    await state.clear()
+    if issue_key:
+        # Формируем красивое уведомление для автора
+        text_notify = (
+            f"✅ <b>Новый дефект зарегистрирован!</b>\n\n"
+            f"🔑 <b>Ключ задачи:</b> {issue_key}\n"
+            f"👤 <b>Автор:</b> {callback.from_user.full_name}\n"
+        )
+        if data.get("links"):
+            text_notify += "🔗 <b>Ссылки:</b>\n" + "\n".join(data["links"]) + "\n"
+        files = data.get("files", [])
+        if files:
+            text_notify += f"📎 <b>Прикреплено файлов:</b> {len(files)}\n"
+        text_notify += f"\n<a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу в Jira</a>"
+
+        # Отправляем автору
+        await callback.message.answer(text_notify, reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
+
+        # =========================
+        # Красивое уведомление в канал тестеров
+        TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-1002196628724'))
+        channel_text = (
+            f"📣 <b>Новый дефект для тестирования!</b>\n\n"
+            f"🔑 <b>Ключ:</b> {issue_key}\n"
+            f"👤 <b>Автор:</b> {callback.from_user.full_name}\n"
+            f"📝 <b>Описание:</b>\n{data.get('description', 'Нет описания')}\n"
+        )
+        if data.get("links"):
+            channel_text += "🔗 <b>Ссылки:</b>\n" + "\n".join(data["links"]) + "\n"
+        if files:
+            channel_text += f"📎 <b>Прикреплено файлов:</b> {len(files)}\n"
+        channel_text += f"\n<a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу в Jira</a>"
+
+        await bot.send_message(TESTERS_CHANNEL_ID, channel_text, parse_mode="HTML")
+        # =========================
+
+    else:
+        await callback.message.answer("❌ <b>Ошибка при создании подзадачи.</b>", reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
+    await callback.answer()
+
 
     # ======= Скриншоты =======
     @dp.message(JiraFSM.waiting_screenshots)
