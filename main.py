@@ -275,13 +275,10 @@ class JiraFSM(StatesGroup):
 
 
 # =======================
-# ОБНОВЛЁННЫЙ handle_text
+# Обработка обычного текста (не команды и не FSM)
 # =======================
-@dp.message(
-    F.text,
-    ~F.text.startswith("/"),
-    StateFilter(None)  # обрабатываем только когда FSM не активен
-)
+
+@dp.message(F.text, ~F.text.startswith("/"), state=StateFilter(None))
 async def handle_text(message: Message):
     await process_text_message(
         message=message,
@@ -292,6 +289,7 @@ async def handle_text(message: Message):
         bot=bot,
         JIRA_URL=JIRA_URL
     )
+
 
 
 # =======================
