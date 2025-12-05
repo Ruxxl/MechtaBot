@@ -145,13 +145,17 @@ async def jira_screenshots_handler(message: Message, state: FSMContext):
         issue_key = await create_jira_ticket_fsm(await state.get_data(), author=message.from_user.full_name)
         if issue_key:
             text_notify = f"✅ <b>Подзадача создана</b>\n" \
-                          f"🔑 <b>{issue_key}</b>\n" \
-                          f"👤 Автор: <b>{message.from_user.full_name}</b>\n" \
-                          f"📝 Описание: {data.get('description', '-')}\n"
+                        f"🔑 <b>{issue_key}</b>\n" \
+                        f"👤 Автор: <b>{message.from_user.full_name}</b>\n" \
+                        f"📝 Описание: {data.get('description', '-')}\n"
             if data.get("links"):
                 text_notify += "🔗 Ссылки:\n" + "\n".join(data["links"]) + "\n"
             if files:
-                text_notify += f"📎 Прикреплено файлов: {len(files)}"
+                text_notify += f"📎 Прикреплено файлов: {len(files)}\n"
+            
+            # Добавляем ссылку на задачу
+            text_notify += f"\n<a href=\"{JIRA_URL}/browse/{issue_key}\">Открыть задачу в Jira</a>"
+
             await message.answer(text_notify, parse_mode="HTML")
         else:
             await message.answer("❌ Ошибка при создании подзадачи.")
