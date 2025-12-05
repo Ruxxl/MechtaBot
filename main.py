@@ -124,7 +124,7 @@ async def jira_description_handler(message: Message, state: FSMContext):
 
 @dp.callback_query(JiraFSM.waiting_priority)
 async def jira_priority_handler(callback: CallbackQuery, state: FSMContext):
-    priority_map = {"priority_low": "Низкий", "priority_medium": "Средний", "priority_high": "Высокий"}
+    priority_map = {"priority_low": "Low", "priority_medium": "Medium", "priority_high": "High"}
     priority = priority_map.get(callback.data, "Medium")
     await state.update_data(priority=priority)
     await callback.message.answer("🔗 <b>Шаг 4:</b> Введите ссылки на страницу или JAM, или напишите 'нет':",
