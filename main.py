@@ -140,37 +140,45 @@ async def jira_links_handler(message: Message, state: FSMContext):
 @dp.message(JiraFSM.waiting_screenshots)
 async def jira_screenshots_handler(message: Message, state: FSMContext):
     data = await state.get_data()
-    files = []
 
+    # Собираем файлы
+    files = data.get("files", [])
     if message.text and message.text.lower() == "нет":
-        await message.answer("Создаю задачу без скриншотов...")
+        pass
     elif message.photo:
-        photo = message.photo[-1]
-        files.append(photo.file_id)
-        await message.answer(f"Скриншот добавлен ({len(files)} шт.)")
+        for photo in message.photo:
+            files.append(photo.file_id)
     else:
         await message.answer("Пожалуйста, отправьте фото или 'нет':")
         return
 
-    await create_jira_ticket_fsm(data, files)
+    # Обновляем данные state
+    await state.update_data(files=files)
+
+    # Создаём Jira задачу один раз
+    await create_jira_ticket_fsm(data)
     await message.answer("Задача создана!")
     await state.clear()
 
-# =======================
-# Создание Jira задачи для FSM
-# =======================
-async def create_jira_ticket_fsm(data: dict, files: list):
+
+async def create_jira_ticket_fsm(data: dict):
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+
+    # Формируем описание: текст + ссылки
+    description_text = data.get("description", "")
+    links = data.get("links", [])
+    if links:
+        description_text += "\n\nСсылки:\n" + "\n".join(links)
+
     payload = {
         "fields": {
             "project": {"key": JIRA_PROJECT_KEY},
-            "parent": {"key": "AS-3255"},  # <-- ключ родителя
-            "summary": data["title"],
-            "description": data["description"],
-            "issuetype": {"name": "Подзадача"},  # <-- важно точное имя подзадачи
-            "priority": {"name": data["priority"]}
+            "parent": {"key": JIRA_PARENT_KEY},
+            "summary": data.get("title", "Без заголовка"),
+            "description": description_text,
+            "issuetype": {"name": "Подзадача"},
+            "priority": {"name": data.get("priority", "Medium")}
         }
-
     }
 
     ssl_context = ssl.create_default_context()
@@ -179,10 +187,29 @@ async def create_jira_ticket_fsm(data: dict, files: list):
 
     async with aiohttp.ClientSession(auth=auth) as session:
         async with session.post(f"{JIRA_URL}/rest/api/2/issue", json=payload, ssl=ssl_context) as resp:
+            if resp.status != 201:
+                error = await resp.text()
+                logger.error("Ошибка при создании задачи: %s — %s", resp.status, error)
+                return
             result = await resp.json()
             issue_key = result.get("key")
-            logger.info(f"Created Jira issue: {issue_key}")
-            # TODO: прикрепление файлов при необходимости
+            logger.info(f"Создана подзадача: {issue_key}")
+
+            # Прикрепление файлов
+            files = data.get("files", [])
+            attach_url = f"{JIRA_URL}/rest/api/2/issue/{issue_key}/attachments"
+            attach_headers = {"X-Atlassian-Token": "no-check"}
+            for file_id in files:
+                file_obj = await bot.get_file(file_id)
+                file_bytes = await bot.download_file(file_obj.file_path)
+                form = aiohttp.FormData()
+                form.add_field('file', file_bytes, filename=f"{file_id}.jpg", content_type='image/jpeg')
+                async with session.post(attach_url, data=form, headers=attach_headers, ssl=ssl_context) as attach_resp:
+                    if attach_resp.status in (200, 201):
+                        logger.info(f"Файл {file_id} прикреплен к {issue_key}")
+                    else:
+                        logger.error(f"Ошибка прикрепления файла {file_id}: {await attach_resp.text()}")
+
 
 # =======================
 # Команды
