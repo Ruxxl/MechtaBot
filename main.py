@@ -258,6 +258,112 @@ async def callback_jira_release_status(callback: CallbackQuery):
         JIRA_URL
     )
 
+# =======================
+# FSM для /jira
+# =======================
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+
+class JiraFSM(StatesGroup):
+    waiting_title = State()
+    waiting_description = State()
+    waiting_priority = State()
+    waiting_link = State()
+    waiting_screenshot = State()
+
+
+@dp.message(F.text == "/jira")
+async def start_jira_fsm(message: Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(JiraFSM.waiting_title)
+    await message.answer("Введите заголовок дефекта (summary):")
+
+
+@dp.message(JiraFSM.waiting_title)
+async def jira_title(message: Message, state: FSMContext):
+    await state.update_data(title=message.text)
+    await state.set_state(JiraFSM.waiting_description)
+    await message.answer("Введите описание дефекта:")
+
+
+@dp.message(JiraFSM.waiting_description)
+async def jira_description(message: Message, state: FSMContext):
+    await state.update_data(description=message.text)
+    await state.set_state(JiraFSM.waiting_priority)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Высокий", callback_data="prio_high")],
+        [InlineKeyboardButton(text="Средний", callback_data="prio_mid")],
+        [InlineKeyboardButton(text="Низкий", callback_data="prio_low")]
+    ])
+
+    await message.answer("Укажите приоритет:", reply_markup=kb)
+
+
+@dp.callback_query(F.data.startswith("prio_"))
+async def jira_priority(callback: CallbackQuery, state: FSMContext):
+    prio_map = {
+        "prio_high": "Высокий",
+        "prio_mid": "Средний",
+        "prio_low": "Низкий"
+    }
+    priority = prio_map.get(callback.data, "Средний")
+
+    await state.update_data(priority=priority)
+    await state.set_state(JiraFSM.waiting_link)
+
+    await callback.message.answer("Укажите ссылку (JAM или страницу):")
+    await callback.answer()
+
+
+@dp.message(JiraFSM.waiting_link)
+async def jira_link(message: Message, state: FSMContext):
+    await state.update_data(link=message.text)
+    await state.set_state(JiraFSM.waiting_screenshot)
+    await message.answer("Отправьте скриншот для вложения:")
+
+
+@dp.message(JiraFSM.waiting_screenshot, F.photo)
+async def jira_screenshot(message: Message, state: FSMContext):
+    data = await state.get_data()
+
+    photo = message.photo[-1]
+    file = await bot.get_file(photo.file_id)
+    file_bytes = await bot.download_file(file.file_path)
+    file_bytes = file_bytes.read()
+
+    summary = data["title"]
+    description = data["description"]
+    priority = data["priority"]
+    link = data["link"]
+
+    full_text = (
+        f"{summary}\n\n"
+        f"Описание:\n{description}\n\n"
+        f"Приоритет: {priority}\n"
+        f"Ссылка: {link}"
+    )
+
+    ok, issue_key = await create_jira_ticket(
+        text=full_text,
+        author=message.from_user.full_name,
+        file_bytes=file_bytes,
+        filename="screenshot.jpg",
+        thread_prefix=""
+    )
+
+    if ok:
+        await message.answer(f"Готово! Подзадача <b>{issue_key}</b> создана.")
+    else:
+        await message.answer("Ошибка при создании задачи. Проверь логи сервера.")
+
+    await state.clear()
+
+
+@dp.message(JiraFSM.waiting_screenshot)
+async def no_photo_warning(message: Message):
+    await message.answer("Отправьте, пожалуйста, именно фото.")
+
 
 # =======================
 # Запуск бота
