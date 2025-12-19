@@ -45,7 +45,7 @@ async def jira_release_check(
                     not_released_versions.add(name)
                     continue
 
-                if released and name in not_released_versions and name not in notified_versions:
+                if name in not_released_versions and name not in notified_versions:
                     notified_versions.add(name)
 
                     logger.info(f"🚀 Релиз выпущен: {name}")
@@ -64,36 +64,34 @@ async def jira_release_check(
                             issues = data.get("issues", [])
 
                     issues_text = "\n".join(
-                        f'• <a href="{JIRA_URL}/browse/{i["key"]}">{i["key"]} — {i["fields"]["summary"]}</a>'
+                        f'• <a href="{JIRA_URL}/browse/{i["key"]}">'
+                        f'{i["key"]} — {i["fields"]["summary"]}</a>'
                         for i in issues
                     ) or "Задачи не найдены."
 
                     message = (
-                        f"🎉 <b>Релиз выпущен!</b>\n\n"
+                        "🎉 <b>Релиз выпущен!</b>\n\n"
                         f"📦 <b>{name}</b>\n\n"
-                        f"📝 <b>Задачи релиза:</b>\n{issues_text}"
+                        "📝 <b>Задачи релиза:</b>\n"
+                        f"{issues_text}"
                     )
-                    try:
-                        if os.path.exists("release.jpg"):
-                            photo = types.FSInputFile("release.jpg")
-                            await bot.send_photo(
-                                TESTERS_CHANNEL_ID,
-                                photo=photo,
-                                caption=message,
-                                parse_mode=ParseMode.HTML
-                            )
-                        else:
-                            await bot.send_message(
-                                TESTERS_CHANNEL_ID,
-                                message,
-                                parse_mode=ParseMode.HTML
-                            )
 
-                        logger.info(f"Уведомление о релизе отправлено: {name}")
-                    
-    except Exception:
-        logger.exception("Ошибка в jira_release_check")
+                    if os.path.exists("release.jpg"):
+                        photo = types.FSInputFile("release.jpg")
+                        await bot.send_photo(
+                            TESTERS_CHANNEL_ID,
+                            photo=photo,
+                            caption=message,
+                            parse_mode=ParseMode.HTML
+                        )
+                    else:
+                        await bot.send_message(
+                            TESTERS_CHANNEL_ID,
+                            message,
+                            parse_mode=ParseMode.HTML
+                        )
 
+                    logger.info(f"Уведомление о релизе отправлено: {name}")
 
     except Exception as e:
         logger.exception("Ошибка в jira_release_check", exc_info=e)
