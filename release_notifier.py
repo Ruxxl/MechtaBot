@@ -45,16 +45,16 @@ async def jira_release_check(
                     not_released_versions.add(name)
                     continue
 
-                if name in not_released_versions:
-                    # дубли отправляем дважды (можно увеличить число)
-                    for _ in range(2):
-                        logger.info(f"🚀 Релиз выпущен (тестовое дублирование): {name}")
+                if name in not_released_versions and name not in notified_versions:
+                    notified_versions.add(name)
 
-                        jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
-                        search_url = (
-                            f"{JIRA_URL}/rest/api/3/search/jql"
-                            f"?jql={jql}&fields=key,summary&maxResults=200"
-                        )
+                    logger.info(f"🚀 Релиз выпущен: {name}")
+
+                    jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
+                    search_url = (
+                        f"{JIRA_URL}/rest/api/3/search/jql"
+                        f"?jql={jql}&fields=key,summary&maxResults=200"
+                    )
 
                     async with session.get(search_url) as resp_issues:
                         if resp_issues.status != 200:
