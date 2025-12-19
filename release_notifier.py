@@ -73,6 +73,24 @@ async def jira_release_check(
                         f"📦 <b>{name}</b>\n\n"
                         f"📝 <b>Задачи релиза:</b>\n{issues_text}"
                     )
+                    try:
+                        if os.path.exists("release.jpg"):
+                            photo = types.FSInputFile("release.jpg")
+                            await bot.send_photo(
+                                TESTERS_CHANNEL_ID,
+                                photo=photo,
+                                caption=message,
+                                parse_mode=ParseMode.HTML
+                            )
+                        else:
+                            await bot.send_message(
+                                TESTERS_CHANNEL_ID,
+                                message,
+                                parse_mode=ParseMode.HTML
+                            )
+
+                        logger.info(f"Уведомление о релизе отправлено: {name}")
+                    
 
                     await bot.send_message(
                         TESTERS_CHANNEL_ID,
