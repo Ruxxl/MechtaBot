@@ -2,31 +2,33 @@ import asyncio
 import os
 import logging
 from datetime import datetime, timedelta
-from dateutil import tz
-from typing import Optional
+from typing import Optional, List
+
 import aiohttp
 from icalendar import Calendar
+from dateutil import tz
+from dateutil.rrule import rrulestr
+
 from aiogram.types import FSInputFile
 from aiogram.enums import ParseMode
 
 logger = logging.getLogger(__name__)
 
 # =======================
-# КОНФИГ КАЛЕНДАРЯ
+# КОНФИГ
 # =======================
 ICS_URL = os.getenv(
     "ICS_URL",
-    "https://calendar.yandex.ru/export/ics.xml?private_token=dba95cc621742f7b9ba141889e288d2e0987fae3&tz_id=Asia/Almaty"
+    "https://calendar.yandex.ru/export/ics.xml?private_token=XXX&tz_id=Asia/Almaty"
 )
-
 
 CHECK_INTERVAL = int(os.getenv("CALENDAR_CHECK_INTERVAL", 30))
 ALERT_BEFORE = timedelta(minutes=5)
 
 EVENT_PHOTO_PATH = "event.jpg"
+TZ = tz.gettz("Asia/Almaty")
 
-
-# Словарь замен email → @mention
+# email → telegram mention
 MENTION_MAP = {
     "ruslan.issin@mechta.kz": " @ISNVO ",
     "yernazar.kadyrbekov@mechta.kz": " @yernazarr ",
@@ -48,91 +50,123 @@ MENTION_MAP = {
     "vladislav.borovkov@mechta.kz": " @john_folker "
 }
 
-# уже отправленные уведомления
+# чтобы не слать дубли
 calendar_sent_notifications = set()
 
 
 # =======================
-# Функции календаря
+# UTILS
 # =======================
+def normalize_dt(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=TZ)
+    return dt.astimezone(TZ)
+
+
 async def fetch_calendar() -> Optional[Calendar]:
-    """Скачивает и парсит ICS календарь."""
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(ICS_URL) as resp:
                 if resp.status == 200:
                     text = await resp.text()
                     return Calendar.from_ical(text)
-                else:
-                    logger.error(f"Ошибка загрузки ICS: {resp.status}")
+                logger.error(f"ICS load error: {resp.status}")
     except Exception as e:
-        logger.error(f"Ошибка fetch_calendar: {e}")
-
+        logger.error(f"fetch_calendar error: {e}")
     return None
 
 
-def normalize_dt(dt):
-    """Делает datetime timezone-aware."""
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=tz.gettz("Asia/Almaty"))
-    return dt
+def get_event_occurrences(component, window_start, window_end) -> List[datetime]:
+    """Разворачивает RRULE только в нужном временном окне"""
+    dtstart = normalize_dt(component.get("dtstart").dt)
+    rrule = component.get("rrule")
+
+    if not rrule:
+        return [dtstart]
+
+    rule = rrulestr(
+        rrule.to_ical().decode(),
+        dtstart=dtstart
+    )
+
+    return list(rule.between(window_start, window_end, inc=True))
 
 
+def parse_attendees(component) -> str:
+    attendees = component.get("attendee")
+    if not attendees:
+        return "не указаны"
+
+    if not isinstance(attendees, list):
+        attendees = [attendees]
+
+    result = []
+    for a in attendees:
+        email = str(a).replace("mailto:", "").strip()
+        result.append(MENTION_MAP.get(email, email))
+
+    return ", ".join(result)
+
+
+# =======================
+# MAIN LOOP
+# =======================
 async def check_calendar_events(bot, chat_id):
-    """Главный цикл уведомлений по календарю."""
-    logger.info("📅 Календарный модуль запущен")
+    logger.info("📅 Calendar watcher started")
 
     while True:
         cal = await fetch_calendar()
-        if cal:
-            now = datetime.now(tz=tz.gettz("Asia/Almaty"))
+        now = datetime.now(TZ)
 
-            for component in cal.walk():
-                if component.name != "VEVENT":
-                    continue
+        if not cal:
+            await asyncio.sleep(CHECK_INTERVAL)
+            continue
 
-                start = normalize_dt(component.get('dtstart').dt)
-                summary = component.get('summary')
-                attendees = component.get('attendee')
+        window_start = now - timedelta(minutes=10)
+        window_end = now + timedelta(minutes=10)
 
-                # Формирование списка участников
-                if attendees:
-                    if isinstance(attendees, list):
-                        attendees_raw = [str(a) for a in attendees]
-                    else:
-                        attendees_raw = [str(attendees)]
+        for component in cal.walk("VEVENT"):
+            summary = component.get("summary", "Без названия")
+            attendees_text = parse_attendees(component)
 
-                    attendees_list = []
-                    for a in attendees_raw:
-                        email = a.replace("mailto:", "").strip()
-                        attendees_list.append(MENTION_MAP.get(email, email))
+            occurrences = get_event_occurrences(
+                component,
+                window_start,
+                window_end
+            )
 
-                    attendees_text = ", ".join(attendees_list)
-                else:
-                    attendees_text = "не указаны"
-
+            for start in occurrences:
                 alert_time = start - ALERT_BEFORE
-                event_key = (summary, start.date())
+                event_key = (summary, start)
 
                 if alert_time <= now < start and event_key not in calendar_sent_notifications:
                     text = (
-                        f"📅 Встреча скоро начнется!\n"
-                        f"📝 Название: <b>{summary}</b>\n"
-                        f"⏰ Начало: {start.strftime('%H:%M')}\n"
+                        f"📅 <b>Встреча скоро начнётся</b>\n\n"
+                        f"📝 <b>{summary}</b>\n"
+                        f"⏰ Начало: <b>{start.strftime('%H:%M')}</b>\n"
                         f"👥 Участники: {attendees_text}"
                     )
 
                     try:
                         if os.path.exists(EVENT_PHOTO_PATH):
-                            file = FSInputFile(EVENT_PHOTO_PATH)
-                            await bot.send_photo(chat_id=chat_id, photo=file, caption=text)
+                            photo = FSInputFile(EVENT_PHOTO_PATH)
+                            await bot.send_photo(
+                                chat_id=chat_id,
+                                photo=photo,
+                                caption=text,
+                                parse_mode=ParseMode.HTML
+                            )
                         else:
-                            await bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
+                            await bot.send_message(
+                                chat_id=chat_id,
+                                text=text,
+                                parse_mode=ParseMode.HTML
+                            )
 
                         calendar_sent_notifications.add(event_key)
-                        logger.info(f"Отправлено уведомление по календарю: {event_key}")
+                        logger.info(f"Sent calendar alert: {event_key}")
 
                     except Exception as e:
-                        logger.error(f"Ошибка отправки сообщения: {e}")
+                        logger.error(f"Send error: {e}")
 
         await asyncio.sleep(CHECK_INTERVAL)
