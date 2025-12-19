@@ -28,7 +28,7 @@ async def jira_release_check(bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN
                     return
                 versions = await resp.json()
 
-            RELEASE_NAME = "[WEB] Релиз 3.7"
+            RELEASE_NAME = "[WEB] Релиз 3.8"
             release = next((r for r in versions if r["name"] == RELEASE_NAME), None)
 
             if not release:
