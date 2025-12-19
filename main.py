@@ -170,7 +170,7 @@ async def main():
         logger.exception("Не удалось запустить start_reminders: %s", e)
 
     # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
-    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=10))
+    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
 
     # 5) Теперь запускаем polling — он держит главный цикл
     logger.info("Запуск polling...")
