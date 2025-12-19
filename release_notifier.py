@@ -91,13 +91,6 @@ async def jira_release_check(
 
                         logger.info(f"Уведомление о релизе отправлено: {name}")
                     
-
-                    await bot.send_message(
-                        TESTERS_CHANNEL_ID,
-                        message,
-                        parse_mode="HTML"
-                    )
-
     except Exception:
         logger.exception("Ошибка в jira_release_check")
 
