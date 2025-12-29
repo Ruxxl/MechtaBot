@@ -98,6 +98,13 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
 
         await asyncio.sleep((target_time - now).total_seconds())
 
+        now = datetime.now(timezone)
+
+        # ⛔ Выходные: суббота (5) и воскресенье (6)
+        if now.weekday() >= 5:
+            logger.info("⏭ Утреннее уведомление пропущено (выходной)")
+            continue
+
         text = (
             "☀️ Доброе утро, коллеги!\n\n"
             "Не забудьте отметиться в <b>Clockster</b>.\n"
@@ -126,6 +133,13 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
             target_time += timedelta(days=1)
 
         await asyncio.sleep((target_time - now).total_seconds())
+
+        now = datetime.now(timezone)
+
+        # ⛔ Выходные: суббота (5) и воскресенье (6)
+        if now.weekday() >= 5:
+            logger.info("⏭ Вечернее уведомление пропущено (выходной)")
+            continue
 
         text = (
             "🌇 Добрый вечер, коллеги!\n\n"
