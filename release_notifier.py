@@ -30,8 +30,12 @@ async def jira_release_check(
                 f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
             ) as resp:
                 if resp.status != 200:
-                    logger.error(f"Ошибка получения релизов: {resp.status}")
+                    text = await resp.text()
+                    logger.error(
+                        f"Ошибка получения релизов: {resp.status}, body={text}"
+                    )
                     return
+
 
                 versions = await resp.json()
 
