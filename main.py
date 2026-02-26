@@ -16,6 +16,7 @@ from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers
+from banner_monitor import check_banner_images
 
 # =======================
 # Настройка окружения
@@ -171,6 +172,18 @@ async def main():
 
     # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
     asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
+
+    # Проверка баннеров каждые 30 минут
+    asyncio.create_task(
+        run_background_task(
+            check_banner_images,
+            bot,
+            TESTERS_CHANNEL_ID,          # куда слать алерт
+            "https://mechta.kz",          # сайт
+            logger,
+            interval=1800                # 30 минут
+        )
+    )
 
     # 5) Теперь запускаем polling — он держит главный цикл
     logger.info("Запуск polling...")
