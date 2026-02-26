@@ -1,6 +1,8 @@
 aiogram
 aiohttp
 python-dotenv
+requests
+beautifulsoup4
 icalendar
 pytesseract
 playwright>=1.37.0
