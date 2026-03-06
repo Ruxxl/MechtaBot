@@ -30,24 +30,24 @@ TZ = tz.gettz("Asia/Almaty")
 
 # email → telegram mention
 MENTION_MAP = {
-    "ruslan.issin@mechta.kz": " @ISNVO ",
-    "yernazar.kadyrbekov@mechta.kz": " @yernazarr ",
-    "madina.imasheva@mechta.kz": "@Kurokitamoko ",
-    "nargiza.marassulova@mechta.kz": " @m_nargi ",
-    "kurmangali.kussainov@mechta.kz": " @Kurmangali_kusainoff ",
-    "damir.shaniiazov@mechta.kz": " @DamirShaniyazov ",
-    "gulnur.yermagambetova@mechta.kz": " @gunya_tt ",
-    "karlygash.tashmukhambetova@mechta.kz": " @karlybirdkarly ",
-    "sultan.nadirbek@mechta.kz": " @av3nt4d0r ",
-    "yerlan.nurakhmetov@mechta.kz": " @coolywooly ",
-    "nurgissa.ussen@mechta.kz": " @nurgi17 ",
-    "azamat.zhumabekov@mechta.kz": " @azamat_zhumabek ",
-    "damir.kuanysh@mechta.kz": " @KuanyshovD ",
-    "abzal.zholkenov@mechta.kz": " @zholkenov ",
-    "amirbek.ashirbek@mechta.kz": " @amir_ashir ",
-    "ruslan.nadyrov@mechta.kz": " @nopeacefulll ",
-    "kamilla.aisakhunova@mechta.kz": " @aisakhunovak ",
-    "vladislav.borovkov@mechta.kz": " @john_folker "
+    "ruslan.issin@ddream.kz": " @ISNVO ",
+    "yernazar.kadyrbekov@ddream.kz": " @yernazarr ",
+    "madina.imasheva@ddream.kz": "@Kurokitamoko ",
+    "nargiza.marassulova@ddream.kz": " @m_nargi ",
+    "kurmangali.kussainov@ddream.kz": " @Kurmangali_kusainoff ",
+    "damir.shaniiazov@ddream.kz": " @DamirShaniyazov ",
+    "gulnur.yermagambetova@ddream.kz": " @gunya_tt ",
+    "karlygash.tashmukhambetova@ddream.kz": " @karlybirdkarly ",
+    "sultan.nadirbek@ddream.kz": " @av3nt4d0r ",
+    "yerlan.nurakhmetov@ddream.kz": " @coolywooly ",
+    "nurgissa.ussen@ddream.kz": " @nurgi17 ",
+    "azamat.zhumabekov@ddream.kz": " @azamat_zhumabek ",
+    "damir.kuanysh@ddream.kz": " @KuanyshovD ",
+    "abzal.zholkenov@ddream.kz": " @zholkenov ",
+    "amirbek.ashirbek@ddream.kz": " @amir_ashir ",
+    "ruslan.nadyrov@ddream.kz": " @nopeacefulll ",
+    "kamilla.aisakhunova@ddream.kz": " @aisakhunovak ",
+    "vladislav.borovkov@ddream.kz": " @john_folker "
 }
 
 # чтобы не слать дубли
