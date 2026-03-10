@@ -17,6 +17,7 @@ from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers
 from banner_monitor import check_banner_images
+from api_monitor import run_api_monitor
 
 # =======================
 # Настройка окружения
@@ -172,6 +173,7 @@ async def main():
 
     # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
     asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
+    asyncio.create_task(run_api_monitor(bot, logger))
 
     # Проверка баннеров каждые 30 минут
     asyncio.create_task(
