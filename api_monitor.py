@@ -9,9 +9,9 @@ TARGET_CHAT_ID = 998292747  # Твой ID для уведомлений
 
 # Список API для мониторинга (добавь свои ссылки сюда)
 API_ENDPOINTS = [
-    "https://www.mechta.kz/api/v2/header/info",
-    "https://www.mechta.kz/api/v2/favorites",
-    "https://www.mechta.kz/api/v2/header/cities"
+    "https://www.pp.yc.mechta.kz/api/v2/header/info",
+    "https://www.pp.yc.mechta.kz/api/v2/favorites",
+    "https://www.pp.yc.mechta.kz/api/v2/header/cities"
   ]
 
 async def check_api_health(bot, logger):
