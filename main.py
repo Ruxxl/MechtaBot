@@ -1,14 +1,17 @@
-# main.py
 import asyncio
 import os
 import logging
 from dotenv import load_dotenv
 
+# Добавляем aiohttp для веб-сервера
+from aiohttp import web
+
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
+# Твои импорты
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
 from text_handler import process_text_message
@@ -35,7 +38,7 @@ CHECK_TAG = '#check'
 THREAD_PREFIXES = {1701: '[Back]', 1703: '[Front]'}
 
 # =======================
-# Логирование (встроенное)
+# Логирование
 # =======================
 def setup_logger():
     fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -44,22 +47,34 @@ def setup_logger():
 
 logger = setup_logger()
 
+# =======================
+# Веб-сервер для Render (Health Check)
+# =======================
+async def handle_web_root(request):
+    return web.Response(text="Bot is alive and kicking!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle_web_root)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Render передает порт в переменную окружения PORT
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    logger.info(f"🌐 Веб-сервер запущен на порту {port}")
+    await site.start()
 
 # =======================
 # Инициализация бота
 # =======================
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-# Dispatcher без параметров — современный стиль
 dp = Dispatcher()
 
-# =======================
-# Регистрация Jira FSM
-# =======================
 register_jira_handlers(dp, bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_PARENT_KEY, JIRA_URL)
 
-# =======================
-# Остальной функционал (HR, фото, текст, фоновые таски)
-# =======================
+# --- Обработчики (Твои без изменений) ---
+
 @dp.message(F.text == "/getid")
 async def get_chat_id(message: Message):
     await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
@@ -83,71 +98,26 @@ async def hr_topic_detail(callback: CallbackQuery):
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
-    await handle_photo_message(
-        bot=bot,
-        message=message,
-        trigger_tags=TRIGGER_TAGS,
-        create_jira_ticket=None  # FSM теперь работает через отдельный файл
-    )
+    await handle_photo_message(bot=bot, message=message, trigger_tags=TRIGGER_TAGS, create_jira_ticket=None)
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message):
-    await process_text_message(
-        message=message,
-        TRIGGER_TAGS=TRIGGER_TAGS,
-        CHECK_TAG=CHECK_TAG,
-        THREAD_PREFIXES=THREAD_PREFIXES,
-        create_jira_ticket=None,  # FSM теперь работает через отдельный файл
-        bot=bot,
-        JIRA_URL=JIRA_URL
-    )
+    await process_text_message(message=message, TRIGGER_TAGS=TRIGGER_TAGS, CHECK_TAG=CHECK_TAG, 
+                               THREAD_PREFIXES=THREAD_PREFIXES, create_jira_ticket=None, bot=bot, JIRA_URL=JIRA_URL)
 
 async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
     while True:
         try:
             await coro_func(*args, **kwargs)
         except asyncio.CancelledError:
-            logger.info("Фоновая задача отменена")
             raise
         except Exception as e:
-            logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
+            logger.exception(f"Ошибка в фоновой задаче {coro_func.__name__}: {e}")
         await asyncio.sleep(interval)
 
 @dp.callback_query(F.data == "jira_release_status")
 async def callback_jira_release_status(callback: CallbackQuery):
-    await handle_jira_release_status(
-        callback,
-        JIRA_EMAIL,
-        JIRA_API_TOKEN,
-        JIRA_PROJECT_KEY,
-        JIRA_URL
-    )
-
-# =======================
-# Фоновая задача — биндер
-# =======================
-async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
-    while True:
-        try:
-            await coro_func(*args, **kwargs)
-        except asyncio.CancelledError:
-            logger.info("Фоновая задача отменена")
-            raise
-        except Exception as e:
-            logger.exception("Ошибка в фоновой задаче %s: %s", getattr(coro_func, '__name__', str(coro_func)), e)
-        await asyncio.sleep(interval)
-
-# callback для кнопки Jira Release
-@dp.callback_query(F.data == "jira_release_status")
-async def callback_jira_release_status(callback: CallbackQuery):
-    await handle_jira_release_status(
-        callback,
-        JIRA_EMAIL,
-        JIRA_API_TOKEN,
-        JIRA_PROJECT_KEY,
-        JIRA_URL
-    )
-
+    await handle_jira_release_status(callback, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL)
 
 # =======================
 # Запуск бота
@@ -155,32 +125,31 @@ async def callback_jira_release_status(callback: CallbackQuery):
 async def main():
     logger.info("🚀 Бот стартует")
 
-    # 1) Запускаем календарный сервис как таск (если check_calendar_events содержит свой loop)
+    # 1) Запускаем Веб-сервер для Render (чтобы не было ошибки портов)
+    asyncio.create_task(start_web_server())
+
+    # 2) Фоновые задачи
     try:
         asyncio.create_task(check_calendar_events(bot, TESTERS_CHANNEL_ID))
-        logger.info("Запущен check_calendar_events в фоне")
-    except Exception as e:
-        logger.exception("Не удалось запустить check_calendar_events: %s", e)
-
-    # 2) Запускаем ежедневные напоминания тоже в фоне (не await!)
-    try:
         asyncio.create_task(start_reminders(bot, TESTERS_CHANNEL_ID))
-        logger.info("Запущен start_reminders в фоне")
     except Exception as e:
-        logger.exception("Не удалось запустить start_reminders: %s", e)
+        logger.exception(f"Ошибка запуска сервисов: {e}")
 
-    # 3) Запуск мониторинга релизов Jira (каждые 30 мин)
-    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
+    # 3) Запуск мониторинга релизов Jira
+    asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, 
+                                           JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
 
-    # 4) Теперь запускаем polling — он держит главный цикл
+    # 4) Удаляем вебхуки перед поллингом (на всякий случай)
+    await bot.delete_webhook(drop_pending_updates=True)
+
+    # 5) Запуск polling
     logger.info("Запуск polling...")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Остановка по Ctrl+C")
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Остановка бота")
     except Exception:
         logger.exception("Критическая ошибка при запуске")
