@@ -137,7 +137,7 @@ async def main():
 
     # 3) Запуск мониторинга релизов Jira
     asyncio.create_task(run_background_task(jira_release_check, bot, TESTERS_CHANNEL_ID, 
-                                           JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=500))
+                                           JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, interval=100))
 
     # 4) Удаляем вебхуки перед поллингом (на всякий случай)
     await bot.delete_webhook(drop_pending_updates=True)
