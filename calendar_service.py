@@ -127,6 +127,8 @@ async def check_calendar_events(bot, chat_id):
 
         for component in cal.walk("VEVENT"):
             summary = component.get("summary", "Без названия")
+            # --- ДОБАВЛЯЕМ ПОЛУЧЕНИЕ ОПИСАНИЯ ---
+            description = component.get("description", "")
             attendees_text = parse_attendees(component)
 
             occurrences = get_event_occurrences(
@@ -140,12 +142,18 @@ async def check_calendar_events(bot, chat_id):
                 event_key = (summary, start)
 
                 if alert_time <= now < start and event_key not in calendar_sent_notifications:
+                    # --- ФОРМИРУЕМ ТЕКСТ С ОПИСАНИЕМ ---
                     text = (
                         f"📅 <b>Встреча скоро начнётся</b>\n\n"
                         f"📝 <b>{summary}</b>\n"
                         f"⏰ Начало: <b>{start.strftime('%H:%M')}</b>\n"
-                        f"👥 Участники: {attendees_text}"
                     )
+                    
+                    # Если есть описание (ссылка), добавляем его в сообщение
+                    if description:
+                        text += f"🔗 <b>Описание/Ссылка:</b>\n{description}\n\n"
+                    
+                    text += f"👥 Участники: {attendees_text}"
 
                     try:
                         if os.path.exists(EVENT_PHOTO_PATH):
