@@ -86,7 +86,7 @@ async def jira_release_check(
                     message = (
                         "🎉 <b>Релиз выпущен!</b>\n\n"
                         f"📦 <b>{name}</b>\n\n"
-                        f"🐞 <b>Багов было: {total_bugs}</b>\n\n"
+                        f"🐞 <b>Багов зарегано: {total_bugs}</b>\n\n"
                         "📝 <b>Задачи релиза:</b>\n"
                         f"{issues_text}"
                     )
