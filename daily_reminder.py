@@ -1,113 +1,164 @@
-import os
+# daily_reminders.py
+import asyncio
+import logging
+from datetime import datetime, timedelta
+from dateutil import tz
+from urllib.parse import quote
 import aiohttp
-from aiogram import types
+import ssl
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums import ParseMode
 
-# Храним состояние между запусками функции
-not_released_versions = set()
-notified_versions = set()
+logger = logging.getLogger(__name__)
 
+# =============================
+# Название конкретного релиза
+# =============================
+RELEASE_NAME = "Релиз 3.17"
 
-async def jira_release_check(
-    bot,
-    TESTERS_CHANNEL_ID,
-    JIRA_EMAIL,
-    JIRA_API_TOKEN,
-    JIRA_PROJECT_KEY,
-    JIRA_URL,
-    logger
-):
-    logger.info("🔎 Проверяю релизы Jira...")
+# =============================
+# Кнопки Clockster + Jira
+# =============================
+def get_clockster_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📝 Отметиться в Clockster", url="https://ruxxl.github.io/clockster-launch/")],
+            [InlineKeyboardButton(text="📊 Посмотреть статус будущего релиза", callback_data="jira_release_status")]
+        ]
+    )
+
+# =============================
+# Callback кнопки "Посмотреть статус релиза"
+# =============================
+async def handle_jira_release_status(callback: CallbackQuery,
+                                     JIRA_EMAIL,
+                                     JIRA_API_TOKEN,
+                                     JIRA_PROJECT_KEY,
+                                     JIRA_URL):
+    await callback.answer()  # закрываем “часики”
 
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
 
-    try:
-        async with aiohttp.ClientSession(auth=auth) as session:
+    # Получаем версии проекта
+    versions_url = f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(versions_url, ssl=ssl_context) as resp:
+            if resp.status != 200:
+                await callback.message.answer(f"❌ Не удалось получить версии проекта (статус {resp.status})")
+                return
+            versions = await resp.json()
 
-            # 1️⃣ Получаем все версии проекта
-            async with session.get(
-                f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    logger.error(
-                        f"Ошибка получения релизов: {resp.status}, body={text}"
-                    )
-                    return
+    release = next((v for v in versions if v["name"] == RELEASE_NAME), None)
+    if not release:
+        await callback.message.answer(f"❌ Релиз '{RELEASE_NAME}' не найден")
+        return
 
-                versions = await resp.json()
+    version_id = release.get("id")
+    jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id} ORDER BY priority DESC'
+    search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status&maxResults=200"
 
-            # 2️⃣ Обрабатываем версии
-            for version in versions:
-                name = version.get("name")
-                released = version.get("released", False)
-                version_id = version.get("id")
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(search_url, ssl=ssl_context) as resp:
+            if resp.status != 200:
+                await callback.message.answer(f"❌ Не удалось получить задачи релиза (статус {resp.status})")
+                return
+            data = await resp.json()
+            issues = data.get("issues", [])
 
-                # Если версия еще не выпущена, запоминаем её и идем дальше
-                if not released:
-                    not_released_versions.add(name)
-                    continue
+            if not issues:
+                text = f"✅ Задачи для релиза <b>{RELEASE_NAME}</b> не найдены."
+            else:
+                lines = [f"📊 <b>Статус задач будущего релиза {RELEASE_NAME}:</b>\n"]
+                for issue in issues:
+                    key = issue.get("key")
+                    summary = issue["fields"].get("summary", "Без названия")
+                    status = issue["fields"]["status"]["name"]
+                    # Формируем ссылку на Jira
+                    url = f"{JIRA_URL}/browse/{key}"
+                    lines.append(f"🔹 <a href='{url}'>{key} — {summary}</a> — <b>{status}</b>")
+                text = "\n".join(lines)
 
-                # Если версия была в списке невыпущенных и мы о ней еще не уведомляли
-                if name in not_released_versions and name not in notified_versions:
-                    notified_versions.add(name)
+    await callback.message.answer(text, parse_mode=ParseMode.HTML)
 
-                    logger.info(f"🚀 Релиз выпущен: {name}")
 
-                    # Запрашиваем задачи этого релиза. 
-                    # Важно: добавляем subtasks в fields, чтобы посчитать баги
-                    jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
-                    search_url = (
-                        f"{JIRA_URL}/rest/api/3/search/jql"
-                        f"?jql={jql}&fields=key,summary,subtasks&maxResults=200"
-                    )
+# =============================
+# Утреннее уведомление
+# =============================
+async def daily_reminder(bot, TESTERS_CHANNEL_ID):
+    timezone = tz.gettz("Asia/Almaty")
 
-                    async with session.get(search_url) as resp_issues:
-                        if resp_issues.status != 200:
-                            issues = []
-                        else:
-                            data = await resp_issues.json()
-                            issues = data.get("issues", [])
+    while True:
+        now = datetime.now(timezone)
+        target_time = now.replace(hour=8, minute=5, second=0, microsecond=0)
+        if now >= target_time:
+            target_time += timedelta(days=1)
 
-                    # 3️⃣ Считаем подзадачи (ваши баги)
-                    total_bugs = 0
-                    for i in issues:
-                        subtasks = i["fields"].get("subtasks", [])
-                        total_bugs += len(subtasks)
+        await asyncio.sleep((target_time - now).total_seconds())
 
-                    # Формируем список основных задач
-                    issues_text = "\n".join(
-                        f'• <a href="{JIRA_URL}/browse/{i["key"]}">'
-                        f'{i["key"]} — {i["fields"]["summary"]}</a>'
-                        for i in issues
-                    ) or "Задачи не найдены."
+        now = datetime.now(timezone)
 
-                    # 4️⃣ Формируем итоговое сообщение
-                    message = (
-                        "🎉 <b>Релиз выпущен!</b>\n\n"
-                        f"📦 <b>{name}</b>\n\n"
-                        f"🐞 <b>Багов зарегано: {total_bugs}</b>\n\n"
-                        "📝 <b>Задачи релиза:</b>\n"
-                        f"{issues_text}"
-                    )
+        # ⛔ Выходные: суббота (5) и воскресенье (6)
+        if now.weekday() >= 5:
+            logger.info("⏭ Утреннее уведомление пропущено (выходной)")
+            continue
 
-                    # 5️⃣ Отправка (с фото или без)
-                    if os.path.exists("release.jpg"):
-                        photo = types.FSInputFile("release.jpg")
-                        await bot.send_photo(
-                            TESTERS_CHANNEL_ID,
-                            photo=photo,
-                            caption=message,
-                            parse_mode=ParseMode.HTML
-                        )
-                    else:
-                        await bot.send_message(
-                            TESTERS_CHANNEL_ID,
-                            message,
-                            parse_mode=ParseMode.HTML
-                        )
+        text = (
+            "☀️ Доброе утро, коллеги!\n\n"
+            "Не забудьте отметиться в <b>Clockster</b>.\n"
+            "Желаем классного дня и продуктивной работы! 💪"
+        )
 
-                    logger.info(f"Уведомление о релизе отправлено: {name}")
+        try:
+            await bot.send_message(TESTERS_CHANNEL_ID, text, parse_mode=ParseMode.HTML, reply_markup=get_clockster_keyboard())
+            logger.info("✅ Отправлено утреннее уведомление")
+        except Exception as e:
+            logger.error(f"Ошибка отправки утреннего уведомления: {e}")
 
-    except Exception as e:
-        logger.exception("Ошибка в jira_release_check", exc_info=e)
+        await asyncio.sleep(60)
+
+
+# =============================
+# Вечернее уведомление
+# =============================
+async def evening_reminder(bot, TESTERS_CHANNEL_ID):
+    timezone = tz.gettz("Asia/Almaty")
+
+    while True:
+        now = datetime.now(timezone)
+        target_time = now.replace(hour=17, minute=0, second=0, microsecond=0)
+        if now >= target_time:
+            target_time += timedelta(days=1)
+
+        await asyncio.sleep((target_time - now).total_seconds())
+
+        now = datetime.now(timezone)
+
+        # ⛔ Выходные: суббота (5) и воскресенье (6)
+        if now.weekday() >= 5:
+            logger.info("⏭ Вечернее уведомление пропущено (выходной)")
+            continue
+
+        text = (
+            "🌇 Добрый вечер, коллеги!\n\n"
+            "Не забудьте отметиться в <b>Clockster</b>.\n"
+            "Хорошего вечера и приятного отдыха! 😎"
+        )
+
+        try:
+            await bot.send_message(TESTERS_CHANNEL_ID, text, parse_mode=ParseMode.HTML, reply_markup=get_clockster_keyboard())
+            logger.info("✅ Отправлено вечернее уведомление")
+        except Exception as e:
+            logger.error(f"Ошибка отправки вечернего уведомления: {e}")
+
+        await asyncio.sleep(60)
+
+
+# =============================
+# Запуск двух напоминаний
+# =============================
+async def start_reminders(bot, TESTERS_CHANNEL_ID):
+    asyncio.create_task(daily_reminder(bot, TESTERS_CHANNEL_ID))
+    asyncio.create_task(evening_reminder(bot, TESTERS_CHANNEL_ID))
