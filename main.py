@@ -144,16 +144,14 @@ async def main():
     # 4) Удаляем вебхуки перед поллингом (на всякий случай)
     await bot.delete_webhook(drop_pending_updates=True)
 
-    # Внутри async def main():
     asyncio.create_task(run_code_review_monitor(
-        bot=bot, 
-        channel_id=TESTERS_CHANNEL_ID, 
-        jira_email=JIRA_EMAIL, 
-        jira_token=JIRA_API_TOKEN, 
-        jira_url=JIRA_URL,           # Будет передано в jira_url
-        project_key=JIRA_PROJECT_KEY, # Будет передано в project_key
-        interval=300
-    ))
+    bot=bot, 
+    channel_id=TESTERS_CHANNEL_ID, 
+    jira_email=JIRA_EMAIL, 
+    jira_token=JIRA_API_TOKEN, 
+    jira_url=JIRA_URL,
+    project_key=JIRA_PROJECT_KEY
+))
 
 # ... остальной код main() ...
 
