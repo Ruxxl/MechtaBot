@@ -22,8 +22,13 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
     """
     Проверяет задачи в статусе 'Код ревью' и назначает случайного ревьюера.
     """
+    # 1. Исправляем формирование URL. 
+    # Убеждаемся, что jira_url не заканчивается на слеш, чтобы не было double slash //
+    base_url = jira_url.rstrip('/')
+    api_url = f"{base_url}/rest/api/3/search"
+    
+    # 2. Формируем JQL (убедись, что project_key передается верно)
     jql = f'project = "{project_key}" AND status = "Код ревью" ORDER BY created DESC'
-    api_url = f"{jira_url}/rest/api/3/search"
     
     auth = aiohttp.BasicAuth(jira_email, jira_token)
     
@@ -34,32 +39,18 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
     }
 
     try:
+        # Рекомендуется использовать один сеанс, но для простоты оставим внутри (или вынеси в main)
         async with aiohttp.ClientSession(auth=auth) as session:
+            # logger.info(f"Запрос к Jira: {api_url}") # Раскомментируй для отладки, если снова упадет
             async with session.post(api_url, json=payload) as response:
                 if response.status != 200:
-                    logger.error(f"Ошибка Jira API: {response.status}")
+                    error_text = await response.text()
+                    logger.error(f"Ошибка Jira API: {response.status} - {error_text}")
                     return
 
                 data = await response.json()
+                # Jira Cloud в методе POST обычно возвращает 'issues'
                 issues = data.get("issues", [])
-
-                for issue in issues:
-                    issue_key = issue["key"]
-                    
-                    # Если задача новая для нас
-                    if issue_key not in processed_issues:
-                        summary = issue["fields"]["summary"]
-                        reviewer = random.choice(REVIEWERS)
-                        
-                        message_text = (
-                            f"🔍 <b>Задача на код ревью</b>\n\n"
-                            f"📌 <a href='{jira_url}/browse/{issue_key}'>{issue_key}</a>: {summary}\n"
-                            f"🎯 Назначаю: {reviewer}"
-                        )
-                        
-                        await bot.send_message(channel_id, message_text, disable_web_page_preview=True)
-                        processed_issues.add(issue_key)
-                        logger.info(f"Назначен ревьюер для {issue_key}")
 
                 # Очистка старых ключей (опционально), чтобы память не росла бесконечно
                 # Если задач в списке нет, а в processed_issues они есть — значит они вышли из ревью
