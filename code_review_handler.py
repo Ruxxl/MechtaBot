@@ -28,12 +28,11 @@ processed_issues = set()
 
 async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str):
     """
-    Проверяет задачи в статусе 'Код ревью', находит автора перехода через changelog 
-    и назначает случайного ревьюера, исключая автора.
+    Проверяет задачи через новый эндпоинт /search/jql и находит автора перехода.
     """
     base_url = str(jira_url).rstrip('/')
-    # Используем /search с параметром expand=changelog
-    api_url = f"{base_url}/rest/api/3/search"
+    # ВНИМАНИЕ: Обновленный эндпоинт согласно вашей ошибке
+    api_url = f"{base_url}/rest/api/3/search/jql"
     
     jql = (
         f'project = "{project_key}" '
@@ -42,11 +41,12 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
     )
     
     auth = aiohttp.BasicAuth(jira_email, jira_token)
+    # Структура payload остается похожей, но мы используем POST на новый эндпоинт
     payload = {
         "jql": jql,
         "maxResults": 20,
         "fields": ["summary", "status"],
-        "expand": ["changelog"] # Обязательно для получения истории изменений
+        "expand": ["changelog"]
     }
 
     try:
@@ -54,10 +54,11 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
             async with session.post(api_url, json=payload) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"Ошибка Jira API: {response.status} - {error_text}")
+                    logger.error(f"Ошибка Jira API ({response.status}): {error_text}")
                     return
 
                 data = await response.json()
+                # Jira API /search/jql возвращает задачи в ключе 'issues'
                 issues = data.get("issues", [])
 
                 for issue in issues:
@@ -68,13 +69,10 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                     summary = issue["fields"].get("summary", "")
                     histories = issue.get("changelog", {}).get("histories", [])
                     
-                    # Логика поиска того, кто ПЕРЕВЕЛ задачу в "Код ревью"
+                    # Поиск того, кто перевел задачу (например, Руслан Надыров)
                     status_changer_email = None
-                    
-                    # Проходим историю с конца к началу
                     for history in reversed(histories):
                         items = history.get("items", [])
-                        # Ищем запись о смене статуса на "Код ревью"
                         is_review_move = any(
                             item.get("field") == "status" and 
                             item.get("toString") == "Код ревью" 
@@ -84,18 +82,16 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                             status_changer_email = history.get("author", {}).get("emailAddress")
                             break
                     
-                    # Определяем Telegram автора по его email
+                    # Сопоставление с Telegram-аккаунтом (учитываем ruslan.nadyrov@ddream.kz)
                     author_tg = USER_MAP.get(status_changer_email)
 
-                    # Логика выбора ревьюера
                     if "[back]" in summary.lower():
                         reviewer = "@DamirShaniyazov"
                         task_type = "🛠 Backend"
                     else:
-                        # Исключаем автора из списка (например, если Руслан перевел — его не выберет)
+                        # Исключаем автора из списка
                         available_reviewers = [r for r in REVIEWERS if r != author_tg]
                         
-                        # Если список пуст (например, один ревьюер и он же автор), берем всех
                         if not available_reviewers:
                             available_reviewers = REVIEWERS
                             
@@ -109,7 +105,6 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                         f"👤 Отправил: {author_tg or 'Не определен'}"
                     )
                     
-                    # Отправка в группу (используем ID темы из ваших настроек)
                     await bot.send_message(
                         chat_id=-1002196628724, 
                         message_thread_id=channel_id,
@@ -118,14 +113,13 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                         parse_mode="HTML"
                     )
                     processed_issues.add(issue_key)
-                    logger.info(f"Назначен {reviewer} для {issue_key}. Автор: {author_tg}")
 
-                # Очистка памяти от задач, которые ушли из статуса ревью
+                # Очистка старых задач из памяти
                 current_keys = {i["key"] for i in issues}
                 processed_issues.intersection_update(current_keys)
 
     except Exception as e:
-        logger.exception(f"Критическая ошибка в мониторинге: {e}")
+        logger.exception(f"Критическая ошибка: {e}")
 
 async def run_code_review_monitor(bot: Bot, channel_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str, interval: int = 100):
     """Цикл запуска проверки раз в 5 минут"""
