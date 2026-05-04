@@ -75,7 +75,13 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                         f"🎯 Назначаю: {reviewer}"
                     )
                     
-                    await bot.send_message(chat_id=channel_id, text=message_text, disable_web_page_preview=True)
+                    # В файле code_review_handler.py на строке 78
+                    await bot.send_message(
+                        chat_id=-1002196628724,          # ID группы из вашего скриншота CleanShot 2026-05-04 at 09.35.14@2x.jpg
+                        message_thread_id=channel_id,    # Здесь ваше значение 42896, которое на самом деле является ID темы
+                        text=message_text, 
+                        disable_web_page_preview=True
+                    )
                     processed_issues.add(issue_key)
                     logger.info(f"Назначен {reviewer} для {issue_key} (Type: {task_type})")
 
