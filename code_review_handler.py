@@ -19,13 +19,15 @@ REVIEWERS = [
 processed_issues = set()
 
 async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str):
-    """
-    Проверяет задачи в статусе 'Код ревью' и назначает случайного ревьюера.
-    """
-    # 1. Исправляем формирование URL. 
-    # Убеждаемся, что jira_url не заканчивается на слеш, чтобы не было double slash //
+    # Защита от кривых URL
+    if not str(jira_url).startswith('http'):
+        logger.error(f"❌ Критической адрес Jira: '{jira_url}'. Проверьте порядок аргументов в main.py!")
+        return
+
     base_url = jira_url.rstrip('/')
     api_url = f"{base_url}/rest/api/3/search"
+    
+    # ... остальной код
     
     # 2. Формируем JQL (убедись, что project_key передается верно)
     jql = f'project = "{project_key}" AND status = "Код ревью" ORDER BY created DESC'
