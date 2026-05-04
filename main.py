@@ -79,25 +79,12 @@ register_jira_handlers(dp, bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JI
 
 # --- Обработчики (Твои без изменений) ---
 
-@dp.message(Command("id"))
-async def get_ids_handler(message: types.Message):
-    chat_id = message.chat.id
-    # message_thread_id — это ID темы (ветки)
+@dp.message()
+async def get_thread_id(message: types.Message):
+    # message_thread_id будет None, если это обычная группа или "Основная" тема
     thread_id = message.message_thread_id
-    
-    if thread_id:
-        text = (
-            f"📍 **ID этой темы (thread):** `{thread_id}`\n"
-            f"🆔 **ID всей группы:** `{chat_id}`"
-        )
-    else:
-        # Если это "Основная" тема или группа без тем
-        text = (
-            f"🆔 **ID группы:** `{chat_id}`\n"
-            f"ℹ️ Это основная тема или ветки не активны."
-        )
-    
-    await message.reply(text, parse_mode="Markdown")
+    chat_id = message.chat.id
+    await message.answer(f"Chat ID: {chat_id}\nThread ID: {thread_id}")
 
 @dp.message(F.text.func(lambda t: bool(t) and "#hr" in t.lower()))
 async def hr_menu(message: Message):
