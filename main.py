@@ -145,13 +145,15 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
 
     
+    # Запуск мониторинга Код Ревью
+    # Используем явное указание аргументов (key=value), чтобы избежать путаницы
     asyncio.create_task(run_code_review_monitor(
-        bot, 
-        TESTERS_CHANNEL_ID, 
-        JIRA_EMAIL, 
-        JIRA_API_TOKEN, 
-        JIRA_PROJECT_KEY, 
-        JIRA_URL, 
+        bot=bot, 
+        channel_id=TESTERS_CHANNEL_ID, 
+        jira_email=JIRA_EMAIL, 
+        jira_token=JIRA_API_TOKEN, 
+        jira_url=JIRA_URL,           # Сюда попадет https://mechtamarket.atlassian.net
+        project_key=JIRA_PROJECT_KEY, # Сюда попадет "AS"
         interval=300
     ))
 
