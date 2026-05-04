@@ -34,8 +34,8 @@ JIRA_PROJECT_KEY = os.getenv('JIRA_PROJECT_KEY', 'AS')
 JIRA_PARENT_KEY = os.getenv('JIRA_PARENT_KEY', 'AS-3312')
 JIRA_URL = os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '998292747'))
-TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-21212'))
-CODEREVIEW_CHANNEL_ID = int(os.getenv('CODEREVIEW_CHANNEL_ID', '-2121212'))
+TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '42896'))
+CODEREVIEW_CHANNEL_ID = int(os.getenv('CODEREVIEW_CHANNEL_ID', '42896'))
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
@@ -79,12 +79,12 @@ register_jira_handlers(dp, bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JI
 
 # --- Обработчики (Твои без изменений) ---
 
-@dp.message()
-async def get_thread_id(message: types.Message):
+#@dp.message()
+#async def get_thread_id(message: types.Message):
     # message_thread_id будет None, если это обычная группа или "Основная" тема
-    thread_id = message.message_thread_id
-    chat_id = message.chat.id
-    await message.answer(f"Chat ID: {chat_id}\nThread ID: {thread_id}")
+ #   thread_id = message.message_thread_id
+  #  chat_id = message.chat.id
+   # await message.answer(f"Chat ID: {chat_id}\nThread ID: {thread_id}")
 
 @dp.message(F.text.func(lambda t: bool(t) and "#hr" in t.lower()))
 async def hr_menu(message: Message):
