@@ -28,7 +28,6 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
     jql = (
         f'project = "{project_key}" '
         f'AND status = "Код ревью" '
-        f'AND summary !~ "[back]" '
         f'ORDER BY created DESC'
     )
     
@@ -56,25 +55,29 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                 for issue in issues:
                     issue_key = issue["key"]
                     summary = issue["fields"].get("summary", "")
-
-                    # НЮАНС 2: Дополнительная проверка в коде.
-                    # Jira иногда игнорирует спецсимволы вроде [] в JQL.
-                    # Эта проверка гарантирует, что [back] точно не пройдет.
-                    if "[back]" in summary.lower():
+                    
+                    # Проверяем, обработана ли уже задача
+                    if issue_key in processed_issues:
                         continue
-
-                    if issue_key not in processed_issues:
+        
+                    # ЛОГИКА ОПРЕДЕЛЕНИЯ РЕВЬЮЕРА
+                    # Если в заголовке есть [back], назначаем Дамира. Иначе — рандом из списка.
+                    if "[back]" in summary.lower():
+                        reviewer = "@DamirShaniyazov"
+                        task_type = "🛠 Backend"
+                    else:
                         reviewer = random.choice(REVIEWERS)
-                        
-                        message_text = (
-                            f"🔍 <b>Задача на код ревью</b>\n\n"
-                            f"📌 <a href='{base_url}/browse/{issue_key}'>{issue_key}</a>: {summary}\n"
-                            f"🎯 Назначаю: {reviewer}"
-                        )
-                        
-                        await bot.send_message(chat_id=channel_id, text=message_text, disable_web_page_preview=True)
-                        processed_issues.add(issue_key)
-                        logger.info(f"Назначен ревьюер {reviewer} для {issue_key}")
+                        task_type = "🎨 Frontend/Common"
+        
+                    message_text = (
+                        f"🔍 <b>Задача на код ревью</b> ({task_type})\n\n"
+                        f"📌 <a href='{base_url}/browse/{issue_key}'>{issue_key}</a>: {summary}\n"
+                        f"🎯 Назначаю: {reviewer}"
+                    )
+                    
+                    await bot.send_message(chat_id=channel_id, text=message_text, disable_web_page_preview=True)
+                    processed_issues.add(issue_key)
+                    logger.info(f"Назначен {reviewer} для {issue_key} (Type: {task_type})")
 
                 # Очистка памяти: оставляем только те задачи, которые всё еще в статусе ревью
                 current_keys = {i["key"] for i in issues}
