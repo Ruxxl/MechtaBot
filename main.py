@@ -19,6 +19,8 @@ from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers
+from code_review_handler import run_code_review_monitor
+
 
 # =======================
 # Настройка окружения
@@ -141,6 +143,19 @@ async def main():
 
     # 4) Удаляем вебхуки перед поллингом (на всякий случай)
     await bot.delete_webhook(drop_pending_updates=True)
+
+    
+    asyncio.create_task(run_code_review_monitor(
+        bot, 
+        TESTERS_CHANNEL_ID, 
+        JIRA_EMAIL, 
+        JIRA_API_TOKEN, 
+        JIRA_PROJECT_KEY, 
+        JIRA_URL, 
+        interval=300
+    ))
+
+# ... остальной код main() ...
 
     # 5) Запуск polling
     logger.info("Запуск polling...")
