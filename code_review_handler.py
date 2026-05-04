@@ -8,7 +8,10 @@ logger = logging.getLogger("bot.code_review")
 
 # Список ревьюеров
 REVIEWERS = [
-    "@Kurmangali_kusainoff"
+    "@Kurmangali_kusainoff",
+    "@peaceffuul",
+    "@john_folker",
+    "@nurgi17"
 ]
 
 # Память бота, чтобы не спамить об одной и той же задаче
