@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
+from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -33,7 +34,8 @@ JIRA_PROJECT_KEY = os.getenv('JIRA_PROJECT_KEY', 'AS')
 JIRA_PARENT_KEY = os.getenv('JIRA_PARENT_KEY', 'AS-3312')
 JIRA_URL = os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '998292747'))
-TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-1002196628724'))
+TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-'))
+CODEREVIEW_CHANNEL_ID = int(os.getenv('CODEREVIEW_CHANNEL_ID', ''))
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
@@ -77,9 +79,25 @@ register_jira_handlers(dp, bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JI
 
 # --- Обработчики (Твои без изменений) ---
 
-@dp.message(F.text == "/getid")
-async def get_chat_id(message: Message):
-    await message.reply(f"Chat ID: <code>{message.chat.id}</code>")
+@dp.message(Command("id"))
+async def get_ids_handler(message: types.Message):
+    chat_id = message.chat.id
+    # message_thread_id — это ID темы (ветки)
+    thread_id = message.message_thread_id
+    
+    if thread_id:
+        text = (
+            f"📍 **ID этой темы (thread):** `{thread_id}`\n"
+            f"🆔 **ID всей группы:** `{chat_id}`"
+        )
+    else:
+        # Если это "Основная" тема или группа без тем
+        text = (
+            f"🆔 **ID группы:** `{chat_id}`\n"
+            f"ℹ️ Это основная тема или ветки не активны."
+        )
+    
+    await message.reply(text, parse_mode="Markdown")
 
 @dp.message(F.text.func(lambda t: bool(t) and "#hr" in t.lower()))
 async def hr_menu(message: Message):
