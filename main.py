@@ -34,8 +34,8 @@ JIRA_PROJECT_KEY = os.getenv('JIRA_PROJECT_KEY', 'AS')
 JIRA_PARENT_KEY = os.getenv('JIRA_PARENT_KEY', 'AS-3312')
 JIRA_URL = os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '998292747'))
-TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-'))
-CODEREVIEW_CHANNEL_ID = int(os.getenv('CODEREVIEW_CHANNEL_ID', ''))
+TESTERS_CHANNEL_ID = int(os.getenv('TESTERS_CHANNEL_ID', '-21212'))
+CODEREVIEW_CHANNEL_ID = int(os.getenv('CODEREVIEW_CHANNEL_ID', '-2121212'))
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
