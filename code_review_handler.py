@@ -11,21 +11,25 @@ REVIEWERS = [
     "@Kurmangali_kusainoff"
 ]
 
+# Память бота, чтобы не спамить об одной и той же задаче
 processed_issues = set()
 
 async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str):
     """
-    Проверяет задачи в статусе 'Код ревью' через НОВЫЙ эндпоинт /search/jql.
+    Проверяет задачи в статусе 'Код ревью', исключает [back] и назначает ревьюера.
     """
-    # Гарантируем корректный URL
     base_url = str(jira_url).rstrip('/')
-    api_url = f"{base_url}/rest/api/3/search/jql" # Новый эндпоинт, который требует Jira
+    api_url = f"{base_url}/rest/api/3/search/jql"
     
-    jql = f'project = "{project_key}" AND status = "Код ревью" ORDER BY created DESC'
+    # НЮАНС 1: JQL фильтрация. Оператор !~ "[back]" пытается исключить бэкенд на уровне БД.
+    jql = (
+        f'project = "{project_key}" '
+        f'AND status = "Код ревью" '
+        f'AND summary !~ "[back]" '
+        f'ORDER BY created DESC'
+    )
     
     auth = aiohttp.BasicAuth(jira_email, jira_token)
-    
-    # Тело запроса в точности как в рабочем JS
     payload = {
         "jql": jql,
         "maxResults": 50,
@@ -41,19 +45,22 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                     return
 
                 data = await response.json()
-                
-                # В новом эндпоинте результаты лежат в ключе 'results'
                 issues = data.get("results") or data.get("issues") or []
 
                 if not issues:
-                    # Если задач нет, просто выходим (тихий режим)
                     return
 
                 for issue in issues:
                     issue_key = issue["key"]
-                    
+                    summary = issue["fields"].get("summary", "")
+
+                    # НЮАНС 2: Дополнительная проверка в коде.
+                    # Jira иногда игнорирует спецсимволы вроде [] в JQL.
+                    # Эта проверка гарантирует, что [back] точно не пройдет.
+                    if "[back]" in summary.lower():
+                        continue
+
                     if issue_key not in processed_issues:
-                        summary = issue["fields"]["summary"]
                         reviewer = random.choice(REVIEWERS)
                         
                         message_text = (
@@ -66,17 +73,15 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                         processed_issues.add(issue_key)
                         logger.info(f"Назначен ревьюер {reviewer} для {issue_key}")
 
-                # Очистка: если задачи больше нет в списке 'Код ревью', убираем её из памяти
+                # Очистка памяти: оставляем только те задачи, которые всё еще в статусе ревью
                 current_keys = {i["key"] for i in issues}
-                keys_to_forget = [k for k in processed_issues if k not in current_keys]
-                for k in keys_to_forget:
-                    processed_issues.remove(k)
+                processed_issues.intersection_update(current_keys)
 
     except Exception as e:
         logger.exception(f"Критическая ошибка в check_code_review_tasks: {e}")
 
 async def run_code_review_monitor(bot: Bot, channel_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str, interval: int = 300):
-    """Цикл мониторинга"""
+    """Бесконечный цикл мониторинга"""
     while True:
         await check_code_review_tasks(bot, channel_id, jira_email, jira_token, jira_url, project_key)
         await asyncio.sleep(interval)
