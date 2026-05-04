@@ -6,7 +6,16 @@ from aiogram import Bot
 
 logger = logging.getLogger("bot.code_review")
 
-# Список ревьюеров
+# Карта соответствия Email (Jira) -> Telegram username
+# ВНИМАНИЕ: Почта Руслана обновлена на ruslan.nadyrov@ddream.kz согласно логам консоли
+USER_MAP = {
+    "ruslan.nadyrov@ddream.kz": "@peaceffuul",
+    "kurmangali.kussainov@ddream.kz": "@Kurmangali_kusainoff",
+    "Vladislav": "@john_folker",
+    "nurgissa.ussen@ddream.kz": "@nurgi17"
+}
+
+# Список потенциальных ревьюеров
 REVIEWERS = [
     "@Kurmangali_kusainoff",
     "@peaceffuul",
@@ -14,28 +23,30 @@ REVIEWERS = [
     "@nurgi17"
 ]
 
-# Память бота, чтобы не спамить об одной и той же задаче
+# Память бота для предотвращения дублей
 processed_issues = set()
 
 async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str):
     """
-    Проверяет задачи в статусе 'Код ревью', исключает [back] и назначает ревьюера.
+    Проверяет задачи в статусе 'Код ревью', находит автора перехода через changelog 
+    и назначает случайного ревьюера, исключая автора.
     """
     base_url = str(jira_url).rstrip('/')
-    api_url = f"{base_url}/rest/api/3/search/jql"
+    # Используем /search с параметром expand=changelog
+    api_url = f"{base_url}/rest/api/3/search"
     
-    # НЮАНС 1: JQL фильтрация. Оператор !~ "[back]" пытается исключить бэкенд на уровне БД.
     jql = (
         f'project = "{project_key}" '
         f'AND status = "Код ревью" '
-        f'ORDER BY created DESC'
+        f'ORDER BY updated DESC'
     )
     
     auth = aiohttp.BasicAuth(jira_email, jira_token)
     payload = {
         "jql": jql,
-        "maxResults": 50,
-        "fields": ["summary", "status", "assignee"]
+        "maxResults": 20,
+        "fields": ["summary", "status"],
+        "expand": ["changelog"] # Обязательно для получения истории изменений
     }
 
     try:
@@ -47,53 +58,77 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, jira_email: str, ji
                     return
 
                 data = await response.json()
-                issues = data.get("results") or data.get("issues") or []
-
-                if not issues:
-                    return
+                issues = data.get("issues", [])
 
                 for issue in issues:
                     issue_key = issue["key"]
-                    summary = issue["fields"].get("summary", "")
-                    
-                    # Проверяем, обработана ли уже задача
                     if issue_key in processed_issues:
                         continue
-        
-                    # ЛОГИКА ОПРЕДЕЛЕНИЯ РЕВЬЮЕРА
-                    # Если в заголовке есть [back], назначаем Дамира. Иначе — рандом из списка.
+                    
+                    summary = issue["fields"].get("summary", "")
+                    histories = issue.get("changelog", {}).get("histories", [])
+                    
+                    # Логика поиска того, кто ПЕРЕВЕЛ задачу в "Код ревью"
+                    status_changer_email = None
+                    
+                    # Проходим историю с конца к началу
+                    for history in reversed(histories):
+                        items = history.get("items", [])
+                        # Ищем запись о смене статуса на "Код ревью"
+                        is_review_move = any(
+                            item.get("field") == "status" and 
+                            item.get("toString") == "Код ревью" 
+                            for item in items
+                        )
+                        if is_review_move:
+                            status_changer_email = history.get("author", {}).get("emailAddress")
+                            break
+                    
+                    # Определяем Telegram автора по его email
+                    author_tg = USER_MAP.get(status_changer_email)
+
+                    # Логика выбора ревьюера
                     if "[back]" in summary.lower():
                         reviewer = "@DamirShaniyazov"
                         task_type = "🛠 Backend"
                     else:
-                        reviewer = random.choice(REVIEWERS)
+                        # Исключаем автора из списка (например, если Руслан перевел — его не выберет)
+                        available_reviewers = [r for r in REVIEWERS if r != author_tg]
+                        
+                        # Если список пуст (например, один ревьюер и он же автор), берем всех
+                        if not available_reviewers:
+                            available_reviewers = REVIEWERS
+                            
+                        reviewer = random.choice(available_reviewers)
                         task_type = "🎨 Frontend/Common"
         
                     message_text = (
                         f"🔍 <b>Задача на код ревью</b> ({task_type})\n\n"
                         f"📌 <a href='{base_url}/browse/{issue_key}'>{issue_key}</a>: {summary}\n"
-                        f"🎯 Назначаю: {reviewer}"
+                        f"🎯 Назначаю: {reviewer}\n"
+                        f"👤 Отправил: {author_tg or 'Не определен'}"
                     )
                     
-                    # В файле code_review_handler.py на строке 78
+                    # Отправка в группу (используем ID темы из ваших настроек)
                     await bot.send_message(
-                        chat_id=-1002196628724,          # ID группы из вашего скриншота CleanShot 2026-05-04 at 09.35.14@2x.jpg
-                        message_thread_id=channel_id,    # Здесь ваше значение 42896, которое на самом деле является ID темы
-                        text=message_text, 
-                        disable_web_page_preview=True
+                        chat_id=-1002196628724, 
+                        message_thread_id=channel_id,
+                        text=message_text,
+                        disable_web_page_preview=True,
+                        parse_mode="HTML"
                     )
                     processed_issues.add(issue_key)
-                    logger.info(f"Назначен {reviewer} для {issue_key} (Type: {task_type})")
+                    logger.info(f"Назначен {reviewer} для {issue_key}. Автор: {author_tg}")
 
-                # Очистка памяти: оставляем только те задачи, которые всё еще в статусе ревью
+                # Очистка памяти от задач, которые ушли из статуса ревью
                 current_keys = {i["key"] for i in issues}
                 processed_issues.intersection_update(current_keys)
 
     except Exception as e:
-        logger.exception(f"Критическая ошибка в check_code_review_tasks: {e}")
+        logger.exception(f"Критическая ошибка в мониторинге: {e}")
 
-async def run_code_review_monitor(bot: Bot, channel_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str, interval: int = 300):
-    """Бесконечный цикл мониторинга"""
+async def run_code_review_monitor(bot: Bot, channel_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str, interval: int = 100):
+    """Цикл запуска проверки раз в 5 минут"""
     while True:
         await check_code_review_tasks(bot, channel_id, jira_email, jira_token, jira_url, project_key)
         await asyncio.sleep(interval)
