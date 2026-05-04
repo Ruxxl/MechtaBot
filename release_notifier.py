@@ -91,19 +91,25 @@ async def jira_release_check(
                         f"{issues_text}"
                     )
 
+                    target_chat_id = -1002196628724  # ID из вашего скриншота
+                    thread_id = 42896
+
                     # 5️⃣ Отправка (с фото или без)
                     if os.path.exists("release.jpg"):
                         photo = types.FSInputFile("release.jpg")
                         await bot.send_photo(
-                            TESTERS_CHANNEL_ID,
+                            chat_id=target_chat_id,
+                            message_thread_id=thread_id,  # Добавляем этот параметр
                             photo=photo,
                             caption=message,
                             parse_mode=ParseMode.HTML
                         )
                     else:
-                        await bot.send_message(
-                            TESTERS_CHANNEL_ID,
-                            message,
+                        await bot.send_photo(
+                            chat_id=target_chat_id,
+                            message_thread_id=thread_id,  # Добавляем этот параметр
+                            photo=photo,
+                            caption=message,
                             parse_mode=ParseMode.HTML
                         )
 
