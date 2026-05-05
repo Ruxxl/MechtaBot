@@ -80,7 +80,7 @@ async def handle_jira_release_status(callback: CallbackQuery,
                 text = "\n".join(lines)
 
     # Ответ на callback всегда идет в тот же чат/поток, где была кнопка
-    await callback.message.answer(text, parse_mode=ParseMode.HTML)
+    await callback.message.answer(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 
 # =============================
@@ -98,7 +98,6 @@ async def daily_reminder(bot, chat_id):
         await asyncio.sleep((target_time - now).total_seconds())
 
         now = datetime.now(timezone)
-
         if now.weekday() >= 5:
             logger.info("⏭ Утреннее уведомление пропущено (выходной)")
             continue
@@ -110,14 +109,14 @@ async def daily_reminder(bot, chat_id):
         )
 
         try:
-            # Отправка в основной чат (без message_thread_id)
+            # Отправка в основной чат TARGET_GROUP_ID
             await bot.send_message(
                 chat_id=chat_id, 
                 text=text, 
                 parse_mode=ParseMode.HTML, 
                 reply_markup=get_clockster_keyboard()
             )
-            logger.info("✅ Отправлено утреннее уведомление")
+            logger.info("✅ Отправлено утреннее уведомление в группу")
         except Exception as e:
             logger.error(f"Ошибка отправки утреннего уведомления: {e}")
 
@@ -139,7 +138,6 @@ async def evening_reminder(bot, chat_id):
         await asyncio.sleep((target_time - now).total_seconds())
 
         now = datetime.now(timezone)
-
         if now.weekday() >= 5:
             logger.info("⏭ Вечернее уведомление пропущено (выходной)")
             continue
@@ -151,14 +149,14 @@ async def evening_reminder(bot, chat_id):
         )
 
         try:
-            # Отправка в основной чат (без message_thread_id)
+            # Отправка в основной чат TARGET_GROUP_ID
             await bot.send_message(
                 chat_id=chat_id, 
                 text=text, 
                 parse_mode=ParseMode.HTML, 
                 reply_markup=get_clockster_keyboard()
             )
-            logger.info("✅ Отправлено вечернее уведомление")
+            logger.info("✅ Отправлено вечернее уведомление в группу")
         except Exception as e:
             logger.error(f"Ошибка отправки вечернего уведомления: {e}")
 
