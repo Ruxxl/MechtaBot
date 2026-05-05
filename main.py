@@ -140,10 +140,18 @@ async def main():
     asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID))
 
     # 2. Мониторинг релизов Jira
+    # 2. Мониторинг релизов Jira
     asyncio.create_task(run_background_task(
-        jira_release_check, bot, TARGET_GROUP_ID, 
-        JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL, logger, 
-        interval=100, thread_id=TARGET_THREAD_ID
+        jira_release_check, 
+        bot, 
+        TARGET_GROUP_ID,      # передается в target_group_id
+        JIRA_EMAIL, 
+        JIRA_API_TOKEN, 
+        JIRA_PROJECT_KEY, 
+        JIRA_URL, 
+        logger, 
+        100,                  # интервал (проверь, есть ли он в аргументах функции)
+        thread_id=TARGET_THREAD_ID
     ))
 
     # 3. Мониторинг Code Review
