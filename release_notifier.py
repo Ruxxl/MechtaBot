@@ -9,14 +9,16 @@ notified_versions = set()
 
 async def jira_release_check(
     bot,
-    target_group_id,    # ID группы из main.py
+    target_group_id,    # Сюда придет TARGET_GROUP_ID
     JIRA_EMAIL,
     JIRA_API_TOKEN,
     JIRA_PROJECT_KEY,
     JIRA_URL,
     logger,
-    thread_id=None      # ID топика из main.py
+    interval=100,       # Добавь дефолтное значение, если оно передается
+    thread_id=None      # Сюда придет TARGET_THREAD_ID
 ):
+    # ... (весь остальной код функции из предыдущего шага)
     logger.info("🔎 Проверяю релизы Jira...")
 
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
