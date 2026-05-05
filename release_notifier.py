@@ -7,15 +7,15 @@ from aiogram.enums import ParseMode
 not_released_versions = set()
 notified_versions = set()
 
-
 async def jira_release_check(
     bot,
-    TESTERS_CHANNEL_ID,
+    target_group_id,    # ID группы из main.py
     JIRA_EMAIL,
     JIRA_API_TOKEN,
     JIRA_PROJECT_KEY,
     JIRA_URL,
-    logger
+    logger,
+    thread_id=None      # ID топика из main.py
 ):
     logger.info("🔎 Проверяю релизы Jira...")
 
@@ -23,16 +23,13 @@ async def jira_release_check(
 
     try:
         async with aiohttp.ClientSession(auth=auth) as session:
-
             # 1️⃣ Получаем все версии проекта
             async with session.get(
                 f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
             ) as resp:
                 if resp.status != 200:
                     text = await resp.text()
-                    logger.error(
-                        f"Ошибка получения релизов: {resp.status}, body={text}"
-                    )
+                    logger.error(f"Ошибка получения релизов: {resp.status}, body={text}")
                     return
 
                 versions = await resp.json()
@@ -43,47 +40,41 @@ async def jira_release_check(
                 released = version.get("released", False)
                 version_id = version.get("id")
 
-                # Если версия еще не выпущена, запоминаем её и идем дальше
+                # Пропускаем, если еще не релизнуто
                 if not released:
                     not_released_versions.add(name)
                     continue
 
-                # Если версия была в списке невыпущенных и мы о ней еще не уведомляли
+                # Уведомляем, только если версия была в "ожидаемых" и мы еще не спамили
                 if name in not_released_versions and name not in notified_versions:
                     notified_versions.add(name)
-
                     logger.info(f"🚀 Релиз выпущен: {name}")
 
-                    # Запрашиваем задачи этого релиза. 
-                    # Важно: добавляем subtasks в fields, чтобы посчитать баги
+                    # Запрашиваем задачи релиза
                     jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
-                    search_url = (
-                        f"{JIRA_URL}/rest/api/3/search/jql"
-                        f"?jql={jql}&fields=key,summary,subtasks&maxResults=200"
-                    )
+                    search_params = {
+                        "jql": jql,
+                        "fields": "key,summary,subtasks",
+                        "maxResults": 200
+                    }
 
-                    async with session.get(search_url) as resp_issues:
-                        if resp_issues.status != 200:
-                            issues = []
-                        else:
+                    async with session.get(f"{JIRA_URL}/rest/api/3/search/jql", params=search_params) as resp_issues:
+                        issues = []
+                        if resp_issues.status == 200:
                             data = await resp_issues.json()
                             issues = data.get("issues", [])
 
-                    # 3️⃣ Считаем подзадачи (ваши баги)
-                    total_bugs = 0
-                    for i in issues:
-                        subtasks = i["fields"].get("subtasks", [])
-                        total_bugs += len(subtasks)
+                    # 3️⃣ Считаем баги (подзадачи)
+                    total_bugs = sum(len(i["fields"].get("subtasks", [])) for i in issues)
 
-                    # Формируем список основных задач
                     issues_text = "\n".join(
                         f'• <a href="{JIRA_URL}/browse/{i["key"]}">'
                         f'{i["key"]} — {i["fields"]["summary"]}</a>'
                         for i in issues
                     ) or "Задачи не найдены."
 
-                    # 4️⃣ Формируем итоговое сообщение
-                    message = (
+                    # 4️⃣ Формируем сообщение
+                    message_text = (
                         "🎉 <b>Релиз выпущен!</b>\n\n"
                         f"📦 <b>{name}</b>\n\n"
                         f"🐞 <b>Багов найдено: {total_bugs}</b>\n\n"
@@ -91,29 +82,28 @@ async def jira_release_check(
                         f"{issues_text}"
                     )
 
-                    target_chat_id = -1002196628724  # ID из вашего скриншота
-                    thread_id = 42896
-
-                    # 5️⃣ Отправка (с фото или без)
-                    if os.path.exists("release.jpg"):
-                        photo = types.FSInputFile("release.jpg")
-                        await bot.send_photo(
-                            chat_id=target_chat_id,
-                            message_thread_id=thread_id,  # Добавляем этот параметр
-                            photo=photo,
-                            caption=message,
-                            parse_mode=ParseMode.HTML
-                        )
-                    else:
-                        await bot.send_photo(
-                            chat_id=target_chat_id,
-                            message_thread_id=thread_id,  # Добавляем этот параметр
-                            photo=photo,
-                            caption=message,
-                            parse_mode=ParseMode.HTML
-                        )
-
-                    logger.info(f"Уведомление о релизе отправлено: {name}")
+                    # 5️⃣ Отправка строго в TARGET_GROUP_ID и TARGET_THREAD_ID
+                    try:
+                        if os.path.exists("release.jpg"):
+                            photo = types.FSInputFile("release.jpg")
+                            await bot.send_photo(
+                                chat_id=target_group_id,
+                                message_thread_id=thread_id,
+                                photo=photo,
+                                caption=message_text,
+                                parse_mode=ParseMode.HTML
+                            )
+                        else:
+                            await bot.send_message(
+                                chat_id=target_group_id,
+                                message_thread_id=thread_id,
+                                text=message_text,
+                                parse_mode=ParseMode.HTML,
+                                disable_web_page_preview=True
+                            )
+                        logger.info(f"✅ Уведомление отправлено в группу {target_group_id} (топик {thread_id})")
+                    except Exception as send_error:
+                        logger.error(f"❌ Ошибка отправки в TG: {send_error}")
 
     except Exception as e:
         logger.exception("Ошибка в jira_release_check", exc_info=e)
