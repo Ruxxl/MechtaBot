@@ -1,4 +1,3 @@
-# daily_reminders.py
 import asyncio
 import logging
 from datetime import datetime, timedelta
@@ -76,18 +75,18 @@ async def handle_jira_release_status(callback: CallbackQuery,
                     key = issue.get("key")
                     summary = issue["fields"].get("summary", "Без названия")
                     status = issue["fields"]["status"]["name"]
-                    # Формируем ссылку на Jira
                     url = f"{JIRA_URL}/browse/{key}"
                     lines.append(f"🔹 <a href='{url}'>{key} — {summary}</a> — <b>{status}</b>")
                 text = "\n".join(lines)
 
+    # Ответ на callback всегда идет в тот же чат/поток, где была кнопка
     await callback.message.answer(text, parse_mode=ParseMode.HTML)
 
 
 # =============================
 # Утреннее уведомление
 # =============================
-async def daily_reminder(bot, TESTERS_CHANNEL_ID):
+async def daily_reminder(bot, chat_id):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -100,7 +99,6 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
 
         now = datetime.now(timezone)
 
-        # ⛔ Выходные: суббота (5) и воскресенье (6)
         if now.weekday() >= 5:
             logger.info("⏭ Утреннее уведомление пропущено (выходной)")
             continue
@@ -112,7 +110,13 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
         )
 
         try:
-            await bot.send_message(TESTERS_CHANNEL_ID, text, parse_mode=ParseMode.HTML, reply_markup=get_clockster_keyboard())
+            # Отправка в основной чат (без message_thread_id)
+            await bot.send_message(
+                chat_id=chat_id, 
+                text=text, 
+                parse_mode=ParseMode.HTML, 
+                reply_markup=get_clockster_keyboard()
+            )
             logger.info("✅ Отправлено утреннее уведомление")
         except Exception as e:
             logger.error(f"Ошибка отправки утреннего уведомления: {e}")
@@ -123,7 +127,7 @@ async def daily_reminder(bot, TESTERS_CHANNEL_ID):
 # =============================
 # Вечернее уведомление
 # =============================
-async def evening_reminder(bot, TESTERS_CHANNEL_ID):
+async def evening_reminder(bot, chat_id):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -136,7 +140,6 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
 
         now = datetime.now(timezone)
 
-        # ⛔ Выходные: суббота (5) и воскресенье (6)
         if now.weekday() >= 5:
             logger.info("⏭ Вечернее уведомление пропущено (выходной)")
             continue
@@ -148,7 +151,13 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
         )
 
         try:
-            await bot.send_message(TESTERS_CHANNEL_ID, text, parse_mode=ParseMode.HTML, reply_markup=get_clockster_keyboard())
+            # Отправка в основной чат (без message_thread_id)
+            await bot.send_message(
+                chat_id=chat_id, 
+                text=text, 
+                parse_mode=ParseMode.HTML, 
+                reply_markup=get_clockster_keyboard()
+            )
             logger.info("✅ Отправлено вечернее уведомление")
         except Exception as e:
             logger.error(f"Ошибка отправки вечернего уведомления: {e}")
@@ -159,6 +168,6 @@ async def evening_reminder(bot, TESTERS_CHANNEL_ID):
 # =============================
 # Запуск двух напоминаний
 # =============================
-async def start_reminders(bot, TESTERS_CHANNEL_ID):
-    asyncio.create_task(daily_reminder(bot, TESTERS_CHANNEL_ID))
-    asyncio.create_task(evening_reminder(bot, TESTERS_CHANNEL_ID))
+async def start_reminders(bot, chat_id):
+    asyncio.create_task(daily_reminder(bot, chat_id))
+    asyncio.create_task(evening_reminder(bot, chat_id))
