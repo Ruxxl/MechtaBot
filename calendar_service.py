@@ -28,7 +28,7 @@ ALERT_BEFORE = timedelta(minutes=5)
 EVENT_PHOTO_PATH = "event.jpg"
 TZ = tz.gettz("Asia/Almaty")
 
-# email → telegram mention
+# Актуальный MENTION_MAP (email → telegram mention)
 MENTION_MAP = {
     "ruslan.issin@ddream.kz": " @ISNVO ",
     "yernazar.kadyrbekov@ddream.kz": " @yernazarr ",
@@ -45,7 +45,7 @@ MENTION_MAP = {
     "damir.kuanysh@ddream.kz": " @KuanyshovD ",
     "abzal.zholkenov@ddream.kz": " @zholkenov ",
     "amirbek.ashirbek@ddream.kz": " @amir_ashir ",
-    "ruslan.nadyrov@ddream.kz": " @nopeacefulll ",
+    "ruslan.nadyrov@ddream.kz": " @peaceffuul ", # Обновил на актуальный
     "kamilla.aisakhunova@ddream.kz": " @aisakhunovak ",
     "vladislav.borovkov@ddream.kz": " @john_folker "
 }
@@ -102,7 +102,7 @@ def parse_attendees(component) -> str:
 
     result = []
     for a in attendees:
-        email = str(a).replace("mailto:", "").strip()
+        email = str(a).replace("mailto:", "").strip().lower()
         result.append(MENTION_MAP.get(email, email))
 
     return ", ".join(result)
@@ -112,7 +112,7 @@ def parse_attendees(component) -> str:
 # MAIN LOOP
 # =======================
 async def check_calendar_events(bot, chat_id):
-    logger.info("📅 Calendar watcher started")
+    logger.info(f"📅 Calendar watcher started for chat_id: {chat_id}")
 
     while True:
         cal = await fetch_calendar()
@@ -127,7 +127,6 @@ async def check_calendar_events(bot, chat_id):
 
         for component in cal.walk("VEVENT"):
             summary = component.get("summary", "Без названия")
-            # --- ДОБАВЛЯЕМ ПОЛУЧЕНИЕ ОПИСАНИЯ ---
             description = component.get("description", "")
             attendees_text = parse_attendees(component)
 
@@ -141,21 +140,21 @@ async def check_calendar_events(bot, chat_id):
                 alert_time = start - ALERT_BEFORE
                 event_key = (summary, start)
 
+                # Проверяем, наступило ли время уведомления (за 5 минут до начала)
                 if alert_time <= now < start and event_key not in calendar_sent_notifications:
-                    # --- ФОРМИРУЕМ ТЕКСТ С ОПИСАНИЕМ ---
                     text = (
                         f"📅 <b>Встреча скоро начнётся</b>\n\n"
                         f"📝 <b>{summary}</b>\n"
                         f"⏰ Начало: <b>{start.strftime('%H:%M')}</b>\n"
                     )
                     
-                    # Если есть описание (ссылка), добавляем его в сообщение
                     if description:
                         text += f"🔗 <b>Описание/Ссылка:</b>\n{description}\n\n"
                     
                     text += f"👥 Участники: {attendees_text}"
 
                     try:
+                        # Отправка в TARGET_GROUP_ID (без thread_id)
                         if os.path.exists(EVENT_PHOTO_PATH):
                             photo = FSInputFile(EVENT_PHOTO_PATH)
                             await bot.send_photo(
@@ -168,13 +167,18 @@ async def check_calendar_events(bot, chat_id):
                             await bot.send_message(
                                 chat_id=chat_id,
                                 text=text,
-                                parse_mode=ParseMode.HTML
+                                parse_mode=ParseMode.HTML,
+                                disable_web_page_preview=True
                             )
 
                         calendar_sent_notifications.add(event_key)
-                        logger.info(f"Sent calendar alert: {event_key}")
+                        logger.info(f"Sent calendar alert to group: {event_key}")
 
                     except Exception as e:
-                        logger.error(f"Send error: {e}")
+                        logger.error(f"Send error in calendar_service: {e}")
+
+        # Периодическая очистка старых уведомлений (раз в сутки)
+        if len(calendar_sent_notifications) > 100:
+            calendar_sent_notifications.clear()
 
         await asyncio.sleep(CHECK_INTERVAL)
