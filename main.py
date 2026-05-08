@@ -137,7 +137,7 @@ async def main():
     # 1. Сервисы календаря и напоминаний
     # Передаем и ID группы, и ID темы (если сервисы это поддерживают)
     asyncio.create_task(check_calendar_events(bot, TARGET_GROUP_ID))
-    asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID))
+    asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID, TARGET_THREAD_ID))
 
     # 2. Мониторинг релизов Jira
     # 2. Мониторинг релизов Jira
