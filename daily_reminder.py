@@ -86,7 +86,7 @@ async def handle_jira_release_status(callback: CallbackQuery,
 # =============================
 # Утреннее уведомление
 # =============================
-async def daily_reminder(bot, chat_id):
+async def daily_reminder(bot, chat_id,thread_id=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -111,9 +111,10 @@ async def daily_reminder(bot, chat_id):
         try:
             # Отправка в основной чат TARGET_GROUP_ID
             await bot.send_message(
-                chat_id=chat_id, 
-                text=text, 
-                parse_mode=ParseMode.HTML, 
+                chat_id=chat_id,
+                thread_id=thread_id,
+                text=text,
+                parse_mode=ParseMode.HTML,
                 reply_markup=get_clockster_keyboard()
             )
             logger.info("✅ Отправлено утреннее уведомление в группу")
@@ -126,7 +127,7 @@ async def daily_reminder(bot, chat_id):
 # =============================
 # Вечернее уведомление
 # =============================
-async def evening_reminder(bot, chat_id):
+async def evening_reminder(bot, chat_id,thread_id=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -152,6 +153,7 @@ async def evening_reminder(bot, chat_id):
             # Отправка в основной чат TARGET_GROUP_ID
             await bot.send_message(
                 chat_id=chat_id, 
+                message_thread_id=thread_id,
                 text=text, 
                 parse_mode=ParseMode.HTML, 
                 reply_markup=get_clockster_keyboard()
@@ -166,6 +168,6 @@ async def evening_reminder(bot, chat_id):
 # =============================
 # Запуск двух напоминаний
 # =============================
-async def start_reminders(bot, chat_id):
-    asyncio.create_task(daily_reminder(bot, chat_id))
-    asyncio.create_task(evening_reminder(bot, chat_id))
+async def start_reminders(bot, chat_id,thread_id=None):
+    asyncio.create_task(daily_reminder(bot, chat_id, thread_id))
+    asyncio.create_task(evening_reminder(bot, chat_id, thread_id))
