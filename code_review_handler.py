@@ -65,11 +65,11 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, thread_id: int, jir
 
                     if "[back]" in summary.lower():
                         reviewer = "@DamirShaniyazov"
-                        task_type = "🛠 Backend"
+                        task_type = "[BACK]"
                     else:
                         available_reviewers = [r for r in REVIEWERS if r != author_tg]
                         reviewer = random.choice(available_reviewers if available_reviewers else REVIEWERS)
-                        task_type = "🎨 Frontend/Common"
+                        task_type = "[FRONT]"
         
                     message_text = (
                         f"🔍 <b>Задача на код ревью</b> ({task_type})\n\n"
