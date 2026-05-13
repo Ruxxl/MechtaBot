@@ -90,7 +90,6 @@ async def jira_release_check(
                             photo = types.FSInputFile("release.jpg")
                             await bot.send_photo(
                                 chat_id=target_group_id,
-                                message_thread_id=thread_id,
                                 photo=photo,
                                 caption=message_text,
                                 parse_mode=ParseMode.HTML
@@ -98,7 +97,6 @@ async def jira_release_check(
                         else:
                             await bot.send_message(
                                 chat_id=target_group_id,
-                                message_thread_id=thread_id,
                                 text=message_text,
                                 parse_mode=ParseMode.HTML,
                                 disable_web_page_preview=True
