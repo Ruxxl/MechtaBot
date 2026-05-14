@@ -3,6 +3,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from aiohttp import web
+from ai_generator import handle_generate_tests
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -60,6 +61,7 @@ async def handle_web_root(request):
 async def start_web_server():
     app = web.Application()
     app.router.add_get('/', handle_web_root)
+    app.router.add_post('/generate', handle_generate_tests)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
