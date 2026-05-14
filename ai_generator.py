@@ -15,12 +15,22 @@ else:
     logger.warning("⚠️ GEMINI_API_KEY не найден в переменных окружения!")
 
 async def handle_generate_tests(request):
+    # 1. ОБРАБОТКА CORS (Preflight request)
+    # Браузер сначала отправляет OPTIONS, чтобы проверить разрешения
+    cors_headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
+
+    if request.method == 'OPTIONS':
+        return web.Response(status=200, headers=cors_headers)
+
     try:
         data = await request.json()
         requirements = data.get("requirements", "")
-        config = data.get("config", {}) # Получаем настройки из HTML
+        config = data.get("config", {}) 
         
-        # Собираем инструкции на основе конфига
         lang = "Русский" if config.get("lang") == "ru" else "English"
         max_cases = config.get("maxCases", 10)
         
@@ -57,17 +67,13 @@ async def handle_generate_tests(request):
             generation_config={"response_mime_type": "application/json"}
         )
         
-        # Добавляем CORS заголовки, чтобы браузер не блокировал запрос
+        # 2. ОТВЕТ С ЗАГОЛОВКАМИ
         return web.Response(
             text=response.text, 
             content_type='application/json',
-            headers={
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type'
-            }
+            headers=cors_headers
         )
     
     except Exception as e:
         logger.error(f"Ошибка в ai_generator: {e}")
-        return web.json_response({"error": str(e)}, status=500)
+        return web.json_response({"error": str(e)}, status=500, headers=cors_headers)
