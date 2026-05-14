@@ -2,6 +2,7 @@ aiogram
 aiohttp
 python-dotenv
 requests
+google-generativeai
 beautifulsoup4
 icalendar
 pytesseract
