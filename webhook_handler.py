@@ -68,7 +68,6 @@ class WebhookHandler:
                     
                     text = f"🚀 <b>[GitHub Actions] Билд успешно собран!</b>\n\n"
                     text += f"🎬 <b>Стенд:</b> {stand_info}\n"
-                    text += f"📦 <b>Репозиторий:</b> {repo_name}\n"
                     text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
                     text += f"🛠 <b>Билд:</b> <a href=\"{html_url}\">#{run_number}</a>\n"
                     text += f"👤 <b>Инициатор:</b> @{actor}\n"
