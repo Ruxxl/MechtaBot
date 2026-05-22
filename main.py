@@ -20,6 +20,9 @@ from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers
 from code_review_handler import run_code_review_monitor
 
+# Новый импорт вынесенного хендлера
+from webhook_handler import WebhookHandler
+
 # =======================
 # Настройка окружения
 # =======================
@@ -53,99 +56,27 @@ def setup_logger():
 logger = setup_logger()
 
 # =======================
-# Инициализация бота (перенесена выше, чтобы веб-сервер видел bot)
+# Инициализация бота
 # =======================
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 # =======================
-# Веб-сервер для Render + Прием Вебхуков
+# Веб-сервер для Render
 # =======================
 async def handle_web_root(request):
     return web.Response(text="Bot is alive!")
 
-async def handle_webhook_notification(request):
-    """
-    Обработчик вебхуков. Ловит завершение GitHub Actions для ветки predprod.
-    """
-    try:
-        user_agent = request.headers.get('User-Agent', '')
-        
-        if 'GitHub-Hookshot' in user_agent:
-            data = await request.json()
-            
-            # 1. Проверка на пинг от GitHub
-            if "zen" in data:
-                logger.info("🍏 Пинг от GitHub Webhook получен!")
-                return web.json_response({"status": "success", "message": "Pong"})
-            
-            # 2. Ловим событие изменения воркфлоу
-            # GitHub присылает информацию в объекте 'workflow_run'
-            workflow_run = data.get("workflow_run")
-            if not workflow_run:
-                return web.json_response({"status": "ignored", "message": "Not a workflow_run event"})
-                
-            # 3. Фильтруем строго по ветке predprod
-            branch = workflow_run.get("head_branch")
-                
-            # 4. Проверяем статус. Нам нужно ловить момент, когда экшен ЗАВЕРШИЛСЯ (completed)
-            status = workflow_run.get("status")
-            conclusion = workflow_run.get("conclusion") # success, failure, cancelled
-            
-            if status != "completed":
-                # Экшен еще в процессе (requested / in_progress), игнорируем, чтобы не спамить
-                return web.json_response({"status": "ignored", "message": "Workflow is still running"})
-                
-            # 5. Если билд успешно завершен — собираем сообщение
-            if conclusion == "success":
-                repo_name = data.get("repository", {}).get("name", "Unknown Repo")
-                actor = workflow_run.get("actor", {}).get("login", "Unknown")
-                run_number = workflow_run.get("run_number", 0)
-                html_url = workflow_run.get("html_url", "#")
-                head_commit = workflow_run.get("head_commit", {})
-                commit_message = head_commit.get("message", "Описание отсутствует").split("\n")[0]
-                workflow_name = workflow_run.get("name", "Unknown Workflow")
-                
-                text = f"🚀 <b>[GitHub Actions] Билд успешно собран!</b>\n\n"
-                text += f"🎬 <b>Стенд:</b> {workflow_name}\n"
-                text += f"📦 <b>Репозиторий:</b> {repo_name}\n"
-                text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
-                text += f"🛠 <b>Билд:</b> <a href=\"{html_url}\">#{run_number}</a>\n"
-                text += f"👤 <b>Инициатор:</b> @{actor}"
-                text += f"📝 <b>Описание:</b> <i>{commit_message}</i>"
-                
-                # Шлем в твою целевую тему
-                await bot.send_message(
-                    chat_id=TARGET_GROUP_ID,
-                    text=text,
-                    message_thread_id=TARGET_THREAD_ID
-                )
-                return web.json_response({"status": "success", "message": "Notification sent"})
-            
-            return web.json_response({"status": "ignored", "message": f"Workflow finished with conclusion: {conclusion}"})
-
-        else:
-            # Старый ручной JSON для тестов через curl
-            data = await request.json()
-            message_text = data.get("text")
-            thread_id = data.get("thread_id", TARGET_THREAD_ID)
-            
-            if not message_text:
-                return web.json_response({"status": "error", "message": "Missing text"}, status=400)
-                
-            await bot.send_message(chat_id=TARGET_GROUP_ID, text=message_text, message_thread_id=int(thread_id))
-            return web.json_response({"status": "success"})
-
-    except Exception as e:
-        logger.error(f"Ошибка вебхука: {e}")
-        return web.json_response({"status": "error", "message": str(e)}, status=500)
-        
 async def start_web_server():
     app = web.Application()
+    
+    # Инициализируем наш вынесенный обработчик, передав зависимости
+    handler = WebhookHandler(bot=bot, target_group_id=TARGET_GROUP_ID, target_thread_id=TARGET_THREAD_ID)
+    
     app.router.add_get('/', handle_web_root)
     app.router.add_post('/generate', handle_generate_tests)
-    # Наш новый эндпоинт для вебхуков
-    app.router.add_post('/webhook/notify', handle_webhook_notification)
+    # Передаем метод класса в качестве роута
+    app.router.add_post('/webhook/notify', handler.handle_notification)
     
     runner = web.AppRunner(app)
     await runner.setup()
@@ -155,6 +86,7 @@ async def start_web_server():
     await site.start()
 
 # Регистрация хендлеров для работы с Jira через FSM
+logger.info("📝 Регистрация хендлеров Jira FSM...")
 register_jira_handlers(dp, bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_PARENT_KEY, JIRA_URL)
 
 # =======================
@@ -213,13 +145,17 @@ async def main():
     logger.info("🚀 Бот стартует")
 
     # Запуск Health Check сервера
+    logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...")
     asyncio.create_task(start_web_server())
 
     # 1. Сервисы календаря и напоминаний
+    logger.info("📅 Запуск мониторинга календаря...")
     asyncio.create_task(check_calendar_events(bot, TARGET_GROUP_ID))
+    logger.info("⏰ Запуск ежедневных напоминаний...")
     asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID, TARGET_THREAD_ID))
 
     # 2. Мониторинг релизов Jira
+    logger.info("📦 Запуск фонового мониторинга релизов Jira...")
     asyncio.create_task(run_background_task(
         jira_release_check, 
         bot, 
@@ -234,6 +170,7 @@ async def main():
     ))
 
     # 3. Мониторинг Code Review
+    logger.info("🔍 Запуск мониторинга Code Review задач...")
     asyncio.create_task(run_code_review_monitor(
         bot=bot, 
         channel_id=TARGET_GROUP_ID, 
@@ -244,7 +181,8 @@ async def main():
         project_key=JIRA_PROJECT_KEY
     ))
 
-    # Очистка вебхуков
+    # 4. Очистка вебхуков
+    logger.info("🧹 Очистка старых вебхуков...")
     await bot.delete_webhook(drop_pending_updates=True)
 
     # Запуск Polling
