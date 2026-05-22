@@ -37,7 +37,6 @@ async def create_jira_issue(bot: Bot, jira_config: dict,
     JIRA_URL = jira_config['url']
     full_title = f"{thread_prefix} {title}".strip()
     
-    priority = data.get("priority", "Medium")
     if not links: links = []
     if not files: files = []
 

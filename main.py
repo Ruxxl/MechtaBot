@@ -18,7 +18,6 @@ from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers, create_jira_issue
-from code_review_handler import run_code_review_monitor
 
 # Новый импорт вынесенного хендлера
 from webhook_handler import WebhookHandler
@@ -123,16 +122,13 @@ async def hr_topic_detail(callback: CallbackQuery):
 async def handle_photo(message: types.Message):
     # Обертка для соответствия интерфейсу
     async def jira_wrapper(text, author, file_bytes, filename, thread_prefix):
-        return await create_jira_issue(
         key = await create_jira_issue(
             bot=bot, jira_config=JIRA_CONFIG, 
             title=text[:50], description=text, author=author,
             files=[message.photo[-1].file_id], thread_prefix=thread_prefix
-        ), "KEY" # Возвращаем кортеж для совместимости
         )
         return bool(key), key
 
-    await handle_photo_message(bot=bot, message=message, trigger_tags=TRIGGER_TAGS, create_jira_ticket=jira_wrapper)
     await handle_photo_message(
         bot=bot, message=message, trigger_tags=TRIGGER_TAGS, 
         create_jira_ticket=jira_wrapper, jira_url=JIRA_URL
@@ -142,13 +138,10 @@ async def handle_photo(message: types.Message):
 async def handle_text(message: Message):
     async def jira_wrapper(text, author, file_bytes, filename, thread_prefix):
         key = await create_jira_issue(
-        return await create_jira_issue(
             bot=bot, jira_config=JIRA_CONFIG, 
             title=text[:50], description=text, author=author,
             thread_prefix=thread_prefix
         )
-        return bool(key), key
-
     await process_text_message(
         message=message, TRIGGER_TAGS=TRIGGER_TAGS, CHECK_TAG=CHECK_TAG, 
         THREAD_PREFIXES=THREAD_PREFIXES, create_jira_ticket=jira_wrapper, bot=bot, JIRA_URL=JIRA_URL
