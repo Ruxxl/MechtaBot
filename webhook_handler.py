@@ -8,6 +8,16 @@ class WebhookHandler:
         self.bot = bot
         self.target_group_id = target_group_id
         self.target_thread_id = target_thread_id
+        # Маппинг имен workflow из .yml файлов на URL стендов
+        self.stand_urls = {
+            "deploy 1c": "http://1c.im.mdev.kz/",
+            "deploy d2": "http://d2.im.mdev.kz/",
+            "deploy d3": "http://d3.im.mdev.kz/",
+            "deploy d4": "http://d4.im.mdev.kz/",
+            "deploy preprod": "https://pp.yc.mechta.kz/",
+            "deploy preprod external integrations": "http://pp.im.mdev.kz/",
+            "deploy ssr prod": "https://mechta.kz/",
+        }
 
     async def handle_notification(self, request: web.Request):
         """
@@ -29,10 +39,11 @@ class WebhookHandler:
                 if not workflow_run:
                     return web.json_response({"status": "ignored", "message": "Not a workflow_run event"})
                     
-                # 3. Фильтруем строго по ветке predprod
+                # 3. Проверяем ветку (разрешаем dev, preprod, prod и основные ветки)
                 branch = workflow_run.get("head_branch")
-                if branch != "predprod":
-                    logger.info(f"Игнорируем экшен для ветки {branch}, ждем только predprod.")
+                allowed_prefixes = ("dev", "preprod", "prod", "master", "main")
+                if not branch or not any(branch.startswith(p) for p in allowed_prefixes):
+                    logger.info(f"Игнорируем экшен для ветки {branch}.")
                     return web.json_response({"status": "ignored", "message": f"Branch {branch} ignored"})
                     
                 # 4. Проверяем статус. Ловим момент, когда экшен ЗАВЕРШИЛСЯ (completed)
@@ -52,8 +63,11 @@ class WebhookHandler:
                     commit_message = head_commit.get("message", "Описание отсутствует").split("\n")[0]
                     workflow_name = workflow_run.get("name", "Unknown Workflow")
                     
+                    # Проверяем, есть ли для этого workflow специальная ссылка
+                    stand_info = self.stand_urls.get(workflow_name.lower().strip(), workflow_name)
+                    
                     text = f"🚀 <b>[GitHub Actions] Билд успешно собран!</b>\n\n"
-                    text += f"🎬 <b>Стенд:</b> {workflow_name}\n"
+                    text += f"🎬 <b>Стенд:</b> {stand_info}\n"
                     text += f"📦 <b>Репозиторий:</b> {repo_name}\n"
                     text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
                     text += f"🛠 <b>Билд:</b> <a href=\"{html_url}\">#{run_number}</a>\n"
