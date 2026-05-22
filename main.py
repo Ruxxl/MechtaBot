@@ -108,6 +108,7 @@ async def handle_webhook_notification(request):
                 text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
                 text += f"🛠 <b>Билд:</b> <a href=\"{html_url}\">#{run_number}</a>\n"
                 text += f"👤 <b>Инициатор:</b> @{actor}"
+                text += f"📝 <b>Описание:</b> <i>{commit_message}</i>"
                 
                 # Шлем в твою целевую тему
                 await bot.send_message(
