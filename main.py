@@ -3,7 +3,6 @@ import os
 import logging
 from dotenv import load_dotenv
 from aiohttp import web
-from ai_generator import handle_generate_tests
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -18,8 +17,6 @@ from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers, create_jira_issue
-
-# Новый импорт вынесенного хендлера
 from webhook_handler import WebhookHandler
 
 # =======================
@@ -75,8 +72,6 @@ async def start_web_server():
     handler = WebhookHandler(bot=bot, target_group_id=TARGET_GROUP_ID, target_thread_id=TARGET_THREAD_ID)
     
     app.router.add_get('/', handle_web_root)
-    app.router.add_post('/generate', handle_generate_tests)
-    # Передаем метод класса в качестве роута
     app.router.add_post('/webhook/notify', handler.handle_notification)
     
     runner = web.AppRunner(app)
