@@ -104,8 +104,10 @@ async def handle_webhook_notification(request):
                 html_url = workflow_run.get("html_url", "#")
                 head_commit = workflow_run.get("head_commit", {})
                 commit_message = head_commit.get("message", "Описание отсутствует").split("\n")[0]
+                workflow_name = workflow_run.get("name", "Unknown Workflow")
                 
                 text = f"🚀 <b>[GitHub Actions] Билд успешно собран!</b>\n\n"
+                text += f"🎬 <b>Стенд:</b> {workflow_name}\n"
                 text += f"📦 <b>Репозиторий:</b> {repo_name}\n"
                 text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
                 text += f"🛠 <b>Билд:</b> <a href=\"{html_url}\">#{run_number}</a>\n"
