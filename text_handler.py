@@ -5,6 +5,8 @@ from aiogram.types import Message
 
 logger = logging.getLogger(__name__)
 
+THREAD_PREFIXES = {1701: '[Back]', 1703: '[Front]'}
+
 def clean_summary(text: str, tags: list) -> str:
     for tag in tags:
         text = re.sub(re.escape(tag), '', text, flags=re.IGNORECASE)

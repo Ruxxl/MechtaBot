@@ -13,7 +13,7 @@ from aiogram.client.default import DefaultBotProperties
 # Твои импорты
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
-from text_handler import process_text_message
+from text_handler import process_text_message, THREAD_PREFIXES
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
@@ -45,7 +45,6 @@ JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handle
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
-THREAD_PREFIXES = {1701: '[Back]', 1703: '[Front]'}
 
 # =======================
 # Логирование
@@ -199,18 +198,6 @@ async def main():
         logger, 
         100, 
         thread_id=TARGET_THREAD_ID
-    ))
-
-    # 3. Мониторинг Code Review
-    logger.info("🔍 Запуск мониторинга Code Review задач...")
-    asyncio.create_task(run_code_review_monitor(
-        bot=bot, 
-        channel_id=TARGET_GROUP_ID, 
-        thread_id=TARGET_THREAD_ID,
-        jira_email=JIRA_CONFIG['email'], 
-        jira_token=JIRA_CONFIG['token'], 
-        jira_url=JIRA_CONFIG['url'],
-        project_key=JIRA_CONFIG['project']
     ))
 
     # 4. Очистка вебхуков
