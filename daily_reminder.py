@@ -6,7 +6,7 @@ from urllib.parse import quote
 import aiohttp
 import ssl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.enums import ParseMode
+from aiogram.enums import ParseMode 
 
 logger = logging.getLogger(__name__)
 
