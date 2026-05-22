@@ -78,13 +78,14 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, thread_id: int, jir
                         f"👤 Отправил: {author_tg or 'Не определен'}"
                     )
                     
-                    await bot.send_message(
-                        chat_id=channel_id, # Используем переданный ID
-                        message_thread_id=thread_id,
-                        text=message_text,
-                        disable_web_page_preview=True,
-                        parse_mode="HTML"
-                    )
+                    # await bot.send_message(
+                    #     chat_id=channel_id, # Используем переданный ID
+                    #     message_thread_id=thread_id,
+                    #     text=message_text,
+                    #     disable_web_page_preview=True,
+                    #     parse_mode="HTML"
+                    # )
+                    logger.info(f"⚠️ Уведомление Code Review пропущено: {issue_key}")
                     processed_issues.add(issue_key)
 
                 current_keys = {i["key"] for i in issues}
