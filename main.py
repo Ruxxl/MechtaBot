@@ -66,23 +66,61 @@ async def handle_web_root(request):
 
 async def handle_webhook_notification(request):
     """
-    Обработчик внешних уведомлений.
-    Ожидает JSON: {"text": "Сообщение", "thread_id": 42896}
+    Универсальный обработчик вебхуков (поддерживает обычный JSON и GitHub Commits)
     """
     try:
-        data = await request.json()
-        message_text = data.get("text")
-        # Если thread_id пришел в запросе — берем его, иначе шлем в дефолтный TARGET_THREAD_ID
-        thread_id = data.get("thread_id", TARGET_THREAD_ID)
+        # Проверяем, от кого пришел запрос. GitHub всегда шлет заголовок User-Agent: GitHub-Hookshot/...
+        user_agent = request.headers.get('User-Agent', '')
+        
+        if 'GitHub-Hookshot' in user_agent:
+            data = await request.json()
+            
+            # 1. Проверяем, не тестовый ли это пинг от GitHub
+            if "zen" in data:
+                logger.info("🍏 Получен пинг-запрос от GitHub Webhook. Все ок!")
+                return web.json_response({"status": "success", "message": "Pong"})
+            
+            # 2. Собираем красивое сообщение о пуше
+            repo_name = data.get("repository", {}).get("name", "Unknown Repo")
+            pusher = data.get("pusher", {}).get("name", "Unknown User")
+            ref = data.get("ref", "")  # например, "refs/heads/main"
+            branch = ref.split("/")[-1] if ref else "unknown"
+            
+            commits = data.get("commits", [])
+            
+            # Формируем шапку
+            text = f"🐙 <b>[GitHub] Новый пуш в репозиторий!</b>\n"
+            text += f"📦 <b>Репо:</b> {repo_name}\n"
+            text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
+            text += f"👤 <b>Автор:</b> @{pusher}\n\n"
+            
+            # Добавляем список коммитов (максимум 5, чтобы не спамить)
+            if commits:
+                text += "📝 <b>Коммиты:</b>\n"
+                for commit in commits[:5]:
+                    message = commit.get("message", "").split("\n")[0] # только первая строчка коммита
+                    text += f"• <code>{commit['id'][:7]}</code> — {message}\n"
+            else:
+                text += "Нет новых коммитов (возможно, создание/удаление ветки)."
+                
+            # Используем твой TARGET_THREAD_ID по умолчанию
+            thread_id = TARGET_THREAD_ID
 
-        if not message_text:
-            return web.json_response({"status": "error", "message": "Missing 'text' field"}, status=400)
+        else:
+            # Обычный ручной JSON (сохраняем старую логику для тестов)
+            data = await request.json()
+            text = data.get("text")
+            thread_id = data.get("thread_id", TARGET_THREAD_ID)
+            
+            if not text:
+                return web.json_response({"status": "error", "message": "Missing 'text' field"}, status=400)
 
-        # Отправляем сообщение напрямую через инициализированный bot
+        # Отправляем сформированное сообщение в Telegram
         await bot.send_message(
             chat_id=TARGET_GROUP_ID,
-            text=message_text,
-            message_thread_id=int(thread_id)
+            text=text,
+            message_thread_id=int(thread_id),
+            disable_web_page_preview=True  # чтобы не разворачивались превью ссылок коммитов
         )
         return web.json_response({"status": "success", "message": "Notification sent"})
 
