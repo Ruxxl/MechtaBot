@@ -50,7 +50,7 @@ MENTION_MAP = {
     "vladislav.borovkov@ddream.kz": " @john_folker "
 }
 
-# чтобы не слать дубли
+# Множество для предотвращения дублирования уведомлений
 calendar_sent_notifications = set()
 
 
@@ -154,7 +154,6 @@ async def check_calendar_events(bot, chat_id):
                     text += f"👥 Участники: {attendees_text}"
 
                     try:
-                        # Отправка в TARGET_GROUP_ID (без thread_id)
                         if os.path.exists(EVENT_PHOTO_PATH):
                             photo = FSInputFile(EVENT_PHOTO_PATH)
                             await bot.send_photo(

@@ -17,7 +17,7 @@ from text_handler import process_text_message
 from calendar_service import check_calendar_events
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
-from jira_fsm import register_jira_handlers
+from jira_fsm import register_jira_handlers, create_jira_issue
 from code_review_handler import run_code_review_monitor
 
 # Новый импорт вынесенного хендлера
@@ -34,12 +34,15 @@ TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 
 # Jira Config
-JIRA_EMAIL = os.getenv('JIRA_EMAIL')
-JIRA_API_TOKEN = os.getenv('JIRA_API_TOKEN')
-JIRA_PROJECT_KEY = os.getenv('JIRA_PROJECT_KEY', 'AS')
-JIRA_PARENT_KEY = os.getenv('JIRA_PARENT_KEY', 'AS-3312')
-JIRA_URL = os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net')
-ADMIN_ID = int(os.getenv('ADMIN_ID', '998292747'))
+JIRA_CONFIG = {
+    'email': os.getenv('JIRA_EMAIL'),
+    'token': os.getenv('JIRA_API_TOKEN'),
+    'project': os.getenv('JIRA_PROJECT_KEY', 'AS'),
+    'parent': os.getenv('JIRA_PARENT_KEY', 'AS-3312'),
+    'url': os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net').rstrip('/')
+}
+
+JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handler
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
@@ -87,7 +90,13 @@ async def start_web_server():
 
 # Регистрация хендлеров для работы с Jira через FSM
 logger.info("📝 Регистрация хендлеров Jira FSM...")
-register_jira_handlers(dp, bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_PARENT_KEY, JIRA_URL)
+register_jira_handlers(
+    dp=dp, 
+    bot=bot, 
+    jira_config=JIRA_CONFIG, 
+    target_group_id=TARGET_GROUP_ID, 
+    target_thread_id=TARGET_THREAD_ID
+)
 
 # =======================
 # Обработчики (Handlers)
@@ -112,18 +121,48 @@ async def hr_topic_detail(callback: CallbackQuery):
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
-    await handle_photo_message(bot=bot, message=message, trigger_tags=TRIGGER_TAGS, create_jira_ticket=None)
+    # Обертка для соответствия интерфейсу
+    async def jira_wrapper(text, author, file_bytes, filename, thread_prefix):
+        return await create_jira_issue(
+        key = await create_jira_issue(
+            bot=bot, jira_config=JIRA_CONFIG, 
+            title=text[:50], description=text, author=author,
+            files=[message.photo[-1].file_id], thread_prefix=thread_prefix
+        ), "KEY" # Возвращаем кортеж для совместимости
+        )
+        return bool(key), key
+
+    await handle_photo_message(bot=bot, message=message, trigger_tags=TRIGGER_TAGS, create_jira_ticket=jira_wrapper)
+    await handle_photo_message(
+        bot=bot, message=message, trigger_tags=TRIGGER_TAGS, 
+        create_jira_ticket=jira_wrapper, jira_url=JIRA_URL
+    )
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message):
+    async def jira_wrapper(text, author, file_bytes, filename, thread_prefix):
+        key = await create_jira_issue(
+        return await create_jira_issue(
+            bot=bot, jira_config=JIRA_CONFIG, 
+            title=text[:50], description=text, author=author,
+            thread_prefix=thread_prefix
+        )
+        return bool(key), key
+
     await process_text_message(
         message=message, TRIGGER_TAGS=TRIGGER_TAGS, CHECK_TAG=CHECK_TAG, 
-        THREAD_PREFIXES=THREAD_PREFIXES, create_jira_ticket=None, bot=bot, JIRA_URL=JIRA_URL
+        THREAD_PREFIXES=THREAD_PREFIXES, create_jira_ticket=jira_wrapper, bot=bot, JIRA_URL=JIRA_URL
     )
 
 @dp.callback_query(F.data == "jira_release_status")
 async def callback_jira_release_status(callback: CallbackQuery):
-    await handle_jira_release_status(callback, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_URL)
+    await handle_jira_release_status(
+        callback, 
+        JIRA_CONFIG['email'], 
+        JIRA_CONFIG['token'], 
+        JIRA_CONFIG['project'], 
+        JIRA_CONFIG['url']
+    )
 
 # =======================
 # Фоновая обертка
@@ -160,10 +199,10 @@ async def main():
         jira_release_check, 
         bot, 
         TARGET_GROUP_ID, 
-        JIRA_EMAIL, 
-        JIRA_API_TOKEN, 
-        JIRA_PROJECT_KEY, 
-        JIRA_URL, 
+        JIRA_CONFIG['email'], 
+        JIRA_CONFIG['token'], 
+        JIRA_CONFIG['project'], 
+        JIRA_CONFIG['url'], 
         logger, 
         100, 
         thread_id=TARGET_THREAD_ID
@@ -175,10 +214,10 @@ async def main():
         bot=bot, 
         channel_id=TARGET_GROUP_ID, 
         thread_id=TARGET_THREAD_ID,
-        jira_email=JIRA_EMAIL, 
-        jira_token=JIRA_API_TOKEN, 
-        jira_url=JIRA_URL,
-        project_key=JIRA_PROJECT_KEY
+        jira_email=JIRA_CONFIG['email'], 
+        jira_token=JIRA_CONFIG['token'], 
+        jira_url=JIRA_CONFIG['url'],
+        project_key=JIRA_CONFIG['project']
     ))
 
     # 4. Очистка вебхуков

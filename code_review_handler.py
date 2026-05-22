@@ -17,10 +17,8 @@ REVIEWERS = ["@Kurmangali_kusainoff", "@peaceffuul", "@john_folker", "@nurgi17"]
 processed_issues = set()
 
 async def check_code_review_tasks(bot: Bot, channel_id: int, thread_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str):
-    base_url = str(jira_url).rstrip('/')
+    base_url = jira_url.rstrip('/')
     api_url = f"{base_url}/rest/api/3/search/jql"
-    
-    # Больше не используем хардкод внутри, берем channel_id из аргументов
     
     jql = f'project = "{project_key}" AND status = "Код ревью" ORDER BY updated DESC'
     auth = aiohttp.BasicAuth(jira_email, jira_token)
@@ -78,13 +76,6 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, thread_id: int, jir
                         f"👤 Отправил: {author_tg or 'Не определен'}"
                     )
                     
-                    # await bot.send_message(
-                    #     chat_id=channel_id, # Используем переданный ID
-                    #     message_thread_id=thread_id,
-                    #     text=message_text,
-                    #     disable_web_page_preview=True,
-                    #     parse_mode="HTML"
-                    # )
                     logger.info(f"⚠️ Уведомление Code Review пропущено: {issue_key}")
                     processed_issues.add(issue_key)
 
@@ -94,7 +85,6 @@ async def check_code_review_tasks(bot: Bot, channel_id: int, thread_id: int, jir
     except Exception as e:
         logger.exception(f"Ошибка в Code Review мониторе: {e}")
 
-# ДОБАВИЛ channel_id В АРГУМЕНТЫ НИЖЕ
 async def run_code_review_monitor(bot: Bot, channel_id: int, thread_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str, interval: int = 100):
     """Цикл запуска проверки"""
     logger.info(f"Монитор Code Review запущен для группы {channel_id}, топик: {thread_id}")
