@@ -21,27 +21,36 @@ class JiraFSM(StatesGroup):
     waiting_links_input = State()
     waiting_screenshots = State()
 
+SSL_CONTEXT = ssl.create_default_context()
+SSL_CONTEXT.check_hostname = False
+SSL_CONTEXT.verify_mode = ssl.CERT_NONE
+
 # =======================
-# Создание подзадачи Jira
+# Создание задачи Jira (Универсальная)
 # =======================
-async def create_jira_ticket_fsm(bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str, JIRA_PROJECT_KEY: str,
-                                 JIRA_PARENT_KEY: str, JIRA_URL: str, data: dict, author: str) -> Optional[str]:
-    title = data.get("title", "Без заголовка")
-    description = data.get("description", "")
+async def create_jira_issue(bot: Bot, jira_config: dict, 
+                            title: str, description: str, 
+                            author: str, priority: str = "Medium", 
+                            links: list = None, files: list = None,
+                            thread_prefix: str = "") -> Optional[str]:
+    
+    JIRA_URL = jira_config['url']
+    full_title = f"{thread_prefix} {title}".strip()
+    
     priority = data.get("priority", "Medium")
-    links = data.get("links", [])
-    files = data.get("files", [])
+    if not links: links = []
+    if not files: files = []
 
     full_text = description
     if links:
         full_text += "\n\n🔗 Ссылки:\n" + "\n".join(links)
 
-    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+    auth = aiohttp.BasicAuth(jira_config['email'], jira_config['token'])
     payload = {
         "fields": {
-            "project": {"key": JIRA_PROJECT_KEY},
-            "parent": {"key": JIRA_PARENT_KEY},
-            "summary": f"[Telegram] {title}"[:255],
+            "project": {"key": jira_config['project']},
+            "parent": {"key": jira_config['parent']},
+            "summary": f"[TG] {full_title}"[:255],
             "description": {
                 "type": "doc",
                 "version": 1,
@@ -52,25 +61,19 @@ async def create_jira_ticket_fsm(bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str,
         }
     }
 
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-
     async with aiohttp.ClientSession(auth=auth) as session:
         try:
-            async with session.post(f"{JIRA_URL}/rest/api/3/issue", json=payload, ssl=ssl_context) as resp:
+            async with session.post(f"{JIRA_URL}/rest/api/3/issue", json=payload, ssl=SSL_CONTEXT) as resp:
                 if resp.status != 201:
                     error = await resp.text()
                     logger.error("Ошибка создания подзадачи: %s — %s", resp.status, error)
                     return None
                 result = await resp.json()
                 issue_key = result.get("key")
-                logger.info("Подзадача %s создана", issue_key)
         except Exception as e:
             logger.exception("Ошибка запроса к Jira: %s", e)
             return None
 
-        # Прикрепление файлов
         if files:
             for i, file_id in enumerate(files):
                 try:
@@ -79,8 +82,7 @@ async def create_jira_ticket_fsm(bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str,
                     attach_url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}/attachments"
                     data_attach = aiohttp.FormData()
                     data_attach.add_field('file', file_bytes.read(), filename=f"screenshot_{i+1}.jpg", content_type='image/jpeg')
-                    headers = {"X-Atlassian-Token": "no-check"}
-                    async with session.post(attach_url, data=data_attach, headers=headers, ssl=ssl_context) as attach_resp:
+                    async with session.post(attach_url, data=data_attach, headers={"X-Atlassian-Token": "no-check"}, ssl=SSL_CONTEXT) as attach_resp:
                         if attach_resp.status in (200, 201):
                             logger.info("Скриншот %s прикреплён к подзадаче %s", i+1, issue_key)
                 except Exception as e:
@@ -91,12 +93,7 @@ async def create_jira_ticket_fsm(bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str,
 # =======================
 # Регистрация FSM хендлеров
 # =======================
-def register_jira_handlers(dp, bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str, JIRA_PROJECT_KEY: str,
-                           JIRA_PARENT_KEY: str, JIRA_URL: str):
-    
-    # ID из твоего Main
-    TARGET_GROUP_ID = -1002196628724
-    TARGET_THREAD_ID = 42896
+def register_jira_handlers(dp, bot: Bot, jira_config: dict, target_group_id: int, target_thread_id: int):
 
     @dp.message(F.text == "/jira")
     async def start_jira_fsm(message: Message, state: FSMContext):
@@ -156,13 +153,22 @@ def register_jira_handlers(dp, bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str, J
     async def finish_jira_fsm(callback: CallbackQuery, state: FSMContext):
         data = await state.get_data()
         author = callback.from_user.full_name
-        issue_key = await create_jira_ticket_fsm(bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_PARENT_KEY, JIRA_URL, data, author)
+        
+        issue_key = await create_jira_issue(
+            bot=bot, 
+            jira_config=jira_config,
+            title=data.get("title"),
+            description=data.get("description", ""),
+            author=author,
+            priority=data.get("priority", "Medium"),
+            links=data.get("links", []),
+            files=data.get("files", [])
+        )
         
         await state.clear()
         
         if issue_key:
-            jira_link = f"{JIRA_URL}/browse/{issue_key}"
-            # Сообщение в топик (TARGET_THREAD_ID)
+            jira_link = f"{jira_config['url']}/browse/{issue_key}"
             channel_text = (
                 f"📣 <b>Зарегистрирован новый дефект!</b>\n\n"
                 f"🔑 <b>Ключ:</b> <a href='{jira_link}'>{issue_key}</a>\n"
@@ -172,8 +178,8 @@ def register_jira_handlers(dp, bot: Bot, JIRA_EMAIL: str, JIRA_API_TOKEN: str, J
             )
             
             await bot.send_message(
-                chat_id=TARGET_GROUP_ID,
-                message_thread_id=TARGET_THREAD_ID,
+                chat_id=target_group_id,
+                message_thread_id=target_thread_id,
                 text=channel_text,
                 parse_mode="HTML",
                 disable_web_page_preview=True

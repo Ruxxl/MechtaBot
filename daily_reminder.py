@@ -10,10 +10,11 @@ from aiogram.enums import ParseMode
 
 logger = logging.getLogger(__name__)
 
-# =============================
 # Название конкретного релиза
-# =============================
 RELEASE_NAME = "Релиз 3.18"
+SSL_CONTEXT = ssl.create_default_context()
+SSL_CONTEXT.check_hostname = False
+SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
 # =============================
 # Кнопки Clockster + Jira
@@ -34,17 +35,14 @@ async def handle_jira_release_status(callback: CallbackQuery,
                                      JIRA_API_TOKEN,
                                      JIRA_PROJECT_KEY,
                                      JIRA_URL):
-    await callback.answer()  # закрываем “часики”
+    await callback.answer()
 
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
 
     # Получаем версии проекта
     versions_url = f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
     async with aiohttp.ClientSession(auth=auth) as session:
-        async with session.get(versions_url, ssl=ssl_context) as resp:
+        async with session.get(versions_url, ssl=SSL_CONTEXT) as resp:
             if resp.status != 200:
                 await callback.message.answer(f"❌ Не удалось получить версии проекта (статус {resp.status})")
                 return
@@ -60,7 +58,7 @@ async def handle_jira_release_status(callback: CallbackQuery,
     search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status&maxResults=200"
 
     async with aiohttp.ClientSession(auth=auth) as session:
-        async with session.get(search_url, ssl=ssl_context) as resp:
+        async with session.get(search_url, ssl=SSL_CONTEXT) as resp:
             if resp.status != 200:
                 await callback.message.answer(f"❌ Не удалось получить задачи релиза (статус {resp.status})")
                 return
@@ -86,7 +84,7 @@ async def handle_jira_release_status(callback: CallbackQuery,
 # =============================
 # Утреннее уведомление
 # =============================
-async def daily_reminder(bot, chat_id,thread_id=None):
+async def daily_reminder(bot, chat_id, thread_id=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -109,10 +107,9 @@ async def daily_reminder(bot, chat_id,thread_id=None):
         )
 
         try:
-            # Отправка в основной чат TARGET_GROUP_ID
             await bot.send_message(
                 chat_id=chat_id,
-                thread_id=thread_id,
+                message_thread_id=thread_id,
                 text=text,
                 parse_mode=ParseMode.HTML,
                 reply_markup=get_clockster_keyboard()
@@ -127,7 +124,7 @@ async def daily_reminder(bot, chat_id,thread_id=None):
 # =============================
 # Вечернее уведомление
 # =============================
-async def evening_reminder(bot, chat_id,thread_id=None):
+async def evening_reminder(bot, chat_id, thread_id=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -150,7 +147,6 @@ async def evening_reminder(bot, chat_id,thread_id=None):
         )
 
         try:
-            # Отправка в основной чат TARGET_GROUP_ID
             await bot.send_message(
                 chat_id=chat_id, 
                 message_thread_id=thread_id,
@@ -168,6 +164,6 @@ async def evening_reminder(bot, chat_id,thread_id=None):
 # =============================
 # Запуск двух напоминаний
 # =============================
-async def start_reminders(bot, chat_id,thread_id=None):
+async def start_reminders(bot, chat_id, thread_id=None):
     asyncio.create_task(daily_reminder(bot, chat_id, thread_id))
     asyncio.create_task(evening_reminder(bot, chat_id, thread_id))

@@ -15,19 +15,17 @@ async def jira_release_check(
     JIRA_PROJECT_KEY,
     JIRA_URL,
     logger,
-    interval=100,       # Добавь дефолтное значение, если оно передается
+    interval=100,
     thread_id=None      # Сюда придет TARGET_THREAD_ID
 ):
-    # ... (весь остальной код функции из предыдущего шага)
     logger.info("🔎 Проверяю релизы Jira...")
-
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
 
     try:
         async with aiohttp.ClientSession(auth=auth) as session:
             # 1️⃣ Получаем все версии проекта
             async with session.get(
-                f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
+                f"{JIRA_URL.rstrip('/')}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
             ) as resp:
                 if resp.status != 200:
                     text = await resp.text()
@@ -60,7 +58,7 @@ async def jira_release_check(
                         "maxResults": 200
                     }
 
-                    async with session.get(f"{JIRA_URL}/rest/api/3/search/jql", params=search_params) as resp_issues:
+                    async with session.get(f"{JIRA_URL.rstrip('/')}/rest/api/3/search/jql", params=search_params) as resp_issues:
                         issues = []
                         if resp_issues.status == 200:
                             data = await resp_issues.json()
@@ -75,7 +73,6 @@ async def jira_release_check(
                         for i in issues
                     ) or "Задачи не найдены."
 
-                    # 4️⃣ Формируем сообщение
                     message_text = (
                         "🎉 <b>Релиз выпущен!</b>\n\n"
                         f"📦 <b>{name}</b>\n\n"

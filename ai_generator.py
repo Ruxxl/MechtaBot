@@ -12,10 +12,10 @@ if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
 else:
-    logger.warning("⚠️ GEMINI_API_KEY не найден в переменных окружения!")
+    model = None
+    logger.error("⚠️ GEMINI_API_KEY не найден в переменных окружения!")
 
 async def handle_generate_tests(request):
-    # 1. ОБРАБОТКА CORS (Preflight request)
     # Браузер сначала отправляет OPTIONS, чтобы проверить разрешения
     cors_headers = {
         'Access-Control-Allow-Origin': '*',
@@ -27,6 +27,9 @@ async def handle_generate_tests(request):
         return web.Response(status=200, headers=cors_headers)
 
     try:
+        if not model:
+            return web.json_response({"error": "Gemini not configured"}, status=500, headers=cors_headers)
+
         data = await request.json()
         requirements = data.get("requirements", "")
         config = data.get("config", {}) 
@@ -67,7 +70,6 @@ async def handle_generate_tests(request):
             generation_config={"response_mime_type": "application/json"}
         )
         
-        # 2. ОТВЕТ С ЗАГОЛОВКАМИ
         return web.Response(
             text=response.text, 
             content_type='application/json',

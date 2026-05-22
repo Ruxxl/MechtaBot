@@ -5,7 +5,7 @@ from aiogram.types import Message
 
 logger = logging.getLogger(__name__)
 
-def clean_summary(text: str, tags: list):
+def clean_summary(text: str, tags: list) -> str:
     for tag in tags:
         text = re.sub(re.escape(tag), '', text, flags=re.IGNORECASE)
     return ' '.join(text.split()).strip()
@@ -28,18 +28,11 @@ async def process_text_message(
     text = message.text or ""
     text_lower = text.lower()
 
-    logger.info(f"✉️ Получено текстовое сообщение: {text}")
-
-    # =======================
-    # Проверка #check
-    # =======================
     if CHECK_TAG in text_lower:
         await message.reply("✅ Бот работает и готов принимать задачи.")
         return
 
-    # =======================
     # Обнаружены триггеры (#bug / #jira)
-    # =======================
     if any(tag in text_lower for tag in TRIGGER_TAGS):
         await message.reply("🔄 Обнаружен тег, создаю задачу в Jira...")
 

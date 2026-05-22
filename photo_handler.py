@@ -1,9 +1,8 @@
-import aiohttp
-import ssl
 import os
 import logging
-from typing import Optional, Tuple
+from typing import Callable
 from aiogram import Bot, types
+from text_handler import get_thread_prefix, THREAD_PREFIXES
 
 logger = logging.getLogger(__name__)
 
@@ -11,44 +10,24 @@ async def handle_photo_message(
     bot: Bot,
     message: types.Message,
     trigger_tags: list[str],
-    create_jira_ticket
+    create_jira_ticket: Callable
 ) -> None:
-    """
-    Обработка фото-сообщения Telegram:
-    - скачивает фото
-    - создает задачу Jira, если есть тег
-    """
     caption = message.caption or ""
     caption_lower = caption.lower()
-    logger.info(f"📸 Получено фото: {caption}")
 
     if not any(tag in caption_lower for tag in trigger_tags):
         return
 
     await message.reply("🔄 Обнаружен тег, создаю задачу в Jira...")
-
-    file_id = message.photo[-1].file_id
-    file = await bot.get_file(file_id)
-    file_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
-
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(file_url, ssl=ssl_context) as resp:
-            if resp.status != 200:
-                await message.reply("❌ Не удалось скачать фото с Telegram.")
-                return
-            photo_bytes = await resp.read()
+    prefix = get_thread_prefix(message, THREAD_PREFIXES)
 
     # Создаём Jira задачу
     success, issue_key = await create_jira_ticket(
-        caption,
-        message.from_user.full_name,
-        file_bytes=photo_bytes,
-        filename="telegram_photo.jpg",
-        thread_prefix=getattr(message, "thread_prefix", "")
+        text=caption,
+        author=message.from_user.full_name,
+        file_bytes=None, # Обрабатывается внутри create_jira_issue через file_id
+        filename=None,
+        thread_prefix=prefix
     )
 
     if success:

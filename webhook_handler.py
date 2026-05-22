@@ -88,5 +88,5 @@ class WebhookHandler:
                 return web.json_response({"status": "success"})
 
         except Exception as e:
-            logger.error(f"Ошибка вебхука: {e}")
+            logger.exception(f"Ошибка вебхука: {e}")
             return web.json_response({"status": "error", "message": str(e)}, status=500)
