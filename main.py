@@ -53,27 +53,56 @@ def setup_logger():
 logger = setup_logger()
 
 # =======================
-# Веб-сервер для Render (Health Check)
+# Инициализация бота (перенесена выше, чтобы веб-сервер видел bot)
+# =======================
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp = Dispatcher()
+
+# =======================
+# Веб-сервер для Render + Прием Вебхуков
 # =======================
 async def handle_web_root(request):
     return web.Response(text="Bot is alive!")
+
+async def handle_webhook_notification(request):
+    """
+    Обработчик внешних уведомлений.
+    Ожидает JSON: {"text": "Сообщение", "thread_id": 42896}
+    """
+    try:
+        data = await request.json()
+        message_text = data.get("text")
+        # Если thread_id пришел в запросе — берем его, иначе шлем в дефолтный TARGET_THREAD_ID
+        thread_id = data.get("thread_id", TARGET_THREAD_ID)
+
+        if not message_text:
+            return web.json_response({"status": "error", "message": "Missing 'text' field"}, status=400)
+
+        # Отправляем сообщение напрямую через инициализированный bot
+        await bot.send_message(
+            chat_id=TARGET_GROUP_ID,
+            text=message_text,
+            message_thread_id=int(thread_id)
+        )
+        return web.json_response({"status": "success", "message": "Notification sent"})
+
+    except Exception as e:
+        logger.error(f"Ошибка при обработке уведомления: {e}")
+        return web.json_response({"status": "error", "message": str(e)}, status=500)
 
 async def start_web_server():
     app = web.Application()
     app.router.add_get('/', handle_web_root)
     app.router.add_post('/generate', handle_generate_tests)
+    # Наш новый эндпоинт для вебхуков
+    app.router.add_post('/webhook/notify', handle_webhook_notification)
+    
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     logger.info(f"🌐 Веб-сервер запущен на порту {port}")
     await site.start()
-
-# =======================
-# Инициализация бота
-# =======================
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher()
 
 # Регистрация хендлеров для работы с Jira через FSM
 register_jira_handlers(dp, bot, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_PARENT_KEY, JIRA_URL)
@@ -137,22 +166,20 @@ async def main():
     asyncio.create_task(start_web_server())
 
     # 1. Сервисы календаря и напоминаний
-    # Передаем и ID группы, и ID темы (если сервисы это поддерживают)
     asyncio.create_task(check_calendar_events(bot, TARGET_GROUP_ID))
     asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID, TARGET_THREAD_ID))
 
     # 2. Мониторинг релизов Jira
-    # 2. Мониторинг релизов Jira
     asyncio.create_task(run_background_task(
         jira_release_check, 
         bot, 
-        TARGET_GROUP_ID,      # передается в target_group_id
+        TARGET_GROUP_ID, 
         JIRA_EMAIL, 
         JIRA_API_TOKEN, 
         JIRA_PROJECT_KEY, 
         JIRA_URL, 
         logger, 
-        100,                  # интервал (проверь, есть ли он в аргументах функции)
+        100, 
         thread_id=TARGET_THREAD_ID
     ))
 
