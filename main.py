@@ -87,9 +87,6 @@ async def handle_webhook_notification(request):
                 
             # 3. Фильтруем строго по ветке predprod
             branch = workflow_run.get("head_branch")
-            if branch != "predprod":
-                logger.info(f"Игнорируем экшен для ветки {branch}, ждем только predprod.")
-                return web.json_response({"status": "ignored", "message": f"Branch {branch} ignored"})
                 
             # 4. Проверяем статус. Нам нужно ловить момент, когда экшен ЗАВЕРШИЛСЯ (completed)
             status = workflow_run.get("status")
