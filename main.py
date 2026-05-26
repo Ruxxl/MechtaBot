@@ -118,22 +118,34 @@ async def hr_topic_detail(callback: CallbackQuery):
     await callback.message.answer(text)
     await callback.answer()
 
-@dp.message(F.text == "/stands")
-async def show_stands_status(message: Message):
+def get_stands_keyboard():
+    """Формирует клавиатуру со списком всех стендов"""
     buttons = []
     for name in webhook_handler.stand_urls.keys():
         btn_label = name.replace("deploy ", "").upper()
         if "EXTERNAL" in btn_label: btn_label = "INTEGRATIONS"
         if "SSR PROD" in btn_label: btn_label = "PRODUCTION"
         
-        # Теперь кнопки не ведут на сайт, а вызывают callback
         buttons.append(InlineKeyboardButton(text=f"🖥 {btn_label}", callback_data=f"stand_info:{name}"))
     
     kb_rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(inline_keyboard=kb_rows)
+
+@dp.message(F.text == "/stands")
+async def show_stands_status(message: Message):
     await message.answer(
         "Выберите стенд, чтобы узнать детали последней сборки:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows)
+        reply_markup=get_stands_keyboard()
     )
+
+@dp.callback_query(F.data == "back_to_stands")
+async def handle_back_to_stands(callback: CallbackQuery):
+    """Возврат к основному списку стендов"""
+    await callback.message.edit_text(
+        "Выберите стенд, чтобы узнать детали последней сборки:",
+        reply_markup=get_stands_keyboard()
+    )
+    await callback.answer()
 
 @dp.callback_query(F.data.startswith("stand_info:"))
 async def handle_stand_info_callback(callback: CallbackQuery):
@@ -166,10 +178,11 @@ async def handle_stand_info_callback(callback: CallbackQuery):
     kb_list = [[InlineKeyboardButton(text="🌐 Открыть стенд", url=url)]]
     if info and info.get("url"):
         kb_list.append([InlineKeyboardButton(text="🛠 Посмотреть билд в GitHub", url=info["url"])])
+    kb_list.append([InlineKeyboardButton(text="⬅️ Назад к списку", callback_data="back_to_stands")])
     
     kb = InlineKeyboardMarkup(inline_keyboard=kb_list)
     
-    await callback.message.answer(text, reply_markup=kb, disable_web_page_preview=True)
+    await callback.message.edit_text(text, reply_markup=kb, disable_web_page_preview=True)
     await callback.answer()
 
 @dp.message(F.photo)
