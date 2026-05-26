@@ -114,37 +114,51 @@ async def hr_topic_detail(callback: CallbackQuery):
 
 @dp.message(F.text == "/stands")
 async def show_stands_status(message: Message):
-    # 1. Формируем клавиатуру с кнопками-ссылками
     buttons = []
-    for name, url in webhook_handler.stand_urls.items():
-        # Делаем название кнопки короче и красивее
+    for name in webhook_handler.stand_urls.keys():
         btn_label = name.replace("deploy ", "").upper()
         if "EXTERNAL" in btn_label: btn_label = "INTEGRATIONS"
         if "SSR PROD" in btn_label: btn_label = "PRODUCTION"
         
-        buttons.append(InlineKeyboardButton(text=f"🖥 {btn_label}", url=url))
+        # Теперь кнопки не ведут на сайт, а вызывают callback
+        buttons.append(InlineKeyboardButton(text=f"🖥 {btn_label}", callback_data=f"stand_info:{name}"))
     
-    # Группируем кнопки по 2 в ряд
     kb_rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    await message.answer(
+        "Выберите стенд, чтобы узнать детали последней сборки:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    )
 
-    if not webhook_handler.latest_builds:
-        await message.answer(
-            "📭 Данных о последних сборках пока нет, но вы можете перейти на стенды по кнопкам ниже:",
-            reply_markup=kb
-        )
-        return
-
-    report = "🖥️ <b>Последние сборки на стендах:</b>\n\n"
-    for stand, info in webhook_handler.latest_builds.items():
-        report += (
-            f"📍 <b>Стенд:</b> {stand}\n"
+@dp.callback_query(F.data.startswith("stand_info:"))
+async def handle_stand_info_callback(callback: CallbackQuery):
+    stand_key = callback.data.split(":", 1)[1]
+    url = webhook_handler.stand_urls.get(stand_key)
+    
+    # Формируем красивое имя для заголовка
+    stand_name_display = stand_key.replace("deploy ", "").upper()
+    if "EXTERNAL" in stand_name_display: stand_name_display = "INTEGRATIONS"
+    if "SSR PROD" in stand_name_display: stand_name_display = "PRODUCTION"
+    
+    # Ищем инфо в хранилище (там ключи в верхнем регистре)
+    info = webhook_handler.latest_builds.get(stand_key.upper())
+    
+    if not info:
+        text = f"📍 <b>Стенд:</b> {stand_name_display}\n\n📭 Данных о последних сборках пока нет."
+    else:
+        text = (
+            f"📍 <b>Стенд:</b> {stand_name_display}\n"
             f"📝 <b>Коммит:</b> <i>{info['commit']}</i>\n"
             f"👤 <b>Инициатор:</b> @{info['actor']}\n"
-            f"📅 <b>Дата:</b> {info['date']}\n"
-            f"───────────────────\n"
+            f"📅 <b>Дата:</b> {info['date']}"
         )
-    await message.answer(report, reply_markup=kb, disable_web_page_preview=True)
+    
+    # Добавляем кнопку для перехода на сам сайт стенда
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 Открыть стенд", url=url)]
+    ])
+    
+    await callback.message.answer(text, reply_markup=kb, disable_web_page_preview=True)
+    await callback.answer()
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
