@@ -86,58 +86,54 @@ class WebhookHandler:
                 if not workflow_run:
                     return web.json_response({"status": "ignored", "message": "Not a workflow_run event"})
                     
-                # 3. Проверяем ветку (разрешаем dev, preprod, prod и основные ветки)
-                branch = workflow_run.get("head_branch")
-                allowed_prefixes = ("dev", "preprod", "prod", "master", "main")
-                if not branch or not any(branch.startswith(p) for p in allowed_prefixes):
-                    logger.info(f"Игнорируем экшен для ветки {branch}.")
-                    return web.json_response({"status": "ignored", "message": f"Branch {branch} ignored"})
-                    
-                # 4. Проверяем статус. Ловим момент, когда экшен ЗАВЕРШИЛСЯ (completed)
+                # 3. Ловим момент, когда экшен ЗАВЕРШИЛСЯ (completed)
                 status = workflow_run.get("status")
                 conclusion = workflow_run.get("conclusion")  # success, failure, cancelled
                 
                 if status != "completed":
                     return web.json_response({"status": "ignored", "message": "Workflow is still running"})
                     
-                # 5. Если билд успешно завершен — собираем сообщение
+                # 4. Собираем данные
+                repo_name = data.get("repository", {}).get("name", "Unknown Repo")
+                actor = workflow_run.get("actor", {}).get("login", "Unknown")
+                run_number = workflow_run.get("run_number", 0)
+                html_url = workflow_run.get("html_url", "#")
+                head_commit = workflow_run.get("head_commit", {})
+                commit_message = head_commit.get("message", "Описание отсутствует").split("\n")[0]
+                workflow_name = workflow_run.get("name", "Unknown Workflow")
+                branch = workflow_run.get("head_branch", "Unknown Branch")
+                
+                # Определяем имя стенда: берем из маппинга (ключ) или имя воркфлоу
+                workflow_key = workflow_name.lower().strip()
+                stand_info = workflow_name.upper() if workflow_key in self.stand_urls else workflow_name
+                
+                # 5. Обновляем кэш стендов (только при успехе)
                 if conclusion == "success":
-                    repo_name = data.get("repository", {}).get("name", "Unknown Repo")
-                    actor = workflow_run.get("actor", {}).get("login", "Unknown")
-                    run_number = workflow_run.get("run_number", 0)
-                    html_url = workflow_run.get("html_url", "#")
-                    head_commit = workflow_run.get("head_commit", {})
-                    commit_message = head_commit.get("message", "Описание отсутствует").split("\n")[0]
-                    workflow_name = workflow_run.get("name", "Unknown Workflow")
-                    
-                    # Определяем имя стенда: берем из маппинга (ключ) или имя воркфлоу
-                    workflow_key = workflow_name.lower().strip()
-                    stand_info = workflow_name.upper() if workflow_key in self.stand_urls else workflow_name
-                    
-                    # Сохраняем информацию о последней сборке
                     self.latest_builds[stand_info] = {
                         "commit": commit_message,
                         "actor": actor,
                         "date": datetime.now().strftime("%d.%m.%Y %H:%M")
                     }
 
-                    text = f"🚀 <b>[GitHub Actions] Билд успешно собран!</b>\n\n"
-                    text += f"🎬 <b>Стенд:</b> {stand_info}\n"
-                    text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
-                    text += f"🛠 <b>Билд:</b> <a href=\"{html_url}\">#{run_number}</a>\n"
-                    text += f"👤 <b>Инициатор:</b> @{actor}\n"
-                    text += f"📝 <b>Описание:</b> <i>{commit_message}</i>"
-                    
-                    # Отправляем в Telegram
-                    await self.bot.send_message(
-                        chat_id=self.target_group_id,
-                        text=text,
-                        message_thread_id=self.target_thread_id,
-                        disable_web_page_preview=True
-                    )
-                    return web.json_response({"status": "success", "message": "Notification sent"})
+                # Подготовка текста уведомления
+                emoji = "🚀" if conclusion == "success" else "❌" if conclusion == "failure" else "⚠️"
+                result_text = "успешно собран" if conclusion == "success" else f"завершен ({conclusion})"
+
+                text = f"{emoji} <b>[GitHub Actions] Билд {result_text}!</b>\n\n"
+                text += f"🎬 <b>Стенд:</b> {stand_info}\n"
+                text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
+                text += f"🛠 <b>Билд:</b> <a href=\"{html_url}\">#{run_number}</a>\n"
+                text += f"👤 <b>Инициатор:</b> @{actor}\n"
+                text += f"📝 <b>Описание:</b> <i>{commit_message}</i>"
                 
-                return web.json_response({"status": "ignored", "message": f"Workflow finished with conclusion: {conclusion}"})
+                # Отправляем в Telegram
+                await self.bot.send_message(
+                    chat_id=self.target_group_id,
+                    text=text,
+                    message_thread_id=self.target_thread_id,
+                    disable_web_page_preview=True
+                )
+                return web.json_response({"status": "success", "message": "Notification sent"})
 
             else:
                 # Старый ручной JSON для тестов через curl
