@@ -59,17 +59,17 @@ logger = setup_logger()
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
+# Инициализируем обработчик вебхуков (теперь он доступен глобально для команд)
+webhook_handler = WebhookHandler(bot=bot, target_group_id=TARGET_GROUP_ID, target_thread_id=TARGET_THREAD_ID)
+
 # =======================
 # Веб-сервер для Render
 # =======================
 async def handle_web_root(request):
     return web.Response(text="Bot is alive!")
 
-async def start_web_server():
+async def start_web_server(handler: WebhookHandler):
     app = web.Application()
-    
-    # Инициализируем наш вынесенный обработчик, передав зависимости
-    handler = WebhookHandler(bot=bot, target_group_id=TARGET_GROUP_ID, target_thread_id=TARGET_THREAD_ID)
     
     app.router.add_get('/', handle_web_root)
     app.router.add_post('/webhook/notify', handler.handle_notification)
@@ -111,6 +111,23 @@ async def hr_topic_detail(callback: CallbackQuery):
     text = HR_TOPICS.get(topic_key, {}).get("text", "❌ Неизвестная тема.")
     await callback.message.answer(text)
     await callback.answer()
+
+@dp.message(F.text == "/stands")
+async def show_stands_status(message: Message):
+    if not webhook_handler.latest_builds:
+        await message.reply("📭 Данных о последних сборках пока нет.")
+        return
+
+    report = "🖥️ <b>Последние сборки на стендах:</b>\n\n"
+    for stand, info in webhook_handler.latest_builds.items():
+        report += (
+            f"📍 <b>Стенд:</b> {stand}\n"
+            f"📝 <b>Коммит:</b> <i>{info['commit']}</i>\n"
+            f"👤 <b>Инициатор:</b> @{info['actor']}\n"
+            f"📅 <b>Дата:</b> {info['date']}\n"
+            f"───────────────────\n"
+        )
+    await message.answer(report, disable_web_page_preview=True)
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
@@ -172,7 +189,7 @@ async def main():
 
     # Запуск Health Check сервера
     logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...")
-    asyncio.create_task(start_web_server())
+    asyncio.create_task(start_web_server(webhook_handler))
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
