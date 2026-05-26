@@ -66,8 +66,9 @@ class WebhookHandler:
                     commit_message = head_commit.get("message", "Описание отсутствует").split("\n")[0]
                     workflow_name = workflow_run.get("name", "Unknown Workflow")
                     
-                    # Проверяем, есть ли для этого workflow специальная ссылка
-                    stand_info = self.stand_urls.get(workflow_name.lower().strip(), workflow_name)
+                    # Определяем имя стенда: берем из маппинга (ключ) или имя воркфлоу
+                    workflow_key = workflow_name.lower().strip()
+                    stand_info = workflow_name.upper() if workflow_key in self.stand_urls else workflow_name
                     
                     # Сохраняем информацию о последней сборке
                     self.latest_builds[stand_info] = {
