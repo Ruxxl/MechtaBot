@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from aiohttp import web
 
 logger = logging.getLogger("bot.webhook")
@@ -8,6 +9,8 @@ class WebhookHandler:
         self.bot = bot
         self.target_group_id = target_group_id
         self.target_thread_id = target_thread_id
+        # Хранилище последних успешных сборок
+        self.latest_builds = {}
         # Маппинг имен workflow из .yml файлов на URL стендов
         self.stand_urls = {
             "deploy 1c": "http://1c.im.mdev.kz/",
@@ -66,6 +69,13 @@ class WebhookHandler:
                     # Проверяем, есть ли для этого workflow специальная ссылка
                     stand_info = self.stand_urls.get(workflow_name.lower().strip(), workflow_name)
                     
+                    # Сохраняем информацию о последней сборке
+                    self.latest_builds[stand_info] = {
+                        "commit": commit_message,
+                        "actor": actor,
+                        "date": datetime.now().strftime("%d.%m.%Y %H:%M")
+                    }
+
                     text = f"🚀 <b>[GitHub Actions] Билд успешно собран!</b>\n\n"
                     text += f"🎬 <b>Стенд:</b> {stand_info}\n"
                     text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
