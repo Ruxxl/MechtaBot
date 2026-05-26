@@ -114,8 +114,25 @@ async def hr_topic_detail(callback: CallbackQuery):
 
 @dp.message(F.text == "/stands")
 async def show_stands_status(message: Message):
+    # 1. Формируем клавиатуру с кнопками-ссылками
+    buttons = []
+    for name, url in webhook_handler.stand_urls.items():
+        # Делаем название кнопки короче и красивее
+        btn_label = name.replace("deploy ", "").upper()
+        if "EXTERNAL" in btn_label: btn_label = "INTEGRATIONS"
+        if "SSR PROD" in btn_label: btn_label = "PRODUCTION"
+        
+        buttons.append(InlineKeyboardButton(text=f"🖥 {btn_label}", url=url))
+    
+    # Группируем кнопки по 2 в ряд
+    kb_rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+
     if not webhook_handler.latest_builds:
-        await message.reply("📭 Данных о последних сборках пока нет.")
+        await message.answer(
+            "📭 Данных о последних сборках пока нет, но вы можете перейти на стенды по кнопкам ниже:",
+            reply_markup=kb
+        )
         return
 
     report = "🖥️ <b>Последние сборки на стендах:</b>\n\n"
@@ -127,7 +144,7 @@ async def show_stands_status(message: Message):
             f"📅 <b>Дата:</b> {info['date']}\n"
             f"───────────────────\n"
         )
-    await message.answer(report, disable_web_page_preview=True)
+    await message.answer(report, reply_markup=kb, disable_web_page_preview=True)
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
