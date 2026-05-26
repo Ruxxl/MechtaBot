@@ -1,14 +1,17 @@
 import logging
 from datetime import datetime
+import aiohttp
 from aiohttp import web
 
 logger = logging.getLogger("bot.webhook")
 
 class WebhookHandler:
-    def __init__(self, bot, target_group_id: int, target_thread_id: int):
+    def __init__(self, bot, target_group_id: int, target_thread_id: int, github_token: str = None, repo_full_name: str = None):
         self.bot = bot
         self.target_group_id = target_group_id
         self.target_thread_id = target_thread_id
+        self.github_token = github_token
+        self.repo_full_name = repo_full_name
         # Хранилище последних успешных сборок
         self.latest_builds = {}
         # Маппинг имен workflow из .yml файлов на URL стендов
@@ -21,6 +24,47 @@ class WebhookHandler:
             "deploy preprod external integrations": "http://pp.im.mdev.kz/",
             "deploy ssr prod": "https://mechta.kz/",
         }
+
+    async def fetch_latest_build_from_api(self, workflow_name: str):
+        """Запрашивает информацию о последнем успешном запуске воркфлоу через GitHub API"""
+        if not self.github_token or not self.repo_full_name:
+            return None
+
+        headers = {
+            "Authorization": f"token {self.github_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+
+        try:
+            async with aiohttp.ClientSession(headers=headers) as session:
+                # 1. Ищем ID воркфлоу по его имени
+                wf_url = f"https://api.github.com/repos/{self.repo_full_name}/actions/workflows"
+                async with session.get(wf_url) as resp:
+                    if resp.status != 200: return None
+                    data = await resp.json()
+                    workflow = next((w for w in data.get('workflows', []) if w['name'].lower() == workflow_name.lower()), None)
+                
+                if not workflow: return None
+
+                # 2. Берем последний успешный запуск (conclusion=success)
+                runs_url = f"https://api.github.com/repos/{self.repo_full_name}/actions/workflows/{workflow['id']}/runs"
+                async with session.get(runs_url, params={"status": "success", "per_page": 1}) as resp:
+                    if resp.status != 200: return None
+                    runs_data = await resp.json()
+                    runs = runs_data.get("workflow_runs", [])
+                    if not runs: return None
+                    
+                    run = runs[0]
+                    dt = datetime.fromisoformat(run.get("updated_at", "").replace("Z", ""))
+                    return {
+                        "commit": run.get("head_commit", {}).get("message", "").split("\n")[0],
+                        "actor": run.get("actor", {}).get("login", "Unknown"),
+                        "date": dt.strftime("%d.%m.%Y %H:%M"),
+                        "url": run.get("html_url")
+                    }
+        except Exception as e:
+            logger.error(f"Ошибка GitHub API: {e}")
+            return None
 
     async def handle_notification(self, request: web.Request):
         """

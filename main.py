@@ -60,7 +60,13 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 dp = Dispatcher()
 
 # Инициализируем обработчик вебхуков (теперь он доступен глобально для команд)
-webhook_handler = WebhookHandler(bot=bot, target_group_id=TARGET_GROUP_ID, target_thread_id=TARGET_THREAD_ID)
+webhook_handler = WebhookHandler(
+    bot=bot, 
+    target_group_id=TARGET_GROUP_ID, 
+    target_thread_id=TARGET_THREAD_ID,
+    github_token=os.getenv('GITHUB_TOKEN'),
+    repo_full_name=os.getenv('GITHUB_REPO') # например "mechta-kz/my-repo"
+)
 
 # =======================
 # Веб-сервер для Render
@@ -139,8 +145,12 @@ async def handle_stand_info_callback(callback: CallbackQuery):
     if "EXTERNAL" in stand_name_display: stand_name_display = "INTEGRATIONS"
     if "SSR PROD" in stand_name_display: stand_name_display = "PRODUCTION"
     
-    # Ищем инфо в хранилище (там ключи в верхнем регистре)
-    info = webhook_handler.latest_builds.get(stand_key.upper())
+    # 1. Пробуем получить свежие данные напрямую из API
+    info = await webhook_handler.fetch_latest_build_from_api(stand_key)
+    
+    # 2. Если API недоступно, берем из локального кэша (от вебхуков)
+    if not info:
+        info = webhook_handler.latest_builds.get(stand_key.upper())
     
     if not info:
         text = f"📍 <b>Стенд:</b> {stand_name_display}\n\n📭 Данных о последних сборках пока нет."
@@ -152,10 +162,12 @@ async def handle_stand_info_callback(callback: CallbackQuery):
             f"📅 <b>Дата:</b> {info['date']}"
         )
     
-    # Добавляем кнопку для перехода на сам сайт стенда
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌐 Открыть стенд", url=url)]
-    ])
+    # Формируем кнопки
+    kb_list = [[InlineKeyboardButton(text="🌐 Открыть стенд", url=url)]]
+    if info and info.get("url"):
+        kb_list.append([InlineKeyboardButton(text="🛠 Посмотреть билд в GitHub", url=info["url"])])
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_list)
     
     await callback.message.answer(text, reply_markup=kb, disable_web_page_preview=True)
     await callback.answer()
