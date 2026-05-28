@@ -268,6 +268,11 @@ async def main():
     # Обновляем начальные статусы в админке
     monitor.update_status("Core", "OK")
     monitor.update_status("GitHub Webhooks", "OK")
+    monitor.update_status("Calendar Service", "OK")
+    monitor.update_status("Daily Reminders", "OK")
+    monitor.update_status("Jira Release Monitor", "OK")
+    monitor.update_status("Translator Service", "OK")
+    monitor.update_status("Jira FSM", "OK")
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")

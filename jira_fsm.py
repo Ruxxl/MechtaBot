@@ -9,6 +9,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
+from admin_handler import monitor
 logger = logging.getLogger("bot_jira")
 
 # =======================
@@ -96,6 +97,7 @@ def register_jira_handlers(dp, bot: Bot, jira_config: dict, target_group_id: int
 
     @dp.message(F.text == "/jira")
     async def start_jira_fsm(message: Message, state: FSMContext):
+        monitor.update_status("Jira FSM", "OK")
         await state.clear()
         await state.update_data(files=[])
         await message.answer("🚀 <b>Регистрация дефекта</b>\n\n📌 <b>Шаг 1:</b> Введите заголовок (коротко):")
