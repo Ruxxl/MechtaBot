@@ -2,9 +2,8 @@ aiogram
 aiohttp
 python-dotenv
 requests
-google-generativeai
+google-generativeai>=0.7.2
 beautifulsoup4
 icalendar
 pytesseract
 playwright>=1.37.0
-deep-translator
