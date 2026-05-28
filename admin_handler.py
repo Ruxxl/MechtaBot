@@ -13,10 +13,16 @@ class AdminMonitor(logging.Handler):
 
     def emit(self, record):
         if record.levelno >= logging.ERROR:
+            message = record.getMessage()
+            
+            # Игнорируем специфическую ошибку конфликта сессий (две копии бота)
+            if "Conflict: terminated by other getUpdates request" in message:
+                return
+
             error_entry = {
                 "timestamp": datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S"),
                 "module": record.name,
-                "message": record.getMessage(),
+                "message": message,
                 "traceback": self.format(record)
             }
             self.error_log.appendleft(error_entry)
