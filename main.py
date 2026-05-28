@@ -18,6 +18,7 @@ from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers, create_jira_issue
 from webhook_handler import WebhookHandler
+from translator_service import register_translator_handlers
 
 # =======================
 # Настройка окружения
@@ -28,6 +29,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 # Твои конкретные ID
 TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
+TRANSLATION_THREAD_ID = 42896  # Укажи здесь ID темы для перевода
 
 # Jira Config
 JIRA_CONFIG = {
@@ -96,6 +98,11 @@ register_jira_handlers(
     target_group_id=TARGET_GROUP_ID, 
     target_thread_id=TARGET_THREAD_ID
 )
+
+# Регистрация переводчика для конкретной темы
+if TRANSLATION_THREAD_ID:
+    logger.info(f"🌐 Регистрация переводчика для темы {TRANSLATION_THREAD_ID}")
+    register_translator_handlers(dp, TRANSLATION_THREAD_ID)
 
 # =======================
 # Обработчики (Handlers)

@@ -103,9 +103,10 @@ class WebhookHandler:
                 workflow_name = workflow_run.get("name", "Unknown Workflow")
                 branch = workflow_run.get("head_branch", "Unknown Branch")
                 
-                # Определяем имя стенда: берем из маппинга (ключ) или имя воркфлоу
+                # Определяем имя стенда и URL: берем из маппинга (ключ) или имя воркфлоу
                 workflow_key = workflow_name.lower().strip()
-                stand_info = workflow_name.upper() if workflow_key in self.stand_urls else workflow_name
+                stand_url = self.stand_urls.get(workflow_key)
+                stand_info = workflow_name.upper() if stand_url else workflow_name
                 
                 # 5. Обновляем кэш стендов (только при успехе)
                 if conclusion == "success":
@@ -121,6 +122,8 @@ class WebhookHandler:
 
                 text = f"{emoji} <b>[GitHub Actions] Билд {result_text}!</b>\n\n"
                 text += f"🎬 <b>Стенд:</b> {stand_info}\n"
+                if stand_url:
+                    text += f"🌐 <b>URL:</b> {stand_url}\n"
                 text += f"🌿 <b>Ветка:</b> <code>{branch}</code>\n"
                 text += f"🛠 <b>Билд:</b> <a href=\"{html_url}\">#{run_number}</a>\n"
                 text += f"👤 <b>Инициатор:</b> @{actor}\n"
