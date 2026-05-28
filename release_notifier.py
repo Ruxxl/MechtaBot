@@ -2,6 +2,7 @@ import os
 import aiohttp
 from aiogram import types
 from aiogram.enums import ParseMode
+from admin_handler import monitor
 
 # Храним состояние между запусками функции
 not_released_versions = set()
@@ -19,6 +20,7 @@ async def jira_release_check(
     thread_id=None      # Сюда придет TARGET_THREAD_ID
 ):
     logger.info("🔎 Проверяю релизы Jira...")
+    monitor.update_status("Jira Release Monitor", "OK")
     auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
 
     try:

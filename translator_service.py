@@ -3,6 +3,7 @@ import logging
 from aiogram import Dispatcher, F
 from aiogram.types import Message
 from google import genai
+from admin_handler import monitor
 from deep_translator import GoogleTranslator
 
 logger = logging.getLogger("bot.translator")
@@ -64,6 +65,7 @@ def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api
     """
     @dp.message(F.message_thread_id == translation_thread_id, F.text & ~F.text.startswith("/"))
     async def handle_translation(message: Message):
+        monitor.update_status("Translator Service", "OK")
         text = message.text.strip()
         if not text: return
 

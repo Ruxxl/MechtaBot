@@ -6,6 +6,7 @@ from urllib.parse import quote
 import aiohttp
 import ssl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from admin_handler import monitor
 from aiogram.enums import ParseMode 
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ async def daily_reminder(bot, chat_id, thread_id=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
+        monitor.update_status("Daily Reminders", "OK")
         now = datetime.now(timezone)
         target_time = now.replace(hour=8, minute=5, second=0, microsecond=0)
         if now >= target_time:

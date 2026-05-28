@@ -3,6 +3,7 @@ import random
 import logging
 import aiohttp
 from aiogram import Bot
+from admin_handler import monitor
 
 logger = logging.getLogger("bot.code_review")
 
@@ -18,6 +19,8 @@ processed_issues = set()
 
 async def check_code_review_tasks(bot: Bot, channel_id: int, thread_id: int, jira_email: str, jira_token: str, jira_url: str, project_key: str):
     base_url = jira_url.rstrip('/')
+    monitor.update_status("Code Review Monitor", "OK")
+    
     api_url = f"{base_url}/rest/api/3/search/jql"
     
     jql = f'project = "{project_key}" AND status = "Код ревью" ORDER BY updated DESC'
