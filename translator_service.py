@@ -2,30 +2,25 @@ import asyncio
 import logging
 from aiogram import Dispatcher, F
 from aiogram.types import Message
-import google.generativeai as genai
+from google import genai
 
 logger = logging.getLogger("bot.translator")
 
-# Кэшируем модель, чтобы не инициализировать её каждый раз
-_model = None
+# Кэшируем клиент, чтобы не создавать его при каждом сообщении
+_client = None
 
-def get_model(api_key: str):
-    global _model
-    if _model is None:
-        genai.configure(api_key=api_key)
-        _model = genai.GenerativeModel('gemini-1.5-flash')
-    return _model
+def get_client(api_key: str):
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 async def translate_ru_to_kk(text: str, api_key: str) -> str:
     """
     Выполняет перевод текста с русского на казахский с помощью Google Gemini.
     """
-    if not api_key:
-        logger.error("GEMINI_API_KEY не задан. Перевод невозможен.")
-        return ""
-
     try:
-        model = get_model(api_key)
+        client = get_client(api_key)
 
         prompt = (
             "Ты — профессиональный переводчик. Переведи следующий текст с русского на казахский язык. "
@@ -35,15 +30,15 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
         )
 
         # Запускаем генерацию в отдельном потоке, чтобы не блокировать event loop
-        response = await asyncio.to_thread(model.generate_content, prompt)
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
         
-        # Проверяем, что в ответе есть текст (может быть пустым, если сработал фильтр безопасности)
-        if response and response.candidates:
-            candidate = response.candidates[0]
-            if candidate.content and candidate.content.parts:
-                return candidate.text.strip()
-        
-        logger.warning(f"Gemini вернул пустой ответ или заблокировал контент для текста: {text[:20]}...")
+        if response and response.text:
+            return response.text.strip()
+            
         return ""
     except Exception as e:
         logger.error(f"Ошибка Gemini при переводе: {e}")
