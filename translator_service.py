@@ -6,6 +6,16 @@ import google.generativeai as genai
 
 logger = logging.getLogger("bot.translator")
 
+# Кэшируем модель, чтобы не инициализировать её каждый раз
+_model = None
+
+def get_model(api_key: str):
+    global _model
+    if _model is None:
+        genai.configure(api_key=api_key)
+        _model = genai.GenerativeModel('gemini-1.5-flash')
+    return _model
+
 async def translate_ru_to_kk(text: str, api_key: str) -> str:
     """
     Выполняет перевод текста с русского на казахский с помощью Google Gemini.
@@ -15,8 +25,7 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
         return ""
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = get_model(api_key)
 
         prompt = (
             "Ты — профессиональный переводчик. Переведи следующий текст с русского на казахский язык. "
@@ -27,7 +36,15 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
 
         # Запускаем генерацию в отдельном потоке, чтобы не блокировать event loop
         response = await asyncio.to_thread(model.generate_content, prompt)
-        return response.text.strip()
+        
+        # Проверяем, что в ответе есть текст (может быть пустым, если сработал фильтр безопасности)
+        if response and response.candidates:
+            candidate = response.candidates[0]
+            if candidate.content and candidate.content.parts:
+                return candidate.text.strip()
+        
+        logger.warning(f"Gemini вернул пустой ответ или заблокировал контент для текста: {text[:20]}...")
+        return ""
     except Exception as e:
         logger.error(f"Ошибка Gemini при переводе: {e}")
         return ""
