@@ -9,6 +9,7 @@ from icalendar import Calendar
 from dateutil import tz
 from dateutil.rrule import rrulestr
 
+from admin_handler import monitor
 from aiogram.types import FSInputFile
 from aiogram.enums import ParseMode
 
@@ -115,6 +116,7 @@ async def check_calendar_events(bot, chat_id):
     logger.info(f"📅 Calendar watcher started for chat_id: {chat_id}")
 
     while True:
+        monitor.update_status("Calendar Service", "OK")
         cal = await fetch_calendar()
         now = datetime.now(TZ)
 
