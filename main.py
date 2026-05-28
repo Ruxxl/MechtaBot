@@ -50,13 +50,20 @@ CHECK_TAG = '#check'
 # =======================
 # Логирование
 # =======================
+class ConflictFilter(logging.Filter):
+    """Фильтр для исключения ошибок конфликта сессий из логов."""
+    def filter(self, record):
+        return "Conflict: terminated by other getUpdates request" not in record.getMessage()
+
 def setup_logger():
     fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     logger = logging.getLogger("bot")
     logger.setLevel(logging.INFO)
+    
+    # Добавляем фильтр на корневой логгер, чтобы он применялся ко всем обработчикам
+    logging.getLogger().addFilter(ConflictFilter())
+    
     logging.basicConfig(level=logging.INFO, format=fmt, handlers=[logging.StreamHandler(), monitor])
-    # Принудительно добавляем наш монитор к корневому логгеру, чтобы ловить всё
-    logging.getLogger().addHandler(monitor)
     return logger
 
 logger = setup_logger()
