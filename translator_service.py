@@ -3,6 +3,7 @@ import logging
 from aiogram import Dispatcher, F
 from aiogram.types import Message
 from google import genai
+from deep_translator import GoogleTranslator
 
 logger = logging.getLogger("bot.translator")
 
@@ -32,7 +33,7 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
         # Запускаем генерацию в отдельном потоке, чтобы не блокировать event loop
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=prompt
         )
         
@@ -41,7 +42,20 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
             
         return ""
     except Exception as e:
-        logger.error(f"Ошибка Gemini при переводе: {e}")
+        error_msg = str(e)
+        # Если исчерпана квота (429), используем запасной вариант
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+            logger.warning("Квота Gemini исчерпана, использую запасной переводчик (GoogleTranslator)")
+            try:
+                translated = await asyncio.to_thread(
+                    lambda: GoogleTranslator(source='ru', target='kk').translate(text)
+                )
+                return translated
+            except Exception as fallback_error:
+                logger.error(f"Ошибка запасного переводчика: {fallback_error}")
+                return ""
+
+        logger.error(f"Ошибка Gemini при переводе (текст: {text[:20]}...): {e}")
         return ""
 
 def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api_key: str):
