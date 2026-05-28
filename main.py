@@ -19,6 +19,7 @@ from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers, create_jira_issue
 from webhook_handler import WebhookHandler
 from translator_service import register_translator_handlers
+from admin_handler import AdminHandler, monitor
 
 # =======================
 # Настройка окружения
@@ -51,8 +52,12 @@ CHECK_TAG = '#check'
 # =======================
 def setup_logger():
     fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    logging.basicConfig(level=logging.INFO, format=fmt)
-    return logging.getLogger("bot")
+    logger = logging.getLogger("bot")
+    logger.setLevel(logging.INFO)
+    logging.basicConfig(level=logging.INFO, format=fmt, handlers=[logging.StreamHandler(), monitor])
+    # Принудительно добавляем наш монитор к корневому логгеру, чтобы ловить всё
+    logging.getLogger().addHandler(monitor)
+    return logger
 
 logger = setup_logger()
 
@@ -77,11 +82,14 @@ webhook_handler = WebhookHandler(
 async def handle_web_root(request):
     return web.Response(text="Bot is alive!")
 
-async def start_web_server(handler: WebhookHandler):
+async def start_web_server(webhook_h: WebhookHandler, bot_info: types.User):
     app = web.Application()
     
+    admin_h = AdminHandler(bot_username=bot_info.username)
+
     app.router.add_get('/', handle_web_root)
-    app.router.add_post('/webhook/notify', handler.handle_notification)
+    app.router.add_post('/webhook/notify', webhook_h.handle_notification)
+    app.router.add_get('/admin', admin_h.handle_dashboard)
     
     runner = web.AppRunner(app)
     await runner.setup()
@@ -251,9 +259,15 @@ async def run_background_task(coro_func, *args, interval: int = 60, **kwargs):
 async def main():
     logger.info("🚀 Бот стартует")
 
+    bot_user = await bot.get_me()
+
     # Запуск Health Check сервера
     logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...")
-    asyncio.create_task(start_web_server(webhook_handler))
+    asyncio.create_task(start_web_server(webhook_handler, bot_user))
+
+    # Обновляем начальные статусы в админке
+    monitor.update_status("Core", "OK")
+    monitor.update_status("GitHub Webhooks", "OK")
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
