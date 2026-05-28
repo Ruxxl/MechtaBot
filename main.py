@@ -29,7 +29,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 # Твои конкретные ID
 TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
-TRANSLATION_THREAD_ID = 42896  # Укажи здесь ID темы для перевода
+TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
 
 # Jira Config
 JIRA_CONFIG = {
