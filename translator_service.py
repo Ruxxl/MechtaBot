@@ -34,7 +34,7 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
         # Запускаем генерацию в отдельном потоке, чтобы не блокировать event loop
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             contents=prompt
         )
         
