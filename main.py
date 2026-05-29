@@ -31,7 +31,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
 # Jira Config
 JIRA_CONFIG = {
@@ -118,7 +118,7 @@ register_jira_handlers(
 # Регистрация переводчика для конкретной темы
 if TRANSLATION_THREAD_ID:
     logger.info(f"🌐 Регистрация переводчика для темы {TRANSLATION_THREAD_ID}")
-    register_translator_handlers(dp, TRANSLATION_THREAD_ID, GEMINI_API_KEY)
+    register_translator_handlers(dp, TRANSLATION_THREAD_ID, GROQ_API_KEY)
 
 # =======================
 # Обработчики (Handlers)
