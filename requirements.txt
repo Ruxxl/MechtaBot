@@ -7,5 +7,5 @@ beautifulsoup4
 icalendar
 pytesseract
 playwright>=1.37.0
-google-genai
 deep-translator
+groq
