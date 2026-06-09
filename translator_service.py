@@ -8,7 +8,6 @@ from deep_translator import GoogleTranslator
 
 logger = logging.getLogger("bot.translator")
 
-
 _client = None
 
 def get_client(api_key: str) -> AsyncGroq:
@@ -18,9 +17,6 @@ def get_client(api_key: str) -> AsyncGroq:
     return _client
 
 async def translate_ru_to_kk(text: str, api_key: str) -> str:
-
-
-
     try:
         client = get_client(api_key)
 
@@ -41,7 +37,6 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
         result = response.choices[0].message.content.strip()
         return result
 
-
     except Exception as e:
         error_msg = str(e)
 
@@ -61,9 +56,6 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
         return ""
 
 def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api_key: str):
-
-
-
     @dp.message(F.message_thread_id == translation_thread_id, F.text & ~F.text.startswith("/"))
     async def handle_translation(message: Message):
         monitor.update_status("Translator Service", "OK")
@@ -73,8 +65,8 @@ def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api
 
         translated_text = await translate_ru_to_kk(text, api_key)
 
-
         if translated_text and translated_text.lower() != text.lower():
             try:
                 await message.reply(translated_text)
             except Exception as e:
+                logger.error(f"Не удалось отправить перевод: {e}")
