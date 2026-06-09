@@ -2,60 +2,31 @@ import asyncio
 import logging
 from aiogram import Dispatcher, F
 from aiogram.types import Message
-from groq import AsyncGroq
 from admin_handler import monitor
-from deep_translator import GoogleTranslator
+from deep_translator import YandexTranslator
 
 logger = logging.getLogger("bot.translator")
 
-_client = None
 
-def get_client(api_key: str) -> AsyncGroq:
-    global _client
-    if _client is None:
-        _client = AsyncGroq(api_key=api_key)
-    return _client
-
-async def translate_ru_to_kk(text: str, api_key: str) -> str:
+async def translate_ru_to_kk(text: str) -> str:
+    """
+    Переводит текст с русского на казахский через Yandex (бесплатно, без ключа).
+    """
     try:
-        client = get_client(api_key)
-
-        prompt = (
-            "Ты — профессиональный переводчик. Переведи следующий текст с русского на казахский язык. "
-            "Соблюдай официальный стиль, если это уместно. Ответ должен содержать ТОЛЬКО текст перевода, "
-            "без кавычек и лишних пояснений.\n\n"
-            f"Текст: {text}"
+        translated = await asyncio.to_thread(
+            lambda: YandexTranslator(source='ru', target='kk').translate(text)
         )
-
-        response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
-            temperature=0.3
-        )
-
-        result = response.choices[0].message.content.strip()
-        return result
-
+        return translated or ""
     except Exception as e:
-        error_msg = str(e)
-
-        # Если исчерпана квота — используем запасной переводчик
-        if "429" in error_msg or "rate_limit" in error_msg.lower():
-            logger.warning("Квота Groq исчерпана, использую запасной переводчик (GoogleTranslator)")
-            try:
-                translated = await asyncio.to_thread(
-                    lambda: GoogleTranslator(source='ru', target='kk').translate(text)
-                )
-                return translated
-            except Exception as fallback_error:
-                logger.error(f"Ошибка запасного переводчика: {fallback_error}")
-                return ""
-
-        logger.error(f"Ошибка Groq при переводе (текст: {text[:20]}...): {e}")
+        logger.error(f"Ошибка YandexTranslator при переводе (текст: {text[:20]}...): {e}")
         return ""
 
-def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api_key: str):
+
+def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api_key: str = None):
+    """
+    Регистрирует хендлер, который слушает только один конкретный thread_id.
+    api_key оставлен для обратной совместимости с main.py, но больше не используется.
+    """
     @dp.message(F.message_thread_id == translation_thread_id, F.text & ~F.text.startswith("/"))
     async def handle_translation(message: Message):
         monitor.update_status("Translator Service", "OK")
@@ -63,7 +34,7 @@ def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api
         if not text:
             return
 
-        translated_text = await translate_ru_to_kk(text, api_key)
+        translated_text = await translate_ru_to_kk(text)
 
         if translated_text and translated_text.lower() != text.lower():
             try:
