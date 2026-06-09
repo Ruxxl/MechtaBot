@@ -1,51 +1,69 @@
 import asyncio
 import logging
-import aiohttp
 from aiogram import Dispatcher, F
 from aiogram.types import Message
+from groq import AsyncGroq
 from admin_handler import monitor
 from deep_translator import GoogleTranslator
 
 logger = logging.getLogger("bot.translator")
 
-MYMEMORY_URL = "https://api.mymemory.translated.net/get"
+
+_client = None
+
+def get_client(api_key: str) -> AsyncGroq:
+    global _client
+    if _client is None:
+        _client = AsyncGroq(api_key=api_key)
+    return _client
+
+async def translate_ru_to_kk(text: str, api_key: str) -> str:
 
 
-async def translate_ru_to_kk(text: str) -> str:
-    """
-    Переводит текст с русского на казахский через MyMemory API (бесплатно, без ключа).
-    Фоллбэк — GoogleTranslator.
-    """
+
     try:
-        params = {
-            "q": text,
-            "langpair": "ru|kk",
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.get(MYMEMORY_URL, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    translated = data.get("responseData", {}).get("translatedText", "")
-                    # MyMemory возвращает ошибку текстом если лимит превышен
-                    if translated and "MYMEMORY WARNING" not in translated:
-                        return translated.strip()
-                    logger.warning(f"MyMemory вернул предупреждение: {translated}")
-    except Exception as e:
-        logger.error(f"Ошибка MyMemory при переводе: {e}")
+        client = get_client(api_key)
 
-    # Фоллбэк на Google
-    logger.info("Использую GoogleTranslator как fallback")
-    try:
-        translated = await asyncio.to_thread(
-            lambda: GoogleTranslator(source='ru', target='kk').translate(text)
+        prompt = (
+            "Ты — профессиональный переводчик. Переведи следующий текст с русского на казахский язык. "
+            "Соблюдай официальный стиль, если это уместно. Ответ должен содержать ТОЛЬКО текст перевода, "
+            "без кавычек и лишних пояснений.\n\n"
+            f"Текст: {text}"
         )
-        return translated or ""
+
+        response = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000,
+            temperature=0.3
+        )
+
+        result = response.choices[0].message.content.strip()
+        return result
+
+
     except Exception as e:
-        logger.error(f"Ошибка GoogleTranslator fallback: {e}")
+        error_msg = str(e)
+
+        # Если исчерпана квота — используем запасной переводчик
+        if "429" in error_msg or "rate_limit" in error_msg.lower():
+            logger.warning("Квота Groq исчерпана, использую запасной переводчик (GoogleTranslator)")
+            try:
+                translated = await asyncio.to_thread(
+                    lambda: GoogleTranslator(source='ru', target='kk').translate(text)
+                )
+                return translated
+            except Exception as fallback_error:
+                logger.error(f"Ошибка запасного переводчика: {fallback_error}")
+                return ""
+
+        logger.error(f"Ошибка Groq при переводе (текст: {text[:20]}...): {e}")
         return ""
 
+def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api_key: str):
 
-def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api_key: str = None):
+
+
     @dp.message(F.message_thread_id == translation_thread_id, F.text & ~F.text.startswith("/"))
     async def handle_translation(message: Message):
         monitor.update_status("Translator Service", "OK")
@@ -53,10 +71,10 @@ def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api
         if not text:
             return
 
-        translated_text = await translate_ru_to_kk(text)
+        translated_text = await translate_ru_to_kk(text, api_key)
+
 
         if translated_text and translated_text.lower() != text.lower():
             try:
                 await message.reply(translated_text)
             except Exception as e:
-                logger.error(f"Не удалось отправить перевод: {e}")
