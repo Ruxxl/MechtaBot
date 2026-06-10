@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # =======================
 ICS_URL = os.getenv(
     "ICS_URL",
-    "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
+    "https://calendar.yandex.kz/export/ics.xml?private_token=953b33256202c3e82985466586f10bf0eea1848a&tz_id=Asia/Almaty"
 )
 
 CHECK_INTERVAL = int(os.getenv("CALENDAR_CHECK_INTERVAL", 30))
