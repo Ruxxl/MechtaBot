@@ -13,7 +13,7 @@ from aiogram.client.default import DefaultBotProperties
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
 from text_handler import process_text_message, THREAD_PREFIXES
-from calendar_service import check_calendar_events
+from calendar_service import check_calendar_events, ICS_URL
 from daily_reminder import handle_jira_release_status, start_reminders
 from release_notifier import jira_release_check
 from jira_fsm import register_jira_handlers, create_jira_issue
@@ -32,6 +32,9 @@ TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+
+PERSONAL_CALENDAR_URL = "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
+PERSONAL_CHAT_ID = 998292747
 
 # Jira Config
 JIRA_CONFIG = {
@@ -283,7 +286,11 @@ async def main():
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
-    asyncio.create_task(check_calendar_events(bot, TARGET_GROUP_ID))
+    # Мониторинг общего календаря группы
+    asyncio.create_task(check_calendar_events(bot, TARGET_GROUP_ID, ICS_URL))
+    # Мониторинг твоего личного календаря
+    asyncio.create_task(check_calendar_events(bot, PERSONAL_CHAT_ID, PERSONAL_CALENDAR_URL))
+
     logger.info("⏰ Запуск ежедневных напоминаний...")
     asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID, TARGET_THREAD_ID))
 

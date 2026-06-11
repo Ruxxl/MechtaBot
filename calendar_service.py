@@ -51,10 +51,6 @@ MENTION_MAP = {
     "vladislav.borovkov@ddream.kz": " @john_folker "
 }
 
-# Множество для предотвращения дублирования уведомлений
-calendar_sent_notifications = set()
-
-
 # =======================
 # UTILS
 # =======================
@@ -64,10 +60,10 @@ def normalize_dt(dt: datetime) -> datetime:
     return dt.astimezone(TZ)
 
 
-async def fetch_calendar() -> Optional[Calendar]:
+async def fetch_calendar(url: str) -> Optional[Calendar]:
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(ICS_URL) as resp:
+            async with session.get(url) as resp:
                 if resp.status == 200:
                     text = await resp.text()
                     return Calendar.from_ical(text)
@@ -112,12 +108,13 @@ def parse_attendees(component) -> str:
 # =======================
 # MAIN LOOP
 # =======================
-async def check_calendar_events(bot, chat_id):
-    logger.info(f"📅 Calendar watcher started for chat_id: {chat_id}")
+async def check_calendar_events(bot, chat_id, url: str):
+    logger.info(f"📅 Calendar watcher started for chat_id: {chat_id}, URL: {url[:40]}...")
+    local_sent_notifications = set()
 
     while True:
         monitor.update_status("Calendar Service", "OK")
-        cal = await fetch_calendar()
+        cal = await fetch_calendar(url)
         now = datetime.now(TZ)
 
         if not cal:
@@ -143,7 +140,7 @@ async def check_calendar_events(bot, chat_id):
                 event_key = (summary, start)
 
                 # Проверяем, наступило ли время уведомления (за 5 минут до начала)
-                if alert_time <= now < start and event_key not in calendar_sent_notifications:
+                if alert_time <= now < start and event_key not in local_sent_notifications:
                     text = (
                         f"📅 <b>Встреча скоро начнётся</b>\n\n"
                         f"📝 <b>{summary}</b>\n"
@@ -172,14 +169,14 @@ async def check_calendar_events(bot, chat_id):
                                 disable_web_page_preview=True
                             )
 
-                        calendar_sent_notifications.add(event_key)
+                        local_sent_notifications.add(event_key)
                         logger.info(f"Sent calendar alert to group: {event_key}")
 
                     except Exception as e:
                         logger.error(f"Send error in calendar_service: {e}")
 
         # Периодическая очистка старых уведомлений (раз в сутки)
-        if len(calendar_sent_notifications) > 100:
-            calendar_sent_notifications.clear()
+        if len(local_sent_notifications) > 100:
+            local_sent_notifications.clear()
 
         await asyncio.sleep(CHECK_INTERVAL)
