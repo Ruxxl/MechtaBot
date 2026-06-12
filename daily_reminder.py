@@ -35,31 +35,21 @@ EVENING_WISHES = [
     "Пусть ваш личный 'Uptime' вечером будет направлен только на радость и отдых! 🍦"
 ]
 
-async def generate_ai_wish(api_key: str, wish_type: str) -> str:
 async def generate_ai_wish(wish_type: str) -> str:
     """Генерирует оригинальное пожелание с помощью Groq AI"""
-    if not api_key:
-        return random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
-
     try:
-        client = AsyncGroq(api_key=api_key)
         prompts = {
             "morning": "Напиши короткое (1-2 предложения) оригинальное и веселое пожелание доброго утра для IT-команды. Используй айтишный сленг (баги, коммиты, кофе, прод). Только текст пожелания, без кавычек.",
             "evening": "Напиши короткое (1-2 предложения) оригинальное пожелание хорошего вечера для программистов. Используй метафоры (очистка кэша, shutdown, релакс). Только текст пожелания, без кавычек."
         }
         
-        response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompts[wish_type]}],
         wish = await ai_service.generate_groq(
             prompt=prompts[wish_type],
             max_tokens=150,
             temperature=0.8
         )
-        wish = response.choices[0].message.content.strip()
         return wish if wish else random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
     except Exception as e:
-        logger.error(f"Ошибка генерации пожелания через Groq: {e}")
         logger.error(f"Ошибка генерации пожелания: {e}")
         return random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
 
