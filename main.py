@@ -9,6 +9,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
  
+
 # Твои импорты
 from hr_topics import HR_TOPICS
 from photo_handler import handle_photo_message
@@ -34,7 +35,6 @@ TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-
 PERSONAL_CALENDAR_URL = "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
 PERSONAL_CHAT_ID = 998292747
 
@@ -278,6 +278,7 @@ async def main():
     bot_user = await bot.get_me()
 
     # Инициализация AI сервисов (Groq / Gemini)
+    # Инициализация AI сервиса (Groq)
     logger.info("⚙️ Инициализация Groq AI сервиса...")
     ai_service.init_groq(GROQ_API_KEY)
 
