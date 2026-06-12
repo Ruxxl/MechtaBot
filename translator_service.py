@@ -2,24 +2,14 @@ import asyncio
 import logging
 from aiogram import Dispatcher, F
 from aiogram.types import Message
-from groq import AsyncGroq
 from admin_handler import monitor
 from deep_translator import GoogleTranslator
+from ai_service import ai_service
 
 logger = logging.getLogger("bot.translator")
 
-_client = None
-
-def get_client(api_key: str) -> AsyncGroq:
-    global _client
-    if _client is None:
-        _client = AsyncGroq(api_key=api_key)
-    return _client
-
-async def translate_ru_to_kk(text: str, api_key: str) -> str:
+async def translate_ru_to_kk(text: str) -> str:
     try:
-        client = get_client(api_key)
-
         prompt = (
             "Переведи на казахский в максимально табиғи и естественном стиле. "
             "Дай самый лучший основной вариант перевода. "
@@ -27,14 +17,11 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
             f"Текст: {text}"
         )
 
-        response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
+        result = await ai_service.generate_groq(
+            prompt=prompt,
             max_tokens=1000,
             temperature=0.3
         )
-
-        result = response.choices[0].message.content.strip()
         return result
 
     except Exception as e:
@@ -55,7 +42,7 @@ async def translate_ru_to_kk(text: str, api_key: str) -> str:
         logger.error(f"Ошибка Groq при переводе (текст: {text[:20]}...): {e}")
         return ""
 
-def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api_key: str):
+def register_translator_handlers(dp: Dispatcher, translation_thread_id: int):
     @dp.message(F.message_thread_id == translation_thread_id, F.text & ~F.text.startswith("/"))
     async def handle_translation(message: Message):
         monitor.update_status("Translator Service", "OK")
@@ -63,7 +50,7 @@ def register_translator_handlers(dp: Dispatcher, translation_thread_id: int, api
         if not text:
             return
 
-        translated_text = await translate_ru_to_kk(text, api_key)
+        translated_text = await translate_ru_to_kk(text)
 
         if translated_text and translated_text.lower() != text.lower():
             try:

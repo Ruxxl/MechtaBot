@@ -6,7 +6,7 @@ from dateutil import tz
 from urllib.parse import quote
 import aiohttp
 import ssl
-from groq import AsyncGroq
+from ai_service import ai_service
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from admin_handler import monitor
 from aiogram.enums import ParseMode 
@@ -36,6 +36,7 @@ EVENING_WISHES = [
 ]
 
 async def generate_ai_wish(api_key: str, wish_type: str) -> str:
+async def generate_ai_wish(wish_type: str) -> str:
     """Генерирует оригинальное пожелание с помощью Groq AI"""
     if not api_key:
         return random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
@@ -50,6 +51,8 @@ async def generate_ai_wish(api_key: str, wish_type: str) -> str:
         response = await client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompts[wish_type]}],
+        wish = await ai_service.generate_groq(
+            prompt=prompts[wish_type],
             max_tokens=150,
             temperature=0.8
         )
@@ -57,6 +60,7 @@ async def generate_ai_wish(api_key: str, wish_type: str) -> str:
         return wish if wish else random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
     except Exception as e:
         logger.error(f"Ошибка генерации пожелания через Groq: {e}")
+        logger.error(f"Ошибка генерации пожелания: {e}")
         return random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
 
 
@@ -128,7 +132,7 @@ async def handle_jira_release_status(callback: CallbackQuery,
 # =============================
 # Утреннее уведомление
 # =============================
-async def daily_reminder(bot, chat_id, thread_id=None, api_key=None):
+async def daily_reminder(bot, chat_id, thread_id=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -145,7 +149,7 @@ async def daily_reminder(bot, chat_id, thread_id=None, api_key=None):
             logger.info("⏭ Утреннее уведомление пропущено (выходной)")
             continue
 
-        ai_wish = await generate_ai_wish(api_key, "morning")
+        ai_wish = await generate_ai_wish("morning")
 
         text = (
             "☀️ Доброе утро, коллеги!\n\n"
@@ -171,7 +175,7 @@ async def daily_reminder(bot, chat_id, thread_id=None, api_key=None):
 # =============================
 # Вечернее уведомление
 # =============================
-async def evening_reminder(bot, chat_id, thread_id=None, api_key=None):
+async def evening_reminder(bot, chat_id, thread_id=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -187,7 +191,7 @@ async def evening_reminder(bot, chat_id, thread_id=None, api_key=None):
             logger.info("⏭ Вечернее уведомление пропущено (выходной)")
             continue
 
-        ai_wish = await generate_ai_wish(api_key, "evening")
+        ai_wish = await generate_ai_wish("evening")
 
         text = (
             "🌇 Добрый вечер, коллеги!\n\n"
@@ -213,6 +217,6 @@ async def evening_reminder(bot, chat_id, thread_id=None, api_key=None):
 # =============================
 # Запуск двух напоминаний
 # =============================
-async def start_reminders(bot, chat_id, thread_id=None, api_key=None):
-    asyncio.create_task(daily_reminder(bot, chat_id, thread_id, api_key))
-    asyncio.create_task(evening_reminder(bot, chat_id, thread_id, api_key))
+async def start_reminders(bot, chat_id, thread_id=None):
+    asyncio.create_task(daily_reminder(bot, chat_id, thread_id))
+    asyncio.create_task(evening_reminder(bot, chat_id, thread_id))
