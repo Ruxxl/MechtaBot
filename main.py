@@ -21,6 +21,7 @@ from webhook_handler import WebhookHandler
 from translator_service import register_translator_handlers
 from admin_handler import AdminHandler, monitor
 from ai_service import ai_service
+from code_review_handler import run_code_review_monitor
 
 # =======================
 # Настройка окружения
@@ -277,6 +278,12 @@ async def main():
 
     bot_user = await bot.get_me()
 
+    # Инициализация AI сервисов (Groq / Gemini)
+    logger.info("⚙️ Инициализация Groq AI сервиса...")
+    ai_service.init_groq(GROQ_API_KEY)
+    logger.info("⚙️ Инициализация Gemini AI сервиса...")
+    ai_service.init_gemini(GEMINI_API_KEY)
+
     # Запуск Health Check сервера
     logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...")
     asyncio.create_task(start_web_server(webhook_handler, bot_user))
@@ -313,6 +320,18 @@ async def main():
         logger, 
         100, 
         thread_id=TARGET_THREAD_ID
+    ))
+
+    # 3. Мониторинг Code Review
+    logger.info("🔍 Запуск мониторинга Code Review...")
+    asyncio.create_task(run_code_review_monitor(
+        bot, 
+        TARGET_GROUP_ID, 
+        TARGET_THREAD_ID, 
+        JIRA_CONFIG['email'], 
+        JIRA_CONFIG['token'], 
+        JIRA_CONFIG['url'], 
+        JIRA_CONFIG['project']
     ))
 
     # 4. Очистка вебхуков
