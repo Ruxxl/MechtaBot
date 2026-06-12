@@ -20,6 +20,7 @@ from jira_fsm import register_jira_handlers, create_jira_issue
 from webhook_handler import WebhookHandler
 from translator_service import register_translator_handlers
 from admin_handler import AdminHandler, monitor
+from ai_service import ai_service
 
 # =======================
 # Настройка окружения
@@ -32,6 +33,7 @@ TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
 PERSONAL_CALENDAR_URL = "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
 PERSONAL_CHAT_ID = 998292747
@@ -118,10 +120,14 @@ register_jira_handlers(
     target_thread_id=TARGET_THREAD_ID
 )
 
+# Инициализация AI сервисов
+ai_service.init_groq(GROQ_API_KEY)
+ai_service.init_gemini(GEMINI_API_KEY)
+
 # Регистрация переводчика для конкретной темы
 if TRANSLATION_THREAD_ID:
     logger.info(f"🌐 Регистрация переводчика для темы {TRANSLATION_THREAD_ID}")
-    register_translator_handlers(dp, TRANSLATION_THREAD_ID, GROQ_API_KEY)
+    register_translator_handlers(dp, TRANSLATION_THREAD_ID)
 
 # =======================
 # Обработчики (Handlers)
@@ -292,7 +298,7 @@ async def main():
     asyncio.create_task(check_calendar_events(bot, PERSONAL_CHAT_ID, PERSONAL_CALENDAR_URL))
 
     logger.info("⏰ Запуск ежедневных напоминаний...")
-    asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID, TARGET_THREAD_ID, GROQ_API_KEY))
+    asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID, TARGET_THREAD_ID))
 
     # 2. Мониторинг релизов Jira
     logger.info("📦 Запуск фонового мониторинга релизов Jira...")
