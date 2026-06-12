@@ -279,6 +279,7 @@ async def main():
 
     # Инициализация AI сервисов (Groq / Gemini)
     # Инициализация AI сервиса (Groq)
+    # Инициализация AI сервиса
     logger.info("⚙️ Инициализация Groq AI сервиса...")
     ai_service.init_groq(GROQ_API_KEY)
 
