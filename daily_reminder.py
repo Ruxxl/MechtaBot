@@ -101,7 +101,8 @@ async def handle_jira_release_status(callback: CallbackQuery,
     version_id = target_release.get("id")
 
     jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id} ORDER BY priority DESC'
-    search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status&maxResults=200"
+    # Добавляем 'subtasks' в запрашиваемые поля для подсчета
+    search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status,subtasks&maxResults=200"
 
     async with aiohttp.ClientSession(auth=auth) as session:
         async with session.get(search_url, ssl=SSL_CONTEXT) as resp:
@@ -110,11 +111,15 @@ async def handle_jira_release_status(callback: CallbackQuery,
                 return
             data = await resp.json()
             issues = data.get("issues", [])
+            
+            # Подсчитываем общее количество подзадач (багов)
+            total_subtasks = sum(len(issue["fields"].get("subtasks", [])) for issue in issues)
 
             if not issues:
                 text = f"✅ Задачи для релиза <b>{release_name}</b> не найдены."
             else:
-                lines = [f"📊 <b>Статус задач будущего релиза {release_name}:</b>\n"]
+                lines = [f"📊 <b>Статус задач будущего релиза {release_name}:</b>\n",
+                         f"🐞 Найдено багов (подзадач): <b>{total_subtasks}</b>\n"]
                 for issue in issues:
                     key = issue.get("key")
                     summary = issue["fields"].get("summary", "Без названия")
