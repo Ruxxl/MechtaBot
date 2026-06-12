@@ -34,7 +34,6 @@ TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
 PERSONAL_CALENDAR_URL = "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
 PERSONAL_CHAT_ID = 998292747
@@ -281,8 +280,6 @@ async def main():
     # Инициализация AI сервисов (Groq / Gemini)
     logger.info("⚙️ Инициализация Groq AI сервиса...")
     ai_service.init_groq(GROQ_API_KEY)
-    logger.info("⚙️ Инициализация Gemini AI сервиса...")
-    ai_service.init_gemini(GEMINI_API_KEY)
 
     # Запуск Health Check сервера
     logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...")
