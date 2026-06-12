@@ -292,7 +292,7 @@ async def main():
     asyncio.create_task(check_calendar_events(bot, PERSONAL_CHAT_ID, PERSONAL_CALENDAR_URL))
 
     logger.info("⏰ Запуск ежедневных напоминаний...")
-    asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID, TARGET_THREAD_ID))
+    asyncio.create_task(start_reminders(bot, TARGET_GROUP_ID, TARGET_THREAD_ID, GROQ_API_KEY))
 
     # 2. Мониторинг релизов Jira
     logger.info("📦 Запуск фонового мониторинга релизов Jira...")
