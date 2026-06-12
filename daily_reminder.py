@@ -1,10 +1,12 @@
 import asyncio
+import random
 import logging
 from datetime import datetime, timedelta
 from dateutil import tz
 from urllib.parse import quote
 import aiohttp
 import ssl
+from groq import AsyncGroq
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from admin_handler import monitor
 from aiogram.enums import ParseMode 
@@ -16,6 +18,47 @@ RELEASE_NAME = "Релиз 3.18"
 SSL_CONTEXT = ssl.create_default_context()
 SSL_CONTEXT.check_hostname = False
 SSL_CONTEXT.verify_mode = ssl.CERT_NONE
+
+MORNING_WISHES = [
+    "Пусть сегодня код пишется сам, а баги боятся одного вашего взгляда! ✨",
+    "Заряжаем ваши мониторы на успех и отсутствие конфликтов при мердже! 🚀",
+    "Желаем, чтобы сегодня всё работало с первого раза, а алгоритмы были изящными! 💎",
+    "Пусть каждое ваше решение сегодня будет элегантным, а кофе — по-настоящему вдохновляющим! ☕️",
+    "Желаем продуктивности уровня 'Zero Bugs' и настроения 'Production Ready'! ⚡️"
+]
+
+EVENING_WISHES = [
+    "Время очистить кэш рабочих мыслей и загрузить режим полного релакса! 🔋",
+    "Пусть вечер пройдет без алертов и в максимально ламповой атмосфере! 🌙",
+    "Вы сегодня отлично потрудились, пора устроить себе заслуженный 'Shutdown' от задач! 🥂",
+    "Желаем уютного вечера: пусть ваш внутренний аккумулятор зарядится до 100%! 🧘‍♂️",
+    "Пусть ваш личный 'Uptime' вечером будет направлен только на радость и отдых! 🍦"
+]
+
+async def generate_ai_wish(api_key: str, wish_type: str) -> str:
+    """Генерирует оригинальное пожелание с помощью Groq AI"""
+    if not api_key:
+        return random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
+
+    try:
+        client = AsyncGroq(api_key=api_key)
+        prompts = {
+            "morning": "Напиши короткое (1-2 предложения) оригинальное и веселое пожелание доброго утра для IT-команды. Используй айтишный сленг (баги, коммиты, кофе, прод). Только текст пожелания, без кавычек.",
+            "evening": "Напиши короткое (1-2 предложения) оригинальное пожелание хорошего вечера для программистов. Используй метафоры (очистка кэша, shutdown, релакс). Только текст пожелания, без кавычек."
+        }
+        
+        response = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompts[wish_type]}],
+            max_tokens=150,
+            temperature=0.8
+        )
+        wish = response.choices[0].message.content.strip()
+        return wish if wish else random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
+    except Exception as e:
+        logger.error(f"Ошибка генерации пожелания через Groq: {e}")
+        return random.choice(MORNING_WISHES if wish_type == "morning" else EVENING_WISHES)
+
 
 # =============================
 # Кнопки Clockster + Jira
@@ -85,7 +128,7 @@ async def handle_jira_release_status(callback: CallbackQuery,
 # =============================
 # Утреннее уведомление
 # =============================
-async def daily_reminder(bot, chat_id, thread_id=None):
+async def daily_reminder(bot, chat_id, thread_id=None, api_key=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -102,10 +145,12 @@ async def daily_reminder(bot, chat_id, thread_id=None):
             logger.info("⏭ Утреннее уведомление пропущено (выходной)")
             continue
 
+        ai_wish = await generate_ai_wish(api_key, "morning")
+
         text = (
             "☀️ Доброе утро, коллеги!\n\n"
             "Не забудьте отметиться в <b>Clockster</b>.\n"
-            "Желаем классного дня и продуктивной работы! 💪"
+            f"{ai_wish}"
         )
 
         try:
@@ -126,7 +171,7 @@ async def daily_reminder(bot, chat_id, thread_id=None):
 # =============================
 # Вечернее уведомление
 # =============================
-async def evening_reminder(bot, chat_id, thread_id=None):
+async def evening_reminder(bot, chat_id, thread_id=None, api_key=None):
     timezone = tz.gettz("Asia/Almaty")
 
     while True:
@@ -142,10 +187,12 @@ async def evening_reminder(bot, chat_id, thread_id=None):
             logger.info("⏭ Вечернее уведомление пропущено (выходной)")
             continue
 
+        ai_wish = await generate_ai_wish(api_key, "evening")
+
         text = (
             "🌇 Добрый вечер, коллеги!\n\n"
             "Не забудьте отметиться в <b>Clockster</b>.\n"
-            "Хорошего вечера и приятного отдыха! 😎"
+            f"{ai_wish}"
         )
 
         try:
@@ -166,6 +213,6 @@ async def evening_reminder(bot, chat_id, thread_id=None):
 # =============================
 # Запуск двух напоминаний
 # =============================
-async def start_reminders(bot, chat_id, thread_id=None):
-    asyncio.create_task(daily_reminder(bot, chat_id, thread_id))
-    asyncio.create_task(evening_reminder(bot, chat_id, thread_id))
+async def start_reminders(bot, chat_id, thread_id=None, api_key=None):
+    asyncio.create_task(daily_reminder(bot, chat_id, thread_id, api_key))
+    asyncio.create_task(evening_reminder(bot, chat_id, thread_id, api_key))
