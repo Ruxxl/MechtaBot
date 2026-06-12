@@ -1,6 +1,7 @@
 import asyncio
 import random
 import logging
+import re
 from datetime import datetime, timedelta
 from dateutil import tz
 from urllib.parse import quote
@@ -13,8 +14,6 @@ from aiogram.enums import ParseMode
 
 logger = logging.getLogger(__name__)
 
-# Название конкретного релиза
-RELEASE_NAME = "Релиз 3.18"
 SSL_CONTEXT = ssl.create_default_context()
 SSL_CONTEXT.check_hostname = False
 SSL_CONTEXT.verify_mode = ssl.CERT_NONE
@@ -86,12 +85,21 @@ async def handle_jira_release_status(callback: CallbackQuery,
                 return
             versions = await resp.json()
 
-    release = next((v for v in versions if v["name"] == RELEASE_NAME), None)
-    if not release:
-        await callback.message.answer(f"❌ Релиз '{RELEASE_NAME}' не найден")
+    # Фильтруем только невыпущенные версии
+    unreleased = [v for v in versions if not v.get("released", False)]
+    if not unreleased:
+        await callback.message.answer("✅ Все запланированные релизы уже выпущены!")
         return
 
-    version_id = release.get("id")
+    # Находим версию с наименьшим номером (следующую в очереди)
+    # Функция извлекает все числа из строки: "Хотфикс 3.22.1" -> [3, 22, 1]
+    def parse_version(v_name):
+        return [int(s) for s in re.findall(r'\d+', v_name)]
+
+    target_release = min(unreleased, key=lambda v: parse_version(v["name"]) or [0])
+    release_name = target_release["name"]
+    version_id = target_release.get("id")
+
     jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id} ORDER BY priority DESC'
     search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status&maxResults=200"
 
@@ -104,9 +112,9 @@ async def handle_jira_release_status(callback: CallbackQuery,
             issues = data.get("issues", [])
 
             if not issues:
-                text = f"✅ Задачи для релиза <b>{RELEASE_NAME}</b> не найдены."
+                text = f"✅ Задачи для релиза <b>{release_name}</b> не найдены."
             else:
-                lines = [f"📊 <b>Статус задач будущего релиза {RELEASE_NAME}:</b>\n"]
+                lines = [f"📊 <b>Статус задач будущего релиза {release_name}:</b>\n"]
                 for issue in issues:
                     key = issue.get("key")
                     summary = issue["fields"].get("summary", "Без названия")
