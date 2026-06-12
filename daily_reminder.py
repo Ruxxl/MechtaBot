@@ -119,7 +119,7 @@ async def handle_jira_release_status(callback: CallbackQuery,
                 text = f"✅ Задачи для релиза <b>{release_name}</b> не найдены."
             else:
                 lines = [f"📊 <b>Статус задач будущего релиза {release_name}:</b>\n",
-                         f"🐞 Найдено багов (подзадач): <b>{total_subtasks}</b>\n"]
+                         f"🐞 Найдено багов: <b>{total_subtasks}</b>\n"]
                 for issue in issues:
                     key = issue.get("key")
                     summary = issue["fields"].get("summary", "Без названия")
