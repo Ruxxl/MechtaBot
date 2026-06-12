@@ -122,7 +122,6 @@ register_jira_handlers(
 
 # Инициализация AI сервисов
 ai_service.init_groq(GROQ_API_KEY)
-ai_service.init_gemini(GEMINI_API_KEY)
 
 # Регистрация переводчика для конкретной темы
 if TRANSLATION_THREAD_ID:
