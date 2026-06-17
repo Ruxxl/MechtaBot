@@ -35,6 +35,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 # Твои конкретные ID
 TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
+VISION_THREAD_ID = 1886
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 PERSONAL_CALENDAR_URL = "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
@@ -228,7 +229,7 @@ async def handle_photo(message: types.Message):
     caption = message.caption or ""
     caption_lower = caption.lower()
  
-    # Есть Jira-тег → создаём задачу (старое поведение)
+    # Есть Jira-тег → создаём задачу (старое поведение, работает во всех топиках)
     if any(tag in caption_lower for tag in TRIGGER_TAGS):
         async def jira_wrapper(text, author, file_bytes, filename, thread_prefix):
             key = await create_jira_issue(
@@ -244,8 +245,9 @@ async def handle_photo(message: types.Message):
         )
         return
  
-    # Нет тега → анализируем скриншот через Groq Vision
-    await handle_vision_message(bot=bot, message=message)
+    # Нет тега → анализ скриншота ТОЛЬКО в топике VISION_THREAD_ID (1886)
+    if message.message_thread_id == VISION_THREAD_ID:
+        await handle_vision_message(bot=bot, message=message)
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message):
