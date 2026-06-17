@@ -188,27 +188,32 @@ async def handle_stand_info_callback(callback: CallbackQuery):
     if "EXTERNAL" in stand_name_display: stand_name_display = "INTEGRATIONS"
     if "SSR PROD" in stand_name_display: stand_name_display = "PRODUCTION"
     
-    # 1. Пробуем получить свежие данные напрямую из API
-    info = await webhook_handler.fetch_latest_build_from_api(stand_key)
+    # 1. Пробуем получить свежие данные напрямую из API (возвращает список)
+    builds = await webhook_handler.fetch_latest_build_from_api(stand_key)
     
     # 2. Если API недоступно, берем из локального кэша (от вебхуков)
-    if not info:
-        info = webhook_handler.latest_builds.get(stand_key.upper())
+    if not builds:
+        builds = webhook_handler.latest_builds.get(stand_key.upper())
     
-    if not info:
+    if not builds:
         text = f"📍 <b>Стенд:</b> {stand_name_display}\n\n📭 Данных о последних сборках пока нет."
+        latest = None
     else:
-        text = (
-            f"📍 <b>Стенд:</b> {stand_name_display}\n"
-            f"📝 <b>Коммит:</b> <i>{info['commit']}</i>\n"
-            f"👤 <b>Инициатор:</b> @{info['actor']}\n"
-            f"📅 <b>Дата:</b> {info['date']}"
-        )
+        latest = builds[0]
+        lines = [f"📍 <b>Стенд:</b> {stand_name_display}\n"]
+        for i, build in enumerate(builds):
+            prefix = "🟢 <b>Последний</b>" if i == 0 else f"🔹 #{i + 1}"
+            lines.append(
+                f"{prefix}\n"
+                f"   📝 <i>{build['commit']}</i>\n"
+                f"   👤 @{build['actor']}   📅 {build['date']}"
+            )
+        text = "\n\n".join(lines)
     
     # Формируем кнопки
-    kb_list = [[InlineKeyboardButton(text="🌐 Открыть стенд", url=url)]]
-    if info and info.get("url"):
-        kb_list.append([InlineKeyboardButton(text="🛠 Посмотреть билд в GitHub", url=info["url"])])
+    kb_list = [[InlineKeyboardButton(text="🌐 Открыть стенд", url=url)]] if url else []
+    if latest and latest.get("url"):
+        kb_list.append([InlineKeyboardButton(text="🛠 Последний билд в GitHub", url=latest["url"])])
     kb_list.append([InlineKeyboardButton(text="⬅️ Назад к списку", callback_data="back_to_stands")])
     
     kb = InlineKeyboardMarkup(inline_keyboard=kb_list)
