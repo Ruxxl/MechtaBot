@@ -12,8 +12,9 @@ class WebhookHandler:
         self.target_thread_id = target_thread_id
         self.github_token = github_token
         self.repo_full_name = repo_full_name
-        # Хранилище последних успешных сборок
-        self.latest_builds = {}
+        # Хранилище последних успешных сборок (до 5 на каждый стенд)
+        self.latest_builds: dict[str, list] = {}
+        self.MAX_BUILDS_PER_STAND = 5
         # Маппинг имен workflow из .yml файлов на URL стендов
         self.stand_urls = {
             "deploy 1c": "http://1c.im.mdev.kz/",
@@ -48,20 +49,22 @@ class WebhookHandler:
 
                 # 2. Берем последний успешный запуск (conclusion=success)
                 runs_url = f"https://api.github.com/repos/{self.repo_full_name}/actions/workflows/{workflow['id']}/runs"
-                async with session.get(runs_url, params={"status": "success", "per_page": 1}) as resp:
+                async with session.get(runs_url, params={"status": "success", "per_page": 5}) as resp:
                     if resp.status != 200: return None
                     runs_data = await resp.json()
                     runs = runs_data.get("workflow_runs", [])
                     if not runs: return None
                     
-                    run = runs[0]
-                    dt = datetime.fromisoformat(run.get("updated_at", "").replace("Z", ""))
-                    return {
-                        "commit": run.get("head_commit", {}).get("message", "").split("\n")[0],
-                        "actor": run.get("actor", {}).get("login", "Unknown"),
-                        "date": dt.strftime("%d.%m.%Y %H:%M"),
-                        "url": run.get("html_url")
-                    }
+                    result = []
+                    for run in runs:
+                        dt = datetime.fromisoformat(run.get("updated_at", "").replace("Z", ""))
+                        result.append({
+                            "commit": run.get("head_commit", {}).get("message", "").split("\n")[0],
+                            "actor": run.get("actor", {}).get("login", "Unknown"),
+                            "date": dt.strftime("%d.%m.%Y %H:%M"),
+                            "url": run.get("html_url")
+                        })
+                    return result
         except Exception as e:
             logger.error(f"Ошибка GitHub API: {e}")
             return None
@@ -110,11 +113,15 @@ class WebhookHandler:
                 
                 # 5. Обновляем кэш стендов (только при успехе)
                 if conclusion == "success":
-                    self.latest_builds[stand_info] = {
+                    build_entry = {
                         "commit": commit_message,
                         "actor": actor,
-                        "date": datetime.now().strftime("%d.%m.%Y %H:%M")
+                        "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                        "url": html_url
                     }
+                    builds = self.latest_builds.setdefault(stand_info, [])
+                    builds.insert(0, build_entry)
+                    self.latest_builds[stand_info] = builds[:self.MAX_BUILDS_PER_STAND]
 
                 # Подготовка текста уведомления
                 emoji = "🚀" if conclusion == "success" else "❌" if conclusion == "failure" else "⚠️"
