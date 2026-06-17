@@ -23,6 +23,8 @@ from translator_service import register_translator_handlers
 from admin_handler import AdminHandler, monitor
 from ai_service import ai_service
 from code_review_handler import run_code_review_monitor
+from vision_handler import handle_vision_message
+
 
 # =======================
 # Настройка окружения
@@ -223,19 +225,27 @@ async def handle_stand_info_callback(callback: CallbackQuery):
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
-    # Обертка для соответствия интерфейсу
-    async def jira_wrapper(text, author, file_bytes, filename, thread_prefix):
-        key = await create_jira_issue(
-            bot=bot, jira_config=JIRA_CONFIG, 
-            title=text[:50], description=text, author=author,
-            files=[message.photo[-1].file_id], thread_prefix=thread_prefix
+    caption = message.caption or ""
+    caption_lower = caption.lower()
+ 
+    # Есть Jira-тег → создаём задачу (старое поведение)
+    if any(tag in caption_lower for tag in TRIGGER_TAGS):
+        async def jira_wrapper(text, author, file_bytes, filename, thread_prefix):
+            key = await create_jira_issue(
+                bot=bot, jira_config=JIRA_CONFIG,
+                title=text[:50], description=text, author=author,
+                files=[message.photo[-1].file_id], thread_prefix=thread_prefix
+            )
+            return bool(key), key
+ 
+        await handle_photo_message(
+            bot=bot, message=message, trigger_tags=TRIGGER_TAGS,
+            create_jira_ticket=jira_wrapper, jira_url=JIRA_URL
         )
-        return bool(key), key
-
-    await handle_photo_message(
-        bot=bot, message=message, trigger_tags=TRIGGER_TAGS, 
-        create_jira_ticket=jira_wrapper, jira_url=JIRA_URL
-    )
+        return
+ 
+    # Нет тега → анализируем скриншот через Groq Vision
+    await handle_vision_message(bot=bot, message=message)
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message):
