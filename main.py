@@ -24,6 +24,7 @@ from admin_handler import AdminHandler, monitor
 from ai_service import ai_service
 from code_review_handler import run_code_review_monitor
 from vision_handler import handle_vision_message
+from monthly_report import check_monthly_report
 
 
 # =======================
@@ -311,6 +312,7 @@ async def main():
     monitor.update_status("Jira Release Monitor", "OK")
     monitor.update_status("Translator Service", "OK")
     monitor.update_status("Jira FSM", "OK")
+    monitor.update_status("Monthly Report", "OK")
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
@@ -347,6 +349,20 @@ async def main():
         JIRA_CONFIG['token'], 
         JIRA_CONFIG['url'], 
         JIRA_CONFIG['project']
+    ))
+
+    # 3.1 Ежемесячный отчет по релизам/задачам/багам (1-30 число, отправка 30-го)
+    logger.info("📊 Запуск мониторинга ежемесячного отчета...")
+    asyncio.create_task(run_background_task(
+        check_monthly_report,
+        bot,
+        TARGET_GROUP_ID,
+        TARGET_THREAD_ID,
+        JIRA_CONFIG['email'],
+        JIRA_CONFIG['token'],
+        JIRA_CONFIG['project'],
+        JIRA_CONFIG['url'],
+        interval=3600  # проверяем раз в час, отправит отчет только в отчетный день
     ))
 
     # 4. Очистка вебхуков
