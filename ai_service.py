@@ -27,7 +27,7 @@ class AIService:
         )
         return response.choices[0].message.content.strip()
 
-    async def analyze_image_groq(self, image_b64: str, caption: str = "", max_tokens: int = 1024):
+    async def analyze_image_groq(self, image_b64: str, caption: str = "", max_tokens: int = 300):
         """Анализирует изображение через Groq Vision (llama-4-scout)."""
         if not self.groq_client:
             raise ValueError("Groq client not initialized")
@@ -39,7 +39,7 @@ class AIService:
             },
             {
                 "type": "text",
-                "text": caption if caption else "Проанализируй этот скриншот. Если есть ошибки — объясни причину и предложи решение.",
+                "text": caption if caption else "Что за ошибка на скриншоте?",
             },
         ]
 
@@ -49,11 +49,13 @@ class AIService:
                 {
                     "role": "system",
                     "content": (
-                        "Ты — помощник для IT-команды. Анализируешь скриншоты.\n"
-                        "Если видишь ошибку (exception, stack trace, HTTP error, баг UI) — "
-                        "объясни причину и дай конкретные шаги для исправления.\n"
-                        "Если это просто интерфейс или код — кратко опиши что видишь и предложи помощь.\n"
-                        "Отвечай на русском языке. Без длинных вступлений — сразу к делу."
+                        "Ты анализируешь скриншоты с ошибками (DevTools, консоль, сеть, UI).\n"
+                        "Правила:\n"
+                        "— Если видишь ошибку (HTTP 4xx/5xx, JS exception, CORS, stack trace, красный текст) — "
+                        "1-2 предложения: что это и почему. Потом 1-2 строки: как починить.\n"
+                        "— Если ошибок нет — одна строка: Ошибок не обнаружено.\n"
+                        "— Никаких вступлений и пересказов. Только суть.\n"
+                        "Отвечай на русском."
                     ),
                 },
                 {"role": "user", "content": user_content},
