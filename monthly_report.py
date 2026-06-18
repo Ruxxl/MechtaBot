@@ -1,8 +1,10 @@
 import calendar
 import logging
+import os
 from datetime import datetime, timedelta
 
 import aiohttp
+from aiogram import types
 from dateutil import tz
 
 from admin_handler import monitor
@@ -10,6 +12,8 @@ from admin_handler import monitor
 logger = logging.getLogger("bot.monthly_report")
 
 TZ = tz.gettz("Asia/Almaty")
+
+REPORT_PHOTO_PATH = "monthryreport.jpg"
 
 MONTHS_RU = {
     1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель",
@@ -199,13 +203,24 @@ async def check_monthly_report(
     )
 
     try:
-        await bot.send_message(
-            chat_id=target_group_id,
-            message_thread_id=target_thread_id,
-            text=text,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
+        if os.path.exists(REPORT_PHOTO_PATH):
+            photo = types.FSInputFile(REPORT_PHOTO_PATH)
+            await bot.send_photo(
+                chat_id=target_group_id,
+                message_thread_id=target_thread_id,
+                photo=photo,
+                caption=text,
+                parse_mode="HTML",
+            )
+        else:
+            logger.warning(f"Файл {REPORT_PHOTO_PATH} не найден — отправляю отчет без картинки")
+            await bot.send_message(
+                chat_id=target_group_id,
+                message_thread_id=target_thread_id,
+                text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
         logger.info(f"✅ Ежемесячный отчет за {month_key} отправлен")
     except Exception as e:
         logger.error(f"Ошибка отправки ежемесячного отчета: {e}")
