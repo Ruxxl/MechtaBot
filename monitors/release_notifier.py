@@ -2,7 +2,7 @@ import os
 import aiohttp
 from aiogram import types
 from aiogram.enums import ParseMode
-from admin_handler import monitor
+from web.admin_handler import monitor
 
 # Храним состояние между запусками функции
 not_released_versions = set()
@@ -85,8 +85,8 @@ async def jira_release_check(
 
                     # 5️⃣ Отправка строго в TARGET_GROUP_ID и TARGET_THREAD_ID
                     try:
-                        if os.path.exists("release.jpg"):
-                            photo = types.FSInputFile("release.jpg")
+                        if os.path.exists("assets/release.jpg"):
+                            photo = types.FSInputFile("assets/release.jpg")
                             await bot.send_photo(
                                 chat_id=target_group_id,
                                 photo=photo,

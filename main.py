@@ -8,23 +8,23 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
- 
+
 
 # Твои импорты
-from hr_topics import HR_TOPICS
-from photo_handler import handle_photo_message
-from text_handler import process_text_message, THREAD_PREFIXES
-from calendar_service import check_calendar_events, ICS_URL
-from daily_reminder import handle_jira_release_status, start_reminders
-from release_notifier import jira_release_check
-from jira_fsm import register_jira_handlers, create_jira_issue
-from webhook_handler import WebhookHandler
-from translator_service import register_translator_handlers
-from admin_handler import AdminHandler, monitor
-from ai_service import ai_service
-from code_review_handler import run_code_review_monitor
-from vision_handler import handle_vision_message
-from monthly_report import check_monthly_report
+from data.hr_topics import HR_TOPICS
+from handlers.photo_handler import handle_photo_message
+from handlers.text_handler import process_text_message, THREAD_PREFIXES
+from services.calendar_service import check_calendar_events, ICS_URL
+from handlers.daily_reminder import handle_jira_release_status, start_reminders
+from monitors.release_notifier import jira_release_check
+from handlers.jira_fsm import register_jira_handlers, create_jira_issue
+from web.webhook_handler import WebhookHandler
+from services.translator_service import register_translator_handlers
+from web.admin_handler import AdminHandler, monitor
+from services.ai_service import ai_service
+from monitors.code_review_handler import run_code_review_monitor
+from handlers.vision_handler import handle_vision_message
+from monitors.monthly_report import check_monthly_report
 
 
 # =======================

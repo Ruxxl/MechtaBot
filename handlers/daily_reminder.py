@@ -7,9 +7,9 @@ from dateutil import tz
 from urllib.parse import quote
 import aiohttp
 import ssl
-from ai_service import ai_service
+from services.ai_service import ai_service
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from admin_handler import monitor
+from web.admin_handler import monitor
 from aiogram.enums import ParseMode 
 
 logger = logging.getLogger(__name__)

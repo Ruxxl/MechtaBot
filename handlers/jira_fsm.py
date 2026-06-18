@@ -9,7 +9,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
-from admin_handler import monitor
+from web.admin_handler import monitor
 logger = logging.getLogger("bot_jira")
 
 # =======================

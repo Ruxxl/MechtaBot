@@ -7,13 +7,13 @@ import aiohttp
 from aiogram import types
 from dateutil import tz
 
-from admin_handler import monitor
+from web.admin_handler import monitor
 
 logger = logging.getLogger("bot.monthly_report")
 
 TZ = tz.gettz("Asia/Almaty")
 
-REPORT_PHOTO_PATH = "monthryreport.jpg"
+REPORT_PHOTO_PATH = "assets/monthryreport.jpg"
 
 MONTHS_RU = {
     1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель",
