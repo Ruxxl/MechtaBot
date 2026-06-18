@@ -2,8 +2,8 @@ import base64
 import logging
 from aiogram import Bot
 from aiogram.types import Message
-from ai_service import ai_service
-from admin_handler import monitor
+from services.ai_service import ai_service
+from web.admin_handler import monitor
 
 logger = logging.getLogger("bot.vision")
 

@@ -9,7 +9,7 @@ from icalendar import Calendar
 from dateutil import tz
 from dateutil.rrule import rrulestr
 
-from admin_handler import monitor
+from web.admin_handler import monitor
 from aiogram.types import FSInputFile
 from aiogram.enums import ParseMode
 
@@ -26,7 +26,7 @@ ICS_URL = os.getenv(
 CHECK_INTERVAL = int(os.getenv("CALENDAR_CHECK_INTERVAL", 30))
 ALERT_BEFORE = timedelta(minutes=5)
 
-EVENT_PHOTO_PATH = "event.jpg"
+EVENT_PHOTO_PATH = "assets/event.jpg"
 TZ = tz.gettz("Asia/Almaty")
 
 # Актуальный MENTION_MAP (email → telegram mention)

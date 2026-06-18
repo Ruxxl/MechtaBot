@@ -2,7 +2,7 @@ import os
 import logging
 from typing import Callable
 from aiogram import Bot, types
-from text_handler import get_thread_prefix, THREAD_PREFIXES
+from handlers.text_handler import get_thread_prefix, THREAD_PREFIXES
 
 logger = logging.getLogger(__name__)
 

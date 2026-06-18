@@ -3,7 +3,7 @@ import random
 import logging
 import aiohttp
 from aiogram import Bot
-from admin_handler import monitor
+from web.admin_handler import monitor
 
 logger = logging.getLogger("bot.code_review")
 

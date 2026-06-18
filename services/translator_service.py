@@ -2,9 +2,9 @@ import asyncio
 import logging
 from aiogram import Dispatcher, F
 from aiogram.types import Message
-from admin_handler import monitor
+from web.admin_handler import monitor
 from deep_translator import GoogleTranslator
-from ai_service import ai_service
+from services.ai_service import ai_service
 
 logger = logging.getLogger("bot.translator")
 
