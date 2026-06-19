@@ -25,6 +25,7 @@ from services.ai_service import ai_service
 from monitors.code_review_handler import run_code_review_monitor
 from handlers.vision_handler import handle_vision_message
 from monitors.monthly_report import check_monthly_report
+from handlers.stress_handler import register_stress_handlers
 
 
 # =======================
@@ -123,6 +124,10 @@ register_jira_handlers(
     target_group_id=TARGET_GROUP_ID, 
     target_thread_id=TARGET_THREAD_ID
 )
+
+# Регистрация хендлеров нагрузочного тестирования (/stress)
+logger.info("🚦 Регистрация хендлеров нагрузочного тестирования...")
+register_stress_handlers(dp=dp, bot=bot)
 
 # Инициализация AI сервисов
 ai_service.init_groq(GROQ_API_KEY)
@@ -313,6 +318,7 @@ async def main():
     monitor.update_status("Translator Service", "OK")
     monitor.update_status("Jira FSM", "OK")
     monitor.update_status("Monthly Report", "OK")
+    monitor.update_status("Stress Test", "OK")
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
