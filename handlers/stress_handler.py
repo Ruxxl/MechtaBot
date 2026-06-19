@@ -115,6 +115,25 @@ def _read_aggregated_stats(csv_prefix: str) -> Optional[dict]:
     return None
 
 
+def _read_breakdown_stats(csv_prefix: str) -> list:
+    """Читает по-строчную статистику {csv_prefix}_stats.csv (одна строка на
+    каждый stat_name из locustfile, без агрегированной строки) — теперь, когда
+    locustfile группирует запросы по типу страницы (product/section/...),
+    это дает осмысленную разбивку в отчете, а не 2000+ строк по каждому URL."""
+    path = f"{csv_prefix}_stats.csv"
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+    except Exception as e:
+        logger.warning(f"Не удалось прочитать stats csv: {e}")
+        return []
+    rows = [r for r in rows if r.get("Name", "").strip() != "Aggregated"]
+    rows.sort(key=lambda r: float(r.get("Request Count", 0) or 0), reverse=True)
+    return rows
+
+
 def _read_failures(csv_prefix: str) -> list:
     path = f"{csv_prefix}_failures.csv"
     if not os.path.exists(path):
@@ -196,6 +215,17 @@ def _build_report_text(session: StressSession) -> str:
         ]
     else:
         lines.append("\n⚠️ Не удалось прочитать статистику теста (возможно, тест остановлен слишком рано).")
+
+    breakdown = _read_breakdown_stats(session.csv_prefix)
+    if breakdown:
+        lines.append("\n📊 <b>По типам страниц:</b>")
+        for row in breakdown:
+            name = _esc(row.get("Name", "?"))
+            total = row.get("Request Count", "0")
+            fail = row.get("Failure Count", "0")
+            rps = row.get("Requests/s", "0")
+            avg = row.get("Average Response Time", "0")
+            lines.append(f"• {name}: {total} запросов, {fail} ошибок, {rps} RPS, {avg} мс")
 
     if failures:
         lines.append("\n🐞 <b>Топ ошибок:</b>")
