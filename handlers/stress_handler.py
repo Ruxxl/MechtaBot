@@ -1,5 +1,6 @@
 import asyncio
 import csv
+import html
 import logging
 import os
 import time
@@ -79,6 +80,13 @@ def _stop_keyboard(run_id: str) -> InlineKeyboardMarkup:
     ])
 
 
+def _esc(value) -> str:
+    """Экранирует текст перед вставкой в HTML-сообщение Telegram.
+    Нужно для всего, что не задано нами в коде: ошибки из CSV locust,
+    кастомный host/название среды, введенные пользователем."""
+    return html.escape(str(value), quote=False)
+
+
 def _progress_bar(percent: float, width: int = 12) -> str:
     filled = int(width * percent / 100)
     return "▓" * filled + "░" * (width - filled)
@@ -131,7 +139,7 @@ async def _progress_loop(bot: Bot, session: StressSession):
             f"{_progress_bar(percent)} {percent:.0f}%",
             f"⏱ Прошло: {_fmt_seconds(elapsed)} из {_fmt_seconds(session.duration_seconds)}",
             f"👥 Пользователей: {session.users}",
-            f"🌐 Среда: {session.env_label} ({session.host})",
+            f"🌐 Среда: {_esc(session.env_label)} ({_esc(session.host)})",
         ]
 
         if stats:
@@ -167,7 +175,7 @@ def _build_report_text(session: StressSession) -> str:
         "📊 <b>Отчет нагрузочного теста</b>",
         "",
         f"Статус: {status_line}",
-        f"🌐 Среда: {session.env_label} ({session.host})",
+        f"🌐 Среда: {_esc(session.env_label)} ({_esc(session.host)})",
         f"👥 Пользователей: {session.users}",
         f"⏱ Запланировано: {_fmt_seconds(session.duration_seconds)}",
         f"⏱ Фактически: {_fmt_seconds(elapsed)}",
@@ -192,7 +200,10 @@ def _build_report_text(session: StressSession) -> str:
     if failures:
         lines.append("\n🐞 <b>Топ ошибок:</b>")
         for f in failures[:10]:
-            lines.append(f"• {f.get('Name', '?')} — {f.get('Error', '?')} ({f.get('Occurrences', '?')} раз)")
+            name = _esc(f.get("Name", "?"))
+            error = _esc(str(f.get("Error", "?"))[:200])
+            occurrences = f.get("Occurrences", "?")
+            lines.append(f"• {name} — {error} ({occurrences} раз)")
 
     return "\n".join(lines)
 
@@ -305,7 +316,7 @@ def register_stress_handlers(dp, bot: Bot):
             await message.reply("⚠️ Host должен начинаться с http:// или https://. Попробуй еще раз:")
             return
         await state.update_data(host=host, env_label=host)
-        await message.reply(f"🌐 Среда: {host}\n👥 Сколько пользователей сэмулировать? Введи число:")
+        await message.reply(f"🌐 Среда: {_esc(host)}\n👥 Сколько пользователей сэмулировать? Введи число:")
         await state.set_state(StressFSM.waiting_users)
 
     @dp.message(StressFSM.waiting_users)
@@ -351,7 +362,7 @@ def register_stress_handlers(dp, bot: Bot):
 
         sent = await message.reply(
             "🚦 <b>Запускаю нагрузочный тест...</b>\n\n"
-            f"🌐 Среда: {env_label} ({host})\n"
+            f"🌐 Среда: {_esc(env_label)} ({_esc(host)})\n"
             f"👥 Пользователей: {users}\n"
             f"⏱ Длительность: {_fmt_seconds(duration_seconds)}",
             reply_markup=_stop_keyboard(run_id),
