@@ -9,3 +9,4 @@ pytesseract
 playwright>=1.37.0
 deep-translator
 groq
+locust
