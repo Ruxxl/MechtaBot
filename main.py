@@ -252,8 +252,8 @@ async def handle_photo(message: types.Message):
         return
  
     # Нет тега → анализ скриншота ТОЛЬКО в топике VISION_THREAD_ID (1886)
-    if message.message_thread_id == VISION_THREAD_ID:
-        await handle_vision_message(bot=bot, message=message)
+    #if message.message_thread_id == VISION_THREAD_ID:
+     #   await handle_vision_message(bot=bot, message=message)
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message):
