@@ -1,12 +1,47 @@
 import os
+import logging
 import aiohttp
 from aiogram import types
 from aiogram.enums import ParseMode
 from web.admin_handler import monitor
+from services.ai_service import ai_service
+
+module_logger = logging.getLogger("bot.release_notifier")
 
 # Храним состояние между запусками функции
 not_released_versions = set()
 notified_versions = set()
+
+
+async def generate_release_summary(issues: list) -> str:
+    """Генерирует краткое описание релиза через AI на основе задач, вошедших в релиз."""
+    if not issues:
+        return "Задачи для описания не найдены."
+
+    tasks_text = "\n".join(
+        f"- {i['key']}: {i['fields'].get('summary', 'Без названия')}"
+        for i in issues
+    )
+
+    prompt = (
+        "Ты — помощник IT-команды. Ниже список задач Jira, вошедших в релиз. "
+        "Напиши краткое (3-5 предложений) описание релиза на русском языке: "
+        "что изменилось, какие основные улучшения и фиксы вошли. "
+        "Пиши связным текстом, без markdown и без списков.\n\n"
+        f"Задачи релиза:\n{tasks_text}"
+    )
+
+    try:
+        summary = await ai_service.generate_groq(
+            prompt=prompt,
+            max_tokens=400,
+            temperature=0.5
+        )
+        return summary or "Не удалось сгенерировать описание релиза."
+    except Exception as e:
+        module_logger.error(f"Ошибка генерации описания релиза через AI: {e}")
+        return "Описание релиза временно недоступно."
+
 
 async def jira_release_check(
     bot,
@@ -69,6 +104,9 @@ async def jira_release_check(
                     # 3️⃣ Считаем баги (подзадачи)
                     total_bugs = sum(len(i["fields"].get("subtasks", [])) for i in issues)
 
+                    # 3.1️⃣ Генерируем AI-описание релиза по списку задач
+                    release_description = await generate_release_summary(issues)
+
                     issues_text = "\n".join(
                         f'• <a href="{JIRA_URL}/browse/{i["key"]}">'
                         f'{i["key"]} — {i["fields"]["summary"]}</a>'
@@ -78,6 +116,7 @@ async def jira_release_check(
                     message_text = (
                         "🎉 <b>Релиз выпущен!</b>\n\n"
                         f"📦 <b>{name}</b>\n\n"
+                        f"📝 <b>Описание релиза:</b>\n{release_description}\n\n"
                         f"🐞 <b>Багов найдено: {total_bugs}</b>\n\n"
                         "📝 <b>Задачи релиза:</b>\n"
                         f"{issues_text}"
