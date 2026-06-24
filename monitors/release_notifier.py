@@ -13,8 +13,12 @@ not_released_versions = set()
 notified_versions = set()
 
 
-async def generate_release_summary(issues: list) -> str:
-    """Генерирует краткое описание релиза через AI на основе задач, вошедших в релиз."""
+async def generate_release_summary(issues: list, max_chars: int = 350) -> str:
+    """Генерирует краткое описание релиза через AI на основе задач, вошедших в релиз.
+
+    Описание всегда укладывается в max_chars символов — это нужно, чтобы суммарное
+    сообщение (описание + список задач) надёжно помещалось в лимит подписи к фото
+    в Telegram (1024 символа)."""
     if not issues:
         return "Задачи для описания не найдены."
 
@@ -25,19 +29,26 @@ async def generate_release_summary(issues: list) -> str:
 
     prompt = (
         "Ты — помощник IT-команды. Ниже список задач Jira, вошедших в релиз. "
-        "Напиши краткое (3-5 предложений) описание релиза на русском языке: "
-        "что изменилось, какие основные улучшения и фиксы вошли. "
-        "Пиши связным текстом, без markdown и без списков.\n\n"
+        "Напиши ОЧЕНЬ короткое (1-2 предложения, максимум 250 символов) описание "
+        "релиза на русском языке: что изменилось, какие основные улучшения и фиксы "
+        "вошли. Пиши связным текстом, без markdown и без списков.\n\n"
         f"Задачи релиза:\n{tasks_text}"
     )
 
     try:
         summary = await ai_service.generate_groq(
             prompt=prompt,
-            max_tokens=400,
+            max_tokens=120,
             temperature=0.5
         )
-        return summary or "Не удалось сгенерировать описание релиза."
+        summary = (summary or "Не удалось сгенерировать описание релиза.").strip()
+
+        # Жёсткая защита: даже если AI проигнорирует ограничение в промпте,
+        # обрезаем результат, чтобы не превысить лимит подписи Telegram.
+        if len(summary) > max_chars:
+            summary = summary[:max_chars - 1].rstrip() + "…"
+
+        return summary
     except Exception as e:
         module_logger.error(f"Ошибка генерации описания релиза через AI: {e}")
         return "Описание релиза временно недоступно."
@@ -123,14 +134,31 @@ async def jira_release_check(
                     )
 
                     # 5️⃣ Отправка строго в TARGET_GROUP_ID и TARGET_THREAD_ID
+                    # Caption у фото в Telegram ограничен 1024 символами (текст сообщения — 4096),
+                    # поэтому если итоговый текст не укладывается в лимит caption — фото уходит
+                    # без подписи, а полный текст отправляется отдельным сообщением.
+                    TELEGRAM_CAPTION_LIMIT = 1024
+                    photo_path = "assets/release.jpg"
+                    has_photo = os.path.exists(photo_path)
+                    fits_caption = len(message_text) <= TELEGRAM_CAPTION_LIMIT
+
                     try:
-                        if os.path.exists("assets/release.jpg"):
-                            photo = types.FSInputFile("assets/release.jpg")
+                        if has_photo and fits_caption:
+                            photo = types.FSInputFile(photo_path)
                             await bot.send_photo(
                                 chat_id=target_group_id,
                                 photo=photo,
                                 caption=message_text,
                                 parse_mode=ParseMode.HTML
+                            )
+                        elif has_photo:
+                            photo = types.FSInputFile(photo_path)
+                            await bot.send_photo(chat_id=target_group_id, photo=photo)
+                            await bot.send_message(
+                                chat_id=target_group_id,
+                                text=message_text,
+                                parse_mode=ParseMode.HTML,
+                                disable_web_page_preview=True
                             )
                         else:
                             await bot.send_message(
