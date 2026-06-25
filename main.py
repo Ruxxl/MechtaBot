@@ -13,6 +13,7 @@ from aiogram.client.default import DefaultBotProperties
 # Твои импорты
 from data.hr_topics import HR_TOPICS
 from handlers.photo_handler import handle_photo_message
+from handlers.personal_photo_handler import handle_personal_photo
 from handlers.text_handler import process_text_message, THREAD_PREFIXES
 from services.calendar_service import check_calendar_events, ICS_URL
 from handlers.daily_reminder import handle_jira_release_status, start_reminders
@@ -229,6 +230,18 @@ async def handle_stand_info_callback(callback: CallbackQuery):
     
     await callback.message.edit_text(text, reply_markup=kb, disable_web_page_preview=True)
     await callback.answer()
+
+# Фото, присланное боту в ЛИЧНЫЕ сообщения -> пересылаем в основной чат.
+# Зарегистрирован ВЫШЕ общего @dp.message(F.photo), чтобы перехватывать
+# личные фото раньше Jira-логики (которая рассчитана на группу).
+@dp.message(F.photo, F.chat.type == "private")
+async def handle_private_photo(message: types.Message):
+    await handle_personal_photo(
+        bot=bot,
+        message=message,
+        target_group_id=TARGET_GROUP_ID,
+        target_thread_id=TARGET_THREAD_ID,
+    )
 
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
