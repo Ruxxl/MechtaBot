@@ -21,7 +21,7 @@ async def handle_personal_photo(
         author = message.from_user.full_name if message.from_user else "Неизвестный"
         original_caption = message.caption or ""
 
-        caption = f"📸 Фото от <b>{author}</b>"
+        caption = f"Amplitude"
         if original_caption:
             caption += f"\n\n{original_caption}"
 
