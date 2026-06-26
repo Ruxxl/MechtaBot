@@ -54,7 +54,7 @@ async def handle_personal_text(
         author = message.from_user.full_name if message.from_user else "Неизвестный"
         text = message.text or ""
 
-        forward_text = f"💬 Сообщение от <b>{author}</b>\n\n{text}"
+        forward_text = f"💬 Сообщение от <b>Amplitude</b>\n\n{text}"
 
         await bot.send_message(
             chat_id=target_group_id,
