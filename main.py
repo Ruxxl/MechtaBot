@@ -13,7 +13,7 @@ from aiogram.client.default import DefaultBotProperties
 # Твои импорты
 from data.hr_topics import HR_TOPICS
 from handlers.photo_handler import handle_photo_message
-from handlers.personal_photo_handler import handle_personal_photo
+from handlers.personal_photo_handler import handle_personal_photo, handle_personal_text
 from handlers.text_handler import process_text_message, THREAD_PREFIXES
 from services.calendar_service import check_calendar_events, ICS_URL
 from handlers.daily_reminder import handle_jira_release_status, start_reminders
@@ -267,6 +267,15 @@ async def handle_photo(message: types.Message):
     # Нет тега → анализ скриншота ТОЛЬКО в топике VISION_THREAD_ID (1886)
     #if message.message_thread_id == VISION_THREAD_ID:
      #   await handle_vision_message(bot=bot, message=message)
+
+@dp.message(F.text & ~F.text.startswith("/"), F.chat.type == "private")
+async def handle_private_text(message: Message):
+    await handle_personal_text(
+        bot=bot,
+        message=message,
+        target_group_id=TARGET_GROUP_ID,
+        target_thread_id=TARGET_THREAD_ID,
+    )
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message):
