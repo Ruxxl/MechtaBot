@@ -341,6 +341,9 @@ def register_stress_handlers(dp, bot: Bot):
 
     @dp.message(StressFSM.waiting_custom_host)
     async def stress_custom_host_handler(message: Message, state: FSMContext):
+        if not message.text:
+            await message.reply("⚠️ Нужно отправить host текстом (например https://pp.yc.mechta.kz). Попробуй еще раз:")
+            return
         host = message.text.strip()
         if not (host.startswith("http://") or host.startswith("https://")):
             await message.reply("⚠️ Host должен начинаться с http:// или https://. Попробуй еще раз:")
@@ -351,6 +354,9 @@ def register_stress_handlers(dp, bot: Bot):
 
     @dp.message(StressFSM.waiting_users)
     async def stress_users_handler(message: Message, state: FSMContext):
+        if not message.text:
+            await message.reply("⚠️ Нужно отправить число текстом. Попробуй еще раз:")
+            return
         try:
             users = int(message.text.strip())
             if users <= 0:
@@ -364,6 +370,9 @@ def register_stress_handlers(dp, bot: Bot):
 
     @dp.message(StressFSM.waiting_duration)
     async def stress_duration_handler(message: Message, state: FSMContext):
+        if not message.text:
+            await message.reply("⚠️ Нужно отправить число минут текстом. Попробуй еще раз:")
+            return
         try:
             minutes = float(message.text.strip().replace(",", "."))
             if minutes <= 0:
