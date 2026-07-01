@@ -1,17 +1,35 @@
+import asyncio
 import logging
 from datetime import datetime
+from typing import Callable, Optional, Set
 import aiohttp
 from aiohttp import web
 
 logger = logging.getLogger("bot.webhook")
 
 class WebhookHandler:
-    def __init__(self, bot, target_group_id: int, target_thread_id: int, github_token: str = None, repo_full_name: str = None):
+    def __init__(
+        self,
+        bot,
+        target_group_id: int,
+        target_thread_id: int,
+        github_token: str = None,
+        repo_full_name: str = None,
+        smoke_test_callback: Optional[Callable] = None,
+        smoke_test_workflows: Optional[Set[str]] = None,
+    ):
         self.bot = bot
         self.target_group_id = target_group_id
         self.target_thread_id = target_thread_id
         self.github_token = github_token
         self.repo_full_name = repo_full_name
+        # Коллбэк вида async def callback(host: str, env_label: str) — запускает
+        # автоматический smoke-тест после успешного деплоя (см. main.py, stress_handler.py)
+        self.smoke_test_callback = smoke_test_callback
+        # Названия воркфлоу (в нижнем регистре), после успеха которых нужно
+        # автоматически запускать smoke-тест. Пусто по умолчанию — фича выключена,
+        # пока main.py явно не передаст список.
+        self.smoke_test_workflows = smoke_test_workflows or set()
         # Хранилище последних успешных сборок (до 5 на каждый стенд)
         self.latest_builds: dict[str, list] = {}
         self.MAX_BUILDS_PER_STAND = 5
@@ -122,6 +140,13 @@ class WebhookHandler:
                     builds = self.latest_builds.setdefault(stand_info, [])
                     builds.insert(0, build_entry)
                     self.latest_builds[stand_info] = builds[:self.MAX_BUILDS_PER_STAND]
+
+                    # 5.1 Автотриггер smoke-теста после успешного деплоя нужного стенда
+                    if stand_url and workflow_key in self.smoke_test_workflows and self.smoke_test_callback:
+                        try:
+                            asyncio.create_task(self.smoke_test_callback(stand_url.rstrip("/"), stand_info))
+                        except Exception as e:
+                            logger.error(f"Ошибка запуска автотриггера smoke-теста: {e}")
 
                 # Подготовка текста уведомления
                 emoji = "🚀" if conclusion == "success" else "❌" if conclusion == "failure" else "⚠️"

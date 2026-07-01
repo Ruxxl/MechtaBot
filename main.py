@@ -26,7 +26,7 @@ from services.ai_service import ai_service
 from monitors.code_review_handler import run_code_review_monitor
 from handlers.vision_handler import handle_vision_message
 from monitors.monthly_report import check_monthly_report
-from handlers.stress_handler import register_stress_handlers
+from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
 
 
 # =======================
@@ -58,6 +58,15 @@ JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handle
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
 
+# Список воркфлоу (имена как в GitHub Actions .yml, регистр не важен), после
+# успешного деплоя которых автоматически запускается smoke-тест на стенд.
+# По умолчанию — только preprod, чтобы не грузить прод/остальные стенды без ведома.
+SMOKE_TEST_WORKFLOWS = {
+    w.strip().lower()
+    for w in os.getenv("SMOKE_TEST_WORKFLOWS", "deploy preprod").split(",")
+    if w.strip()
+}
+
 # =======================
 # Логирование
 # =======================
@@ -85,13 +94,20 @@ logger = setup_logger()
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
+# Коллбэк для WebhookHandler: запускает smoke-тест после успешного деплоя
+# нужного стенда (см. SMOKE_TEST_WORKFLOWS выше и handlers/stress_handler.py)
+async def _smoke_test_callback(host: str, env_label: str):
+    await trigger_smoke_test(bot, TARGET_GROUP_ID, TARGET_THREAD_ID, host, env_label)
+
 # Инициализируем обработчик вебхуков (теперь он доступен глобально для команд)
 webhook_handler = WebhookHandler(
     bot=bot, 
     target_group_id=TARGET_GROUP_ID, 
     target_thread_id=TARGET_THREAD_ID,
     github_token=os.getenv('GITHUB_TOKEN'),
-    repo_full_name=os.getenv('GITHUB_REPO') # например "mechta-kz/my-repo"
+    repo_full_name=os.getenv('GITHUB_REPO'), # например "mechta-kz/my-repo"
+    smoke_test_callback=_smoke_test_callback,
+    smoke_test_workflows=SMOKE_TEST_WORKFLOWS,
 )
 
 # =======================

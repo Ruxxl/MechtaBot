@@ -30,6 +30,13 @@ ENVIRONMENTS = {
     "prod": ("🔴 Production", "https://mechta.kz"),
 }
 
+# =======================
+# Автоматический smoke-тест после деплоя (см. web/webhook_handler.py)
+# Параметры дефолтно небольшие — это именно smoke-тест, а не полноценная нагрузка.
+# =======================
+SMOKE_TEST_USERS = int(os.getenv("SMOKE_TEST_USERS", 20))
+SMOKE_TEST_DURATION_MINUTES = float(os.getenv("SMOKE_TEST_DURATION_MIN", "2"))
+
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
 
@@ -300,6 +307,80 @@ async def _run_stress_test(bot: Bot, session: StressSession):
     active_sessions.pop(session.chat_id, None)
 
 
+async def launch_stress_session(
+    bot: Bot,
+    chat_id: int,
+    thread_id: Optional[int],
+    users: int,
+    duration_seconds: int,
+    host: str,
+    env_label: str,
+    initial_note: str = "",
+) -> Optional[StressSession]:
+    """Создает и запускает сессию нагрузочного теста программно (без диалога FSM).
+    Используется как из /stress (после сбора параметров), так и из автотриггера
+    после деплоя (см. trigger_smoke_test ниже).
+
+    Возвращает None и ничего не запускает, если в чате уже есть активная сессия —
+    чтобы автотриггер не перебивал ручной тест (и наоборот)."""
+    if chat_id in active_sessions:
+        logger.info(f"Пропускаю запуск теста для чата {chat_id} — уже есть активная сессия.")
+        return None
+
+    run_id = uuid.uuid4().hex[:8]
+    session = StressSession(
+        run_id=run_id,
+        chat_id=chat_id,
+        thread_id=thread_id,
+        users=users,
+        duration_seconds=duration_seconds,
+        host=host,
+        env_label=env_label,
+    )
+
+    text = (
+        f"{initial_note}"
+        "🚦 <b>Запускаю нагрузочный тест...</b>\n\n"
+        f"🌐 Среда: {_esc(env_label)} ({_esc(host)})\n"
+        f"👥 Пользователей: {users}\n"
+        f"⏱ Длительность: {_fmt_seconds(duration_seconds)}"
+    )
+    sent = await bot.send_message(
+        chat_id=chat_id,
+        message_thread_id=thread_id,
+        text=text,
+        reply_markup=_stop_keyboard(run_id),
+    )
+    session.message_id = sent.message_id
+    active_sessions[chat_id] = session
+
+    asyncio.create_task(_run_stress_test(bot, session))
+    return session
+
+
+async def trigger_smoke_test(bot: Bot, chat_id: int, thread_id: Optional[int], host: str, env_label: str):
+    """Запускает короткий автоматический smoke-тест после успешного деплоя
+    (вызывается из web/webhook_handler.py). Параметры регулируются через
+    SMOKE_TEST_USERS / SMOKE_TEST_DURATION_MIN в окружении."""
+    if not host:
+        logger.info(f"Smoke-тест для '{env_label}' пропущен — неизвестен URL стенда.")
+        return
+
+    duration_seconds = int(SMOKE_TEST_DURATION_MINUTES * 60)
+    session = await launch_stress_session(
+        bot=bot,
+        chat_id=chat_id,
+        thread_id=thread_id,
+        users=SMOKE_TEST_USERS,
+        duration_seconds=duration_seconds,
+        host=host,
+        env_label=env_label,
+        initial_note="🤖 <b>Автоматический smoke-тест после деплоя</b>\n\n",
+    )
+    if session is None:
+        logger.info(f"Smoke-тест для '{env_label}' пропущен — в чате {chat_id} уже идет другой тест.")
+
+
 def register_stress_handlers(dp, bot: Bot):
 
     @dp.message(F.text == "/stress")
@@ -388,9 +469,8 @@ def register_stress_handlers(dp, bot: Bot):
         duration_seconds = int(minutes * 60)
         await state.clear()
 
-        run_id = uuid.uuid4().hex[:8]
-        session = StressSession(
-            run_id=run_id,
+        session = await launch_stress_session(
+            bot=bot,
             chat_id=message.chat.id,
             thread_id=message.message_thread_id,
             users=users,
@@ -398,18 +478,11 @@ def register_stress_handlers(dp, bot: Bot):
             host=host,
             env_label=env_label,
         )
-
-        sent = await message.reply(
-            "🚦 <b>Запускаю нагрузочный тест...</b>\n\n"
-            f"🌐 Среда: {_esc(env_label)} ({_esc(host)})\n"
-            f"👥 Пользователей: {users}\n"
-            f"⏱ Длительность: {_fmt_seconds(duration_seconds)}",
-            reply_markup=_stop_keyboard(run_id),
-        )
-        session.message_id = sent.message_id
-        active_sessions[message.chat.id] = session
-
-        asyncio.create_task(_run_stress_test(bot, session))
+        if session is None:
+            await message.reply(
+                "⚠️ В этом чате уже выполняется нагрузочный тест. "
+                "Останови его кнопкой в сообщении выше перед запуском нового."
+            )
 
     @dp.callback_query(F.data.startswith("stress_stop:"))
     async def stress_stop_handler(callback: CallbackQuery):
