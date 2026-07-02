@@ -25,12 +25,15 @@ def _clean_html(raw_html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _build_cql(query: str, space_key: Optional[str]) -> str:
+def _build_cql(query: str, space_key: Optional[str], page_id: Optional[str]) -> str:
     # Экранируем кавычки в вопросе пользователя, чтобы не сломать CQL-запрос
     safe_query = query.replace('"', "'")
     cql = f'text ~ "{safe_query}"'
     if space_key:
         cql += f' and space = "{space_key}"'
+    if page_id:
+        # Ищем и в самой странице, и в её подстраницах
+        cql += f' and (id = "{page_id}" or ancestor = "{page_id}")'
     return cql
 
 
@@ -46,6 +49,7 @@ async def search_confluence(confluence_config: dict, query: str, limit: int = 3)
     email = confluence_config.get('email')
     token = confluence_config.get('token')
     space_key = confluence_config.get('space')
+    page_id = confluence_config.get('page_id')
 
     if not base_url or not email or not token:
         logger.error("Confluence не настроен: отсутствует url, email или token")
@@ -53,7 +57,7 @@ async def search_confluence(confluence_config: dict, query: str, limit: int = 3)
 
     auth = aiohttp.BasicAuth(email, token)
     headers = {"Accept": "application/json"}
-    cql = _build_cql(query, space_key)
+    cql = _build_cql(query, space_key, page_id)
 
     search_url = f"{base_url}/rest/api/content/search"
     params = {

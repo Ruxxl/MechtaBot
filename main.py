@@ -64,6 +64,9 @@ CONFLUENCE_CONFIG = {
     'email': os.getenv('CONFLUENCE_EMAIL') or JIRA_CONFIG['email'],
     'token': os.getenv('CONFLUENCE_API_TOKEN') or JIRA_CONFIG['token'],
     'space': os.getenv('CONFLUENCE_SPACE_KEY') or None,
+    # Опционально: ограничить поиск конкретной страницей и её подстраницами.
+    # ID страницы — число из URL после /pages/, например .../pages/422313993/...
+    'page_id': os.getenv('CONFLUENCE_PAGE_ID') or None,
 }
 
 TRIGGER_TAGS = ['#bug', '#jira']
