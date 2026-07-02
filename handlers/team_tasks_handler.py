@@ -20,10 +20,8 @@ SSL_CONTEXT = ssl.create_default_context()
 SSL_CONTEXT.check_hostname = False
 SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
-# Статусы, которые не считаем "рабочими" и не показываем в списке задач/подзадач.
-# Сравнение регистронезависимое (см. _is_excluded).
-EXCLUDED_STATUSES = {"ожидание релиза", "готово"}
-
+# Статусы "Готово" и "Ожидает релиза" (в любых вариациях формулировки) не
+# считаем "рабочими" — см. _is_excluded ниже, там гибкое сравнение.
 CALLBACK_PREFIX = "team_user:"
 
 
@@ -32,7 +30,33 @@ def _esc(value) -> str:
 
 
 def _is_excluded(status_name: str) -> bool:
-    return (status_name or "").strip().lower() in EXCLUDED_STATUSES
+    """Проверяет, нужно ли скрыть задачу/подзадачу с данным статусом.
+    Сравнение по вхождению подстроки, а не точное совпадение — потому что
+    в Jira статус может называться "Ожидает релиза", "Ожидание релиза" и т.п.,
+    и точное сравнение легко "промахивается" мимо реальной формулировки."""
+    name = (status_name or "").strip().lower()
+    if not name:
+        return False
+    if "готов" in name or name in {"done", "closed", "закрыто"}:
+        return True
+    if "ожида" in name and "релиз" in name:
+        return True
+    return False
+
+
+# Максимальная длина названия задачи/подзадачи в выводе. Длинные названия
+# обрезаются по границе слова — иначе перенос строки в Telegram "съезжает"
+# и портит дерево (├─/└─) и иконки статусов.
+TASK_SUMMARY_MAX = 70
+SUBTASK_SUMMARY_MAX = 60
+
+
+def _truncate(text: str, max_len: int) -> str:
+    text = (text or "").strip()
+    if len(text) <= max_len:
+        return text
+    cut = text[:max_len].rsplit(" ", 1)[0]
+    return f"{cut}…"
 
 
 # Иконки по статусу — сопоставление по вхождению подстроки (регистронезависимо),
@@ -115,24 +139,24 @@ async def fetch_assignable_users(jira_config: dict) -> List[dict]:
 
 async def fetch_user_sprint_tasks(jira_config: dict, account_id: str) -> List[dict]:
     """Задачи (без подзадач верхнего уровня), назначенные на пользователя,
-    которые находятся в активном спринте и не в исключенных статусах.
-    Подзадачи каждой задачи подтягиваются полем 'subtasks' в том же запросе."""
+    которые находятся в активном спринте. Фильтрация по статусу ("Готово",
+    "Ожидает релиза") делается на стороне Python через _is_excluded —
+    не через JQL, т.к. точная формулировка статуса в разных проектах может
+    отличаться."""
     base_url = jira_config["url"].rstrip("/")
     project = jira_config["project"]
     auth = aiohttp.BasicAuth(jira_config["email"], jira_config["token"])
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
 
-    excluded_jql = ", ".join(f'"{s}"' for s in ("Ожидание релиза", "Готово"))
     jql = (
         f'project="{project}" AND assignee="{account_id}" '
         f'AND sprint in openSprints() AND issuetype != Подзадача '
-        f'AND status not in ({excluded_jql}) '
         f'ORDER BY updated DESC'
     )
 
     payload = {
         "jql": jql,
-        "fields": ["key", "summary", "status", "subtasks"],
+        "fields": ["key", "summary", "status"],
         "maxResults": 100,
     }
 
@@ -145,7 +169,50 @@ async def fetch_user_sprint_tasks(jira_config: dict, account_id: str) -> List[di
                 return []
             data = await resp.json()
 
-    return data.get("issues", [])
+    issues = data.get("issues", [])
+    return [i for i in issues if not _is_excluded(i.get("fields", {}).get("status", {}).get("name", ""))]
+
+
+async def fetch_subtasks_by_parents(jira_config: dict, parent_keys: List[str]) -> dict:
+    """Запрашивает ВСЕ подзадачи для списка родительских задач одним JQL-запросом
+    (parent in (...)) — независимо от того, на кого они назначены. Это надежнее,
+    чем полагаться на поле 'subtasks' в ответе поиска задач: оно не всегда
+    возвращается эндпоинтом /search/jql так, как для классического /search.
+
+    Возвращает {parent_key: [issue, ...]}."""
+    if not parent_keys:
+        return {}
+
+    base_url = jira_config["url"].rstrip("/")
+    auth = aiohttp.BasicAuth(jira_config["email"], jira_config["token"])
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
+    keys_joined = ", ".join(parent_keys)
+    jql = f'parent in ({keys_joined}) ORDER BY parent ASC'
+
+    payload = {
+        "jql": jql,
+        "fields": ["key", "summary", "status", "parent"],
+        "maxResults": 200,
+    }
+
+    search_url = f"{base_url}/rest/api/3/search/jql"
+    async with aiohttp.ClientSession(auth=auth, headers=headers) as session:
+        async with session.post(search_url, json=payload, ssl=SSL_CONTEXT) as resp:
+            if resp.status != 200:
+                body = await resp.text()
+                logger.error(f"Ошибка поиска подзадач: {resp.status} — {body[:300]}")
+                return {}
+            data = await resp.json()
+
+    grouped: dict = {}
+    for issue in data.get("issues", []):
+        parent_key = issue.get("fields", {}).get("parent", {}).get("key")
+        if not parent_key:
+            continue
+        grouped.setdefault(parent_key, []).append(issue)
+
+    return grouped
 
 
 # =======================
@@ -169,7 +236,7 @@ def _users_keyboard(users: List[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def _format_user_tasks(jira_url: str, display_name: str, issues: List[dict]) -> str:
+def _format_user_tasks(jira_url: str, display_name: str, issues: List[dict], subtasks_by_parent: dict) -> str:
     jira_url = jira_url.rstrip("/")
 
     if not issues:
@@ -182,7 +249,7 @@ def _format_user_tasks(jira_url: str, display_name: str, issues: List[dict]) -> 
     # чтобы показать сводку в шапке сообщения.
     visible_subtasks_total = 0
     for issue in issues:
-        for sub in issue.get("fields", {}).get("subtasks", []):
+        for sub in subtasks_by_parent.get(issue.get("key"), []):
             sub_status = sub.get("fields", {}).get("status", {}).get("name", "")
             if not _is_excluded(sub_status):
                 visible_subtasks_total += 1
@@ -197,36 +264,38 @@ def _format_user_tasks(jira_url: str, display_name: str, issues: List[dict]) -> 
     for idx, issue in enumerate(issues, start=1):
         key = issue.get("key")
         fields = issue.get("fields", {})
-        summary = fields.get("summary", "Без названия")
+        summary = _truncate(fields.get("summary", "Без названия"), TASK_SUMMARY_MAX)
         status = fields.get("status", {}).get("name", "?")
         url = f"{jira_url}/browse/{key}"
 
         lines.append(
-            f"{_status_icon(status)} <b>{idx}.</b> 📌 <a href='{url}'>{key}</a> — {_esc(summary)}\n"
-            f"   Статус: <b>{_esc(status)}</b>"
+            f"{_status_icon(status)} <b>{idx}.</b> 📌 <a href='{url}'>{key}</a> — <b>{_esc(status)}</b>\n"
+            f"    {_esc(summary)}"
         )
 
         visible_subtasks = [
-            sub for sub in fields.get("subtasks", [])
+            sub for sub in subtasks_by_parent.get(key, [])
             if not _is_excluded(sub.get("fields", {}).get("status", {}).get("name", ""))
         ]
 
         for j, sub in enumerate(visible_subtasks):
             sub_key = sub.get("key")
             sub_fields = sub.get("fields", {})
-            sub_summary = sub_fields.get("summary", "Без названия")
+            sub_summary = _truncate(sub_fields.get("summary", "Без названия"), SUBTASK_SUMMARY_MAX)
             sub_status = sub_fields.get("status", {}).get("name", "?")
             sub_url = f"{jira_url}/browse/{sub_key}"
 
             branch = "└" if j == len(visible_subtasks) - 1 else "├"
+            pad = " " if j == len(visible_subtasks) - 1 else "│"
             lines.append(
-                f"   {branch}─ {_status_icon(sub_status)} 🔹 <a href='{sub_url}'>{sub_key}</a> — "
-                f"{_esc(sub_summary)} <i>({_esc(sub_status)})</i>"
+                f"   {branch}─ {_status_icon(sub_status)} 🔹 <a href='{sub_url}'>{sub_key}</a> "
+                f"<i>({_esc(sub_status)})</i>\n"
+                f"   {pad}    {_esc(sub_summary)}"
             )
 
         lines.append("")  # разделитель между задачами
 
-    lines.append(f"{'─' * 28}\nℹ️ Скрыты статусы: «Ожидание релиза», «Готово»")
+    lines.append(f"{'─' * 28}\nℹ️ Скрыты статусы: «Готово», «Ожидает релиза»")
 
     return "\n".join(lines).strip()
 
@@ -273,11 +342,13 @@ def register_team_tasks_handlers(dp, bot: Bot, jira_config: dict):
 
         try:
             issues = await fetch_user_sprint_tasks(jira_config, account_id)
+            parent_keys = [i["key"] for i in issues if i.get("key")]
+            subtasks_by_parent = await fetch_subtasks_by_parents(jira_config, parent_keys)
         except Exception as e:
             logger.exception(f"Ошибка получения задач пользователя: {e}")
             monitor.update_status("Team Tasks", f"ERROR: {e}")
             await callback.message.answer("❌ Не удалось получить задачи пользователя.")
             return
 
-        text = _format_user_tasks(jira_config["url"], display_name, issues)
+        text = _format_user_tasks(jira_config["url"], display_name, issues, subtasks_by_parent)
         await callback.message.answer(text, disable_web_page_preview=True)
