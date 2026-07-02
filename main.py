@@ -30,6 +30,7 @@ from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
 from handlers.faq_handler import register_faq_handlers
 from handlers.nurlan_handler import is_from_target_user, handle_target_user_message
 from handlers.team_tasks_handler import register_team_tasks_handlers
+from handlers.help_handler import register_help_handlers
 
 
 # =======================
@@ -171,6 +172,10 @@ register_stress_handlers(dp=dp, bot=bot)
 # Регистрация команды /team — список пользователей Jira и их задачи в спринте
 logger.info("👥 Регистрация хендлеров команды /team...")
 register_team_tasks_handlers(dp=dp, bot=bot, jira_config=JIRA_CONFIG)
+
+# Регистрация /help и /start — интерактивное меню возможностей бота
+logger.info("ℹ️ Регистрация хендлеров /help...")
+register_help_handlers(dp=dp, bot=bot)
 
 # Регистрация FAQ-бота (/ask, #faq) — поиск по Confluence + ответ через Groq.
 # Регистрируется до общих текстовых хендлеров ниже по файлу, чтобы тег #faq
