@@ -27,6 +27,7 @@ from monitors.code_review_handler import run_code_review_monitor
 from handlers.vision_handler import handle_vision_message
 from monitors.monthly_report import check_monthly_report
 from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
+from handlers.faq_handler import register_faq_handlers
 
 
 # =======================
@@ -54,6 +55,16 @@ JIRA_CONFIG = {
 }
 
 JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handler
+
+# Confluence Config — по умолчанию используем тот же email/token, что и в Jira
+# (на Atlassian Cloud это обычно один и тот же аккаунт), но их можно переопределить
+# отдельными переменными окружения.
+CONFLUENCE_CONFIG = {
+    'url': os.getenv('CONFLUENCE_URL', JIRA_CONFIG['url'] + '/wiki'),
+    'email': os.getenv('CONFLUENCE_EMAIL', JIRA_CONFIG['email']),
+    'token': os.getenv('CONFLUENCE_API_TOKEN', JIRA_CONFIG['token']),
+    'space': os.getenv('CONFLUENCE_SPACE_KEY') or None,
+}
 
 TRIGGER_TAGS = ['#bug', '#jira']
 CHECK_TAG = '#check'
@@ -145,6 +156,12 @@ register_jira_handlers(
 # Регистрация хендлеров нагрузочного тестирования (/stress)
 logger.info("🚦 Регистрация хендлеров нагрузочного тестирования...")
 register_stress_handlers(dp=dp, bot=bot)
+
+# Регистрация FAQ-бота (/ask, #faq) — поиск по Confluence + ответ через Groq.
+# Регистрируется до общих текстовых хендлеров ниже по файлу, чтобы тег #faq
+# перехватывался раньше общей Jira-логики (см. handle_text ниже).
+logger.info("📚 Регистрация FAQ-бота (Confluence)...")
+register_faq_handlers(dp=dp, bot=bot, confluence_config=CONFLUENCE_CONFIG)
 
 # Инициализация AI сервисов
 ai_service.init_groq(GROQ_API_KEY)
@@ -357,6 +374,7 @@ async def main():
     monitor.update_status("Jira FSM", "OK")
     monitor.update_status("Monthly Report", "OK")
     monitor.update_status("Stress Test", "OK")
+    monitor.update_status("FAQ Bot", "OK")
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
