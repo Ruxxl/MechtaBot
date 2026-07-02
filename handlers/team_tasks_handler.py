@@ -35,6 +35,35 @@ def _is_excluded(status_name: str) -> bool:
     return (status_name or "").strip().lower() in EXCLUDED_STATUSES
 
 
+# Иконки по статусу — сопоставление по вхождению подстроки (регистронезависимо),
+# т.к. в разных проектах названия статусов могут немного отличаться.
+# Порядок важен: проверяются сверху вниз, первое совпадение побеждает.
+STATUS_ICON_RULES = [
+    ("код ревью", "🔍"),
+    ("ревью", "🔍"),
+    ("тестир", "🧪"),
+    ("qa", "🧪"),
+    ("проверк", "👀"),
+    ("в работе", "🔧"),
+    ("progress", "🔧"),
+    ("блок", "⛔"),
+    ("block", "⛔"),
+    ("открыт", "🆕"),
+    ("to do", "🆕"),
+    ("todo", "🆕"),
+    ("backlog", "🗂"),
+]
+DEFAULT_STATUS_ICON = "⚪"
+
+
+def _status_icon(status_name: str) -> str:
+    name = (status_name or "").strip().lower()
+    for needle, icon in STATUS_ICON_RULES:
+        if needle in name:
+            return icon
+    return DEFAULT_STATUS_ICON
+
+
 # =======================
 # Jira API
 # =======================
@@ -149,32 +178,55 @@ def _format_user_tasks(jira_url: str, display_name: str, issues: List[dict]) -> 
             f"спринте (в рабочих статусах)."
         )
 
-    lines = [f"📋 <b>Задачи {_esc(display_name)} в текущем спринте:</b>\n"]
-
+    # Считаем общее число подзадач (после фильтрации исключенных статусов),
+    # чтобы показать сводку в шапке сообщения.
+    visible_subtasks_total = 0
     for issue in issues:
+        for sub in issue.get("fields", {}).get("subtasks", []):
+            sub_status = sub.get("fields", {}).get("status", {}).get("name", "")
+            if not _is_excluded(sub_status):
+                visible_subtasks_total += 1
+
+    header = (
+        f"📋 <b>Задачи {_esc(display_name)} — текущий спринт</b>\n"
+        f"🧩 Задач: <b>{len(issues)}</b>   🔸 Подзадач: <b>{visible_subtasks_total}</b>\n"
+        f"{'─' * 28}"
+    )
+    lines = [header, ""]
+
+    for idx, issue in enumerate(issues, start=1):
         key = issue.get("key")
         fields = issue.get("fields", {})
         summary = fields.get("summary", "Без названия")
         status = fields.get("status", {}).get("name", "?")
         url = f"{jira_url}/browse/{key}"
 
-        lines.append(f"🔹 <a href='{url}'>{key} — {_esc(summary)}</a> — <b>{_esc(status)}</b>")
+        lines.append(
+            f"{_status_icon(status)} <b>{idx}.</b> 📌 <a href='{url}'>{key}</a> — {_esc(summary)}\n"
+            f"   Статус: <b>{_esc(status)}</b>"
+        )
 
-        for sub in fields.get("subtasks", []):
+        visible_subtasks = [
+            sub for sub in fields.get("subtasks", [])
+            if not _is_excluded(sub.get("fields", {}).get("status", {}).get("name", ""))
+        ]
+
+        for j, sub in enumerate(visible_subtasks):
             sub_key = sub.get("key")
             sub_fields = sub.get("fields", {})
             sub_summary = sub_fields.get("summary", "Без названия")
             sub_status = sub_fields.get("status", {}).get("name", "?")
-
-            if _is_excluded(sub_status):
-                continue
-
             sub_url = f"{jira_url}/browse/{sub_key}"
+
+            branch = "└" if j == len(visible_subtasks) - 1 else "├"
             lines.append(
-                f"    └ <a href='{sub_url}'>{sub_key} — {_esc(sub_summary)}</a> — <i>{_esc(sub_status)}</i>"
+                f"   {branch}─ {_status_icon(sub_status)} 🔹 <a href='{sub_url}'>{sub_key}</a> — "
+                f"{_esc(sub_summary)} <i>({_esc(sub_status)})</i>"
             )
 
-        lines.append("")
+        lines.append("")  # разделитель между задачами
+
+    lines.append(f"{'─' * 28}\nℹ️ Скрыты статусы: «Ожидание релиза», «Готово»")
 
     return "\n".join(lines).strip()
 
