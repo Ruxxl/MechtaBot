@@ -28,6 +28,7 @@ from handlers.vision_handler import handle_vision_message
 from monitors.monthly_report import check_monthly_report
 from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
 from handlers.faq_handler import register_faq_handlers
+from handlers.nurlan_handler import is_from_target_user, handle_target_user_message
 
 
 # =======================
@@ -112,6 +113,7 @@ dp = Dispatcher()
 # нужного стенда (см. SMOKE_TEST_WORKFLOWS выше и handlers/stress_handler.py)
 async def _smoke_test_callback(host: str, env_label: str):
     await trigger_smoke_test(bot, TARGET_GROUP_ID, TARGET_THREAD_ID, host, env_label)
+    
 
 # Инициализируем обработчик вебхуков (теперь он доступен глобально для команд)
 webhook_handler = WebhookHandler(
@@ -145,6 +147,11 @@ async def start_web_server(webhook_h: WebhookHandler, bot_info: types.User):
     site = web.TCPSite(runner, "0.0.0.0", port)
     logger.info(f"🌐 Веб-сервер запущен на порту {port}")
     await site.start()
+
+logger.info("🙅 Регистрация спец-реакции на сообщения nurlanseo...")
+@dp.message(F.chat.type.in_({"group", "supergroup"}), F.func(is_from_target_user))
+async def nurlan_reaction(message: types.Message):
+    await handle_target_user_message(message)
 
 # Регистрация хендлеров для работы с Jira через FSM
 logger.info("📝 Регистрация хендлеров Jira FSM...")
