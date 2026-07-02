@@ -60,9 +60,9 @@ JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handle
 # (на Atlassian Cloud это обычно один и тот же аккаунт), но их можно переопределить
 # отдельными переменными окружения.
 CONFLUENCE_CONFIG = {
-    'url': os.getenv('CONFLUENCE_URL', JIRA_CONFIG['url'] + '/wiki'),
-    'email': os.getenv('CONFLUENCE_EMAIL', JIRA_CONFIG['email']),
-    'token': os.getenv('CONFLUENCE_API_TOKEN', JIRA_CONFIG['token']),
+    'url': os.getenv('CONFLUENCE_URL') or (JIRA_CONFIG['url'] + '/wiki'),
+    'email': os.getenv('CONFLUENCE_EMAIL') or JIRA_CONFIG['email'],
+    'token': os.getenv('CONFLUENCE_API_TOKEN') or JIRA_CONFIG['token'],
     'space': os.getenv('CONFLUENCE_SPACE_KEY') or None,
 }
 
