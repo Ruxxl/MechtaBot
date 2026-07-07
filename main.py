@@ -28,7 +28,6 @@ from handlers.vision_handler import handle_vision_message
 from monitors.monthly_report import check_monthly_report
 from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
 from handlers.faq_handler import register_faq_handlers
-from handlers.nurlan_handler import is_from_target_user, handle_target_user_message
 from handlers.team_tasks_handler import register_team_tasks_handlers
 from handlers.help_handler import register_help_handlers
 
