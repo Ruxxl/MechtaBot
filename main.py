@@ -150,11 +150,6 @@ async def start_web_server(webhook_h: WebhookHandler, bot_info: types.User):
     logger.info(f"🌐 Веб-сервер запущен на порту {port}")
     await site.start()
 
-logger.info("🙅 Регистрация спец-реакции на сообщения nurlanseo...")
-@dp.message(F.chat.type.in_({"group", "supergroup"}), F.func(is_from_target_user))
-async def nurlan_reaction(message: types.Message):
-    await handle_target_user_message(message)
-
 # Регистрация хендлеров для работы с Jira через FSM
 logger.info("📝 Регистрация хендлеров Jira FSM...")
 register_jira_handlers(
