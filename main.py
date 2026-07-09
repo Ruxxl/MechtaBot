@@ -30,6 +30,8 @@ from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
 from handlers.faq_handler import register_faq_handlers
 from handlers.team_tasks_handler import register_team_tasks_handlers
 from handlers.help_handler import register_help_handlers
+from handlers.bugreport_handler import register_bugreport_handlers
+
 
 
 # =======================
@@ -166,6 +168,15 @@ register_stress_handlers(dp=dp, bot=bot)
 # Регистрация команды /team — список пользователей Jira и их задачи в спринте
 logger.info("👥 Регистрация хендлеров команды /team...")
 register_team_tasks_handlers(dp=dp, bot=bot, jira_config=JIRA_CONFIG)
+
+# рядом с register_team_tasks_handlers(...)
+logger.info("🐛 Регистрация хендлера /bugreport...")
+register_bugreport_handlers(
+    dp=dp,
+    bot=bot,
+    jira_config=JIRA_CONFIG,
+    create_jira_issue_func=create_jira_issue,
+)
 
 # Регистрация /help и /start — интерактивное меню возможностей бота
 logger.info("ℹ️ Регистрация хендлеров /help...")
