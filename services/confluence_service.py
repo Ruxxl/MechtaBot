@@ -15,10 +15,10 @@ SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
 EXCERPT_CHARS = 1200
 PINNED_PAGE_EXCERPT_CHARS = 6000
-
-# Сколько дочерних страниц максимум забираем под родителем — защита от
-# случайно огромного дерева страниц.
-MAX_CHILD_PAGES = 200
+# Чек-листы часто представляют собой длинные таблицы — обычного EXCERPT_CHARS
+# (1200) не хватает, чтобы дойти до нижних строк. Даем больше места на
+# страницу, т.к. со страниц parent_page_id обычно берется всего 1-3 штуки.
+CHILD_PAGE_EXCERPT_CHARS = 6000
 
 
 def _clean_html(raw_html: str) -> str:
@@ -208,8 +208,8 @@ async def search_confluence_under_parent(confluence_config: dict, query: str, li
     results = []
     for p in top:
         excerpt = p["full_text"]
-        if len(excerpt) > EXCERPT_CHARS:
-            excerpt = excerpt[:EXCERPT_CHARS].rsplit(" ", 1)[0] + "…"
+        if len(excerpt) > CHILD_PAGE_EXCERPT_CHARS:
+            excerpt = excerpt[:CHILD_PAGE_EXCERPT_CHARS].rsplit(" ", 1)[0] + "…"
         results.append({"title": p["title"], "url": p["url"], "excerpt": excerpt})
 
     return results
