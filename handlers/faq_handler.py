@@ -35,14 +35,17 @@ async def _generate_answer(question: str, pages: list) -> str:
     prompt = (
         "Ты — помощник IT-команды. Ответь на вопрос коллеги, используя ТОЛЬКО "
         "информацию из приведенных ниже фрагментов документации Confluence. "
+        "Если материал — это чек-лист или таблица с несколькими пунктами, "
+        "относящимися к вопросу (например, несколько FAILED-строк), "
+        "перечисли ВСЕ подходящие пункты списком, а не только первый найденный. "
         "Если ответа в материалах нет — честно скажи, что не нашел информацию "
         "по этому вопросу в документации, и посоветуй уточнить у коллег. "
-        "Отвечай кратко, по делу, на русском языке, без markdown-разметки.\n\n"
+        "Отвечай по делу, на русском языке, без markdown-разметки.\n\n"
         f"Вопрос: {question}\n\n"
         f"Материалы из документации:\n{context_blocks}"
     )
 
-    return await ai_service.generate_groq(prompt=prompt, max_tokens=500, temperature=0.3)
+    return await ai_service.generate_groq(prompt=prompt, max_tokens=900, temperature=0.3)
 
 
 async def handle_faq_question(bot: Bot, message: Message, question: str, confluence_config: dict) -> None:
