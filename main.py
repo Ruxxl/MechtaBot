@@ -68,10 +68,12 @@ CONFLUENCE_CONFIG = {
     'email': os.getenv('CONFLUENCE_EMAIL') or JIRA_CONFIG['email'],
     'token': os.getenv('CONFLUENCE_API_TOKEN') or JIRA_CONFIG['token'],
     'space': os.getenv('CONFLUENCE_SPACE_KEY') or None,
+    # Опционально: ограничить поиск конкретной страницей (используется только
+    # если parent_page_id ниже не задан).
     'page_id': os.getenv('CONFLUENCE_PAGE_ID') or None,
     # Родительская страница "Чек листы" — /ask будет искать по ВСЕМ её
     # дочерним страницам (включая новые, которые добавят позже), а не по
-    # одной закрепленной странице.
+    # одной закрепленной странице. Имеет приоритет над page_id.
     'parent_page_id': os.getenv('CONFLUENCE_PARENT_PAGE_ID', '806060055'),
 }
 

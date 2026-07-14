@@ -13,21 +13,33 @@ SSL_CONTEXT = ssl.create_default_context()
 SSL_CONTEXT.check_hostname = False
 SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
+# Сколько символов очищенного текста страницы отдаем в промпт AI при обычном
+# CQL text-поиске по всему Confluence (см. search_confluence).
 EXCERPT_CHARS = 1200
+
+# Для закрепленной страницы (CONFLUENCE_PAGE_ID) отдаем больше текста, т.к. это
+# единственный источник контекста и делить бюджет с другими страницами не нужно.
 PINNED_PAGE_EXCERPT_CHARS = 6000
-# Чек-листы часто представляют собой длинные таблицы — обычного EXCERPT_CHARS
-# (1200) не хватает, чтобы дойти до нижних строк. Даем больше места на
-# страницу, т.к. со страниц parent_page_id обычно берется всего 1-3 штуки.
+
+# Чек-листы под parent_page_id часто представляют собой длинные таблицы —
+# обычного EXCERPT_CHARS (1200) не хватает, чтобы дойти до нижних строк.
+# Даем больше места на страницу, т.к. со страниц дерева обычно берется 1-3 шт.
 CHILD_PAGE_EXCERPT_CHARS = 6000
+
+# Сколько дочерних страниц максимум забираем под родителем — защита от
+# случайно огромного дерева страниц.
+MAX_CHILD_PAGES = 200
 
 
 def _clean_html(raw_html: str) -> str:
+    """Убирает HTML-разметку Confluence storage format, оставляя чистый текст."""
     soup = BeautifulSoup(raw_html or "", "html.parser")
     text = soup.get_text(separator=" ", strip=True)
     return re.sub(r"\s+", " ", text).strip()
 
 
 def _build_cql(query: str, space_key: Optional[str]) -> str:
+    # Экранируем кавычки в вопросе пользователя, чтобы не сломать CQL-запрос
     safe_query = query.replace('"', "'")
     cql = f'text ~ "{safe_query}"'
     if space_key:
@@ -35,7 +47,21 @@ def _build_cql(query: str, space_key: Optional[str]) -> str:
     return cql
 
 
+# =======================
+# Закрепленная страница (CONFLUENCE_PAGE_ID)
+# =======================
 async def get_pinned_page(confluence_config: dict) -> Optional[dict]:
+    """
+    Получает содержимое одной конкретной страницы Confluence по ID
+    (CONFLUENCE_PAGE_ID) напрямую, БЕЗ CQL text-поиска.
+
+    Нужно это потому, что CQL text-поиск в Confluence Cloud ненадежно работает
+    со словоформами русского языка (стемминг) — вопрос "промокода" может не
+    совпасть с текстом "Промокод"/"промокоду" на странице, даже если страница
+    явно релевантна. Когда вся нужная информация лежит на одной известной
+    странице, проще и надежнее просто всегда отдавать её целиком в AI и дать
+    ему самому решить, отвечает ли она на вопрос.
+    """
     base_url = confluence_config.get('url', '').rstrip('/')
     email = confluence_config.get('email')
     token = confluence_config.get('token')
@@ -82,7 +108,7 @@ async def get_pinned_page(confluence_config: dict) -> Optional[dict]:
 async def _get_child_page_stubs(confluence_config: dict) -> List[dict]:
     """
     Возвращает базовую инфу (id, title) обо ВСЕХ страницах-потомках
-    parent_page_id, на любом уровне вложенности — через CQL 'ancestor = X'.
+    parent_page_id, на любом уровне вложенности — через CQL 'ancestor=X'.
     Работает "на лету": если под родителем добавят новую страницу, она
     появится в следующем же вызове /ask без изменений в коде.
     """
@@ -92,12 +118,17 @@ async def _get_child_page_stubs(confluence_config: dict) -> List[dict]:
     parent_id = confluence_config.get('parent_page_id')
 
     if not base_url or not email or not token or not parent_id:
+        logger.warning(
+            f"Поиск по дереву страниц пропущен: не хватает конфига "
+            f"(base_url={bool(base_url)}, email={bool(email)}, "
+            f"token={bool(token)}, parent_id={parent_id})"
+        )
         return []
 
     auth = aiohttp.BasicAuth(email, token)
     headers = {"Accept": "application/json"}
     search_url = f"{base_url}/rest/api/content/search"
-    cql = f'ancestor = {parent_id}'
+    cql = f'ancestor={parent_id}'
 
     pages: List[dict] = []
     start = 0
@@ -110,7 +141,10 @@ async def _get_child_page_stubs(confluence_config: dict) -> List[dict]:
                 async with session.get(search_url, params=params, ssl=SSL_CONTEXT) as resp:
                     if resp.status != 200:
                         body = await resp.text()
-                        logger.error(f"Confluence ancestor search error: {resp.status} — {body[:300]}")
+                        logger.error(
+                            f"Confluence ancestor search error: {resp.status}, "
+                            f"cql={cql}, url={resp.url}, body={body[:300]}"
+                        )
                         break
                     data = await resp.json()
 
@@ -120,9 +154,10 @@ async def _get_child_page_stubs(confluence_config: dict) -> List[dict]:
                     break
                 start += page_size
     except Exception as e:
-        logger.exception(f"Ошибка получения дочерних страниц Confluence: {e}")
+        logger.exception(f"Ошибка получения дочерних страниц Confluence (parent_id={parent_id}): {e}")
         return []
 
+    logger.info(f"Confluence ancestor={parent_id}: найдено дочерних страниц — {len(pages)}")
     return pages[:MAX_CHILD_PAGES]
 
 
@@ -137,6 +172,8 @@ async def _fetch_page_full_text(session: aiohttp.ClientSession, base_url: str, p
     try:
         async with session.get(url, params=params, ssl=SSL_CONTEXT) as resp:
             if resp.status != 200:
+                body = await resp.text()
+                logger.warning(f"Не удалось получить страницу {page_id}: {resp.status} — {body[:200]}")
                 return None
             data = await resp.json()
     except Exception as e:
@@ -189,6 +226,7 @@ async def search_confluence_under_parent(confluence_config: dict, query: str, li
         return []
 
     pages = [p for p in fetched if p]
+    logger.info(f"Confluence: успешно загружено {len(pages)} из {len(stubs)} дочерних страниц")
     if not pages:
         return []
 
@@ -215,15 +253,27 @@ async def search_confluence_under_parent(confluence_config: dict, query: str, li
     return results
 
 
+# =======================
+# Точка входа
+# =======================
 async def search_confluence(confluence_config: dict, query: str, limit: int = 3) -> List[dict]:
     """
     Приоритет источников:
-    1. parent_page_id — поиск по всем дочерним страницам дерева (новый режим).
+    1. parent_page_id — поиск по всем дочерним страницам дерева. Если ничего
+       не нашлось (ошибка доступа, пустое дерево и т.п.) — не сдаемся сразу,
+       а падаем в обычный CQL text-поиск ниже как запасной вариант.
     2. page_id — одна закрепленная страница целиком.
     3. Обычный CQL text-поиск по всему Confluence / space.
     """
     if confluence_config.get('parent_page_id'):
-        return await search_confluence_under_parent(confluence_config, query, limit=limit)
+        results = await search_confluence_under_parent(confluence_config, query, limit=limit)
+        if results:
+            return results
+        logger.warning(
+            "Поиск по дереву parent_page_id ничего не нашел — "
+            "пробую обычный CQL text-поиск как запасной вариант."
+        )
+        # не возвращаем [] сразу — идем дальше по обычной CQL text-логике
 
     base_url = confluence_config.get('url', '').rstrip('/')
     email = confluence_config.get('email')
@@ -235,6 +285,8 @@ async def search_confluence(confluence_config: dict, query: str, limit: int = 3)
         logger.error("Confluence не настроен: отсутствует url, email или token")
         return []
 
+    # Если задана конкретная закрепленная страница — используем её содержимое
+    # напрямую (см. get_pinned_page выше), а не CQL text-поиск.
     if page_id:
         pinned = await get_pinned_page(confluence_config)
         return [pinned] if pinned else []
