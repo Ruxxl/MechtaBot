@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Callable, Optional, Set
 import aiohttp
 from aiohttp import web
+from services.db_service import save_build
 
 logger = logging.getLogger("bot.webhook")
 
@@ -140,6 +141,16 @@ class WebhookHandler:
                     builds = self.latest_builds.setdefault(stand_info, [])
                     builds.insert(0, build_entry)
                     self.latest_builds[stand_info] = builds[:self.MAX_BUILDS_PER_STAND]
+
+                    # Дублируем в Postgres — переживает рестарт бота
+                    asyncio.create_task(save_build(
+                        stand_key=workflow_key,
+                        stand_label=stand_info,
+                        commit_message=commit_message,
+                        actor=actor,
+                        build_date=build_entry["date"],
+                        url=html_url,
+                    ))
 
                     # 5.1 Автотриггер smoke-теста после успешного деплоя нужного стенда
                     if stand_url and workflow_key in self.smoke_test_workflows and self.smoke_test_callback:

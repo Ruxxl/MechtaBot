@@ -31,6 +31,7 @@ from handlers.faq_handler import register_faq_handlers
 from handlers.team_tasks_handler import register_team_tasks_handlers
 from handlers.help_handler import register_help_handlers
 from handlers.bugreport_handler import register_bugreport_handlers
+from services.db_service import init_db, close_db, get_latest_builds as get_stand_builds_from_db
 
 
 
@@ -195,6 +196,7 @@ register_faq_handlers(dp=dp, bot=bot, confluence_config=CONFLUENCE_CONFIG)
 # Инициализация AI сервисов
 ai_service.init_groq(GROQ_API_KEY)
 
+
 # Регистрация переводчика для конкретной темы
 if TRANSLATION_THREAD_ID:
     logger.info(f"🌐 Регистрация переводчика для темы {TRANSLATION_THREAD_ID}")
@@ -254,6 +256,16 @@ async def handle_back_to_stands(callback: CallbackQuery):
 async def handle_stand_info_callback(callback: CallbackQuery):
     stand_key = callback.data.split(":", 1)[1]
     url = webhook_handler.stand_urls.get(stand_key)
+    # 1. Пробуем получить свежие данные напрямую из API (возвращает список)
+    builds = await webhook_handler.fetch_latest_build_from_api(stand_key)
+
+    # 2. Если API недоступно, берем из локального кэша (от вебхуков)
+    if not builds:
+        builds = webhook_handler.latest_builds.get(stand_key.upper())
+
+    # 3. Если и кэш пуст (например, бот только что перезапустился) — БД
+    if not builds:
+        builds = await get_stand_builds_from_db(stand_key)
     
     # Формируем красивое имя для заголовка
     stand_name_display = stand_key.replace("deploy ", "").upper()
@@ -388,6 +400,9 @@ async def main():
     # Инициализация AI сервиса
     logger.info("⚙️ Инициализация Groq AI сервиса...")
     ai_service.init_groq(GROQ_API_KEY)
+
+    logger.info("🗄 Подключение к базе данных...")
+    await init_db()
 
     # Запуск Health Check сервера
     logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...")
