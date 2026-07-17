@@ -13,8 +13,29 @@ not_released_versions = set()
 notified_versions = set()
 
 
+def _format_issue_with_subtasks(issue: dict) -> str:
+    """Формирует строку задачи вместе с её подзадачами (багами) для промпта AI.
+
+    У подзадач summary уже приходит в fields из ответа Jira (поле subtasks
+    отдает мини-объекты с key + fields.summary "из коробки"), доп. запрос
+    к Jira не нужен."""
+    key = issue.get("key")
+    summary = issue["fields"].get("summary", "Без названия")
+    lines = [f"- {key}: {summary}"]
+
+    subtasks = issue["fields"].get("subtasks", []) or []
+    for sub in subtasks:
+        sub_key = sub.get("key")
+        sub_summary = sub.get("fields", {}).get("summary", "Без названия")
+        lines.append(f"    • {sub_key}: {sub_summary}")
+
+    return "\n".join(lines)
+
+
 async def generate_release_summary(issues: list, max_chars: int = 350) -> str:
-    """Генерирует краткое описание релиза через AI на основе задач, вошедших в релиз.
+    """Генерирует краткое описание релиза через AI на основе задач, вошедших в релиз,
+    а также их подзадач (багов) — именно в подзадачах чаще всего содержится реальная
+    суть исправлений/улучшений, а не в заголовке родительской задачи.
 
     Описание всегда укладывается в max_chars символов — это нужно, чтобы суммарное
     сообщение (описание + список задач) надёжно помещалось в лимит подписи к фото
@@ -22,17 +43,17 @@ async def generate_release_summary(issues: list, max_chars: int = 350) -> str:
     if not issues:
         return "Задачи для описания не найдены."
 
-    tasks_text = "\n".join(
-        f"- {i['key']}: {i['fields'].get('summary', 'Без названия')}"
-        for i in issues
-    )
+    tasks_text = "\n".join(_format_issue_with_subtasks(i) for i in issues)
 
     prompt = (
-        "Ты — помощник IT-команды. Ниже список задач Jira, вошедших в релиз. "
-        "Напиши ОЧЕНЬ короткое (1-2 предложения, максимум 250 символов) описание "
-        "релиза на русском языке: что изменилось, какие основные улучшения и фиксы "
-        "вошли. Пиши связным текстом, без markdown и без списков.\n\n"
-        f"Задачи релиза:\n{tasks_text}"
+        "Ты — помощник IT-команды. Ниже список задач Jira, вошедших в релиз, "
+        "вместе с их подзадачами (багами/фиксами), отмеченными знаком •. "
+        "Учитывай ОБА уровня: и заголовки самих задач, и заголовки подзадач — "
+        "часто именно в подзадачах указано, что конкретно было исправлено или "
+        "улучшено. Напиши ОЧЕНЬ короткое (1-2 предложения, максимум 250 символов) "
+        "описание релиза на русском языке: что изменилось, какие основные "
+        "улучшения и фиксы вошли. Пиши связным текстом, без markdown и без списков.\n\n"
+        f"Задачи релиза и их подзадачи:\n{tasks_text}"
     )
 
     try:
@@ -98,7 +119,8 @@ async def jira_release_check(
                     notified_versions.add(name)
                     logger.info(f"🚀 Релиз выпущен: {name}")
 
-                    # Запрашиваем задачи релиза
+                    # Запрашиваем задачи релиза (subtasks приходит вместе с summary
+                    # подзадач "из коробки", отдельный запрос за подзадачами не нужен)
                     jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
                     search_params = {
                         "jql": jql,
@@ -115,7 +137,7 @@ async def jira_release_check(
                     # 3️⃣ Считаем баги (подзадачи)
                     total_bugs = sum(len(i["fields"].get("subtasks", [])) for i in issues)
 
-                    # 3.1️⃣ Генерируем AI-описание релиза по списку задач
+                    # 3.1️⃣ Генерируем AI-описание релиза по списку задач + их подзадач
                     release_description = await generate_release_summary(issues)
 
                     issues_text = "\n".join(
