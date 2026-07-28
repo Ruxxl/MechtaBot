@@ -120,7 +120,9 @@ dp = Dispatcher()
 # Коллбэк для WebhookHandler: запускает smoke-тест после успешного деплоя
 # нужного стенда (см. SMOKE_TEST_WORKFLOWS выше и handlers/stress_handler.py)
 async def _smoke_test_callback(host: str, env_label: str):
-    await trigger_smoke_test(bot, TARGET_GROUP_ID, TARGET_THREAD_ID, host, env_label)
+    # ВРЕМЕННО ОТКЛЮЧЕНО: нагрузочное тестирование
+    # await trigger_smoke_test(bot, TARGET_GROUP_ID, TARGET_THREAD_ID, host, env_label)
+    logger.info(f"⏸ Smoke-тест для '{env_label}' пропущен — функция временно отключена.")
     
 
 # Инициализируем обработчик вебхуков (теперь он доступен глобально для команд)
@@ -168,7 +170,8 @@ register_jira_handlers(
 
 # Регистрация хендлеров нагрузочного тестирования (/stress)
 logger.info("🚦 Регистрация хендлеров нагрузочного тестирования...")
-register_stress_handlers(dp=dp, bot=bot)
+# ВРЕМЕННО ОТКЛЮЧЕНО: нагрузочное тестирование
+# register_stress_handlers(dp=dp, bot=bot)
 
 # Регистрация команды /team — список пользователей Jira и их задачи в спринте
 logger.info("👥 Регистрация хендлеров команды /team...")
