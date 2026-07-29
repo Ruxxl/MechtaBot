@@ -4,7 +4,8 @@ import os
 from datetime import datetime, timedelta
 
 import aiohttp
-from aiogram import types
+from aiogram import Bot, F, types
+from aiogram.types import Message
 from dateutil import tz
 
 from web.admin_handler import monitor
@@ -141,7 +142,7 @@ def _format_diff_line(current_bugs: int, prev_bugs: int) -> str:
 
 
 # =======================
-# Точка входа для фоновой задачи
+# Точка входа для фоновой задачи (30-е число, весь месяц целиком)
 # =======================
 async def check_monthly_report(
     bot,
@@ -227,3 +228,87 @@ async def check_monthly_report(
         return  # не помечаем месяц как отправленный, если сообщение не дошло
 
     _last_sent_month = month_key
+
+
+# =======================
+# Отчет "по запросу" — с 1-го числа текущего месяца до момента запуска команды
+# =======================
+async def build_on_demand_report(
+    jira_email: str,
+    jira_token: str,
+    jira_project_key: str,
+    jira_url: str,
+):
+    """
+    В отличие от check_monthly_report (который ждет 30-е число и берет период
+    целиком 1-30), эта функция всегда считает период с 1-го числа текущего
+    месяца ПО ТЕКУЩИЙ МОМЕНТ — то есть "живой" срез на момент вызова команды.
+
+    Для сравнения берется тот же по длине отрезок прошлого месяца (1-е число —
+    тот же день/время), а не месяц целиком — иначе сравнение, например, 15 дней
+    текущего месяца с 30 днями прошлого было бы некорректным.
+
+    Возвращает готовый HTML-текст сообщения, либо None при ошибке запроса к Jira.
+    """
+    now = datetime.now(TZ)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end = now
+
+    current = await _fetch_period_report(jira_email, jira_token, jira_project_key, jira_url, start, end)
+    if current is None:
+        return None
+
+    # Тот же по длине отрезок предыдущего месяца: с 1-го числа до того же
+    # дня/времени, но не дальше последнего дня прошлого месяца.
+    prev_ref = _prev_month_reference(now)
+    prev_start = prev_ref.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_day_prev = calendar.monthrange(prev_ref.year, prev_ref.month)[1]
+    end_day = min(now.day, last_day_prev)
+    prev_end = prev_ref.replace(day=end_day, hour=now.hour, minute=now.minute, second=now.second, microsecond=0)
+
+    previous = await _fetch_period_report(jira_email, jira_token, jira_project_key, jira_url, prev_start, prev_end)
+    if previous is None:
+        return None
+
+    diff_line = _format_diff_line(current["bugs"], previous["bugs"])
+    month_name = MONTHS_RU.get(now.month, now.strftime("%B"))
+
+    text = (
+        f"📊 <b>Отчет с начала месяца — {month_name} {now.year}</b>\n"
+        f"🗓 Период: 01.{now.month:02d}.{now.year} — {now.strftime('%d.%m.%Y %H:%M')}\n\n"
+        f"🚀 Релизов: <b>{current['releases']}</b>\n"
+        f"📝 Задач: <b>{current['tasks']}</b>\n"
+        f"🐞 Багов (подзадач в релизах): <b>{current['bugs']}</b>\n"
+        f"{diff_line}\n\n"
+        f"<i>Сравнение — с тем же отрезком прошлого месяца (01–{end_day:02d} число)</i>"
+    )
+    return text
+
+
+# =======================
+# Команда /monthreport — отчет по запросу в любой момент
+# =======================
+def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
+
+    @dp.message(F.text.startswith("/monthreport"))
+    async def monthreport_command(message: Message):
+        monitor.update_status("Monthly Report", "OK")
+        loading = await message.reply("⏳ Формирую отчет с начала месяца по текущий момент...")
+
+        try:
+            text = await build_on_demand_report(
+                jira_config['email'],
+                jira_config['token'],
+                jira_config['project'],
+                jira_config['url'],
+            )
+        except Exception as e:
+            logger.exception(f"Ошибка формирования отчета по запросу: {e}")
+            text = None
+
+        if text is None:
+            monitor.update_status("Monthly Report", "ERROR")
+            await loading.edit_text("❌ Не удалось получить данные из Jira для отчета. Попробуй позже.")
+            return
+
+        await loading.edit_text(text)
