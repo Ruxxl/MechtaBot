@@ -25,7 +25,7 @@ from web.admin_handler import AdminHandler, monitor
 from services.ai_service import ai_service
 from monitors.code_review_handler import run_code_review_monitor
 from handlers.vision_handler import handle_vision_message
-from monitors.monthly_report import check_monthly_report
+from monitors.monthly_report import check_monthly_report, register_monthly_report_handlers
 from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
 from handlers.faq_handler import register_faq_handlers
 from handlers.team_tasks_handler import register_team_tasks_handlers
@@ -176,6 +176,10 @@ logger.info("🚦 Регистрация хендлеров нагрузочно
 # Регистрация команды /team — список пользователей Jira и их задачи в спринте
 logger.info("👥 Регистрация хендлеров команды /team...")
 register_team_tasks_handlers(dp=dp, bot=bot, jira_config=JIRA_CONFIG)
+
+# Регистрация команды /monthreport — отчет с 1-го числа по текущий момент
+logger.info("📊 Регистрация команды /monthreport...")
+register_monthly_report_handlers(dp=dp, bot=bot, jira_config=JIRA_CONFIG)
 
 # рядом с register_team_tasks_handlers(...)
 logger.info("🐛 Регистрация хендлера /bugreport...")
