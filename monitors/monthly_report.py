@@ -22,10 +22,10 @@ MONTHS_RU = {
     9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь",
 }
 
-# Типы задач, которые считаем в строке "Созданные задачи" (см. скриншот
-# меню типов задач в Jira). "Эпик" сознательно не учитываем — это
-# контейнер для группы задач, а не сама задача.
-CREATED_TASK_TYPES = ["Task DEV", "Баг", "Task BA", "Улучшение", "Задание"]
+# Типы задач, которые считаем в строке "Созданные задачи" (см. типы проекта
+# в Jira). "Эпик" и "Подзадача" сознательно не учитываются: эпик — контейнер
+# для группы задач, подзадачи уже считаются отдельно (поле "bugs" ниже).
+SPRINT_TASK_TYPES = ["Task DEV", "Баг", "Task BA", "Улучшение", "Задание"]
 
 # Месяц, за который отчет уже отправлен (в формате "YYYY-MM").
 # Хранится в памяти процесса — так же, как и другие "защелки" в проекте
@@ -67,20 +67,92 @@ def _prev_month_reference(dt: datetime) -> datetime:
 
 
 # =======================
-# Запрос данных в Jira
+# Спринты и задачи внутри них (Jira Agile API)
 # =======================
-async def _fetch_created_tasks_count(session: aiohttp.ClientSession, base_url: str, jira_project_key: str, start: datetime, end: datetime) -> int:
-    """Считает количество задач указанных типов (CREATED_TASK_TYPES), СОЗДАННЫХ
-    в периоде [start, end] — в отличие от остальных метрик отчета, которые
-    считаются по дате релиза (fixVersion), эта метрика — по дате создания
-    задачи, независимо от того, вошла она уже в релиз или нет."""
-    types_jql = ", ".join(f'"{t}"' for t in CREATED_TASK_TYPES)
-    start_str = start.strftime("%Y-%m-%d %H:%M")
-    end_str = end.strftime("%Y-%m-%d %H:%M")
-    jql = (
-        f'project="{jira_project_key}" AND issuetype in ({types_jql}) '
-        f'AND created >= "{start_str}" AND created <= "{end_str}"'
-    )
+async def _fetch_project_board_ids(session: aiohttp.ClientSession, base_url: str, jira_project_key: str) -> list:
+    """Возвращает ID всех досок (scrum/kanban), привязанных к проекту."""
+    boards_url = f"{base_url}/rest/agile/1.0/board"
+    board_ids = []
+    start_at = 0
+
+    while True:
+        params = {"projectKeyOrId": jira_project_key, "startAt": start_at, "maxResults": 50}
+        try:
+            async with session.get(boards_url, params=params) as resp:
+                if resp.status != 200:
+                    logger.error(f"Ошибка получения досок проекта: {resp.status}")
+                    break
+                data = await resp.json()
+        except Exception as e:
+            logger.error(f"Ошибка запроса досок проекта: {e}")
+            break
+
+        board_ids.extend(b["id"] for b in data.get("values", []) if "id" in b)
+
+        if data.get("isLast", True):
+            break
+        start_at += 50
+
+    return board_ids
+
+
+async def _fetch_sprint_ids_in_period(session: aiohttp.ClientSession, base_url: str, jira_project_key: str, start: datetime, end: datetime) -> list:
+    """Возвращает ID всех спринтов проекта (по всем его доскам), у которых
+    ДАТА НАЧАЛА спринта попадает в период [start, end] — то есть "спринты
+    этого месяца". Спринт может быть в состоянии active/closed/future —
+    берем все, чтобы не пропустить, например, спринт, который стартовал
+    в этом месяце, но еще не закрыт."""
+    board_ids = await _fetch_project_board_ids(session, base_url, jira_project_key)
+    if not board_ids:
+        logger.warning(f"Не найдено ни одной доски для проекта {jira_project_key} — спринты не будут учтены")
+        return []
+
+    sprint_ids = set()
+
+    for board_id in board_ids:
+        sprints_url = f"{base_url}/rest/agile/1.0/board/{board_id}/sprint"
+        start_at = 0
+
+        while True:
+            params = {"startAt": start_at, "maxResults": 50, "state": "active,closed,future"}
+            try:
+                async with session.get(sprints_url, params=params) as resp:
+                    if resp.status != 200:
+                        # Не у каждой доски (например kanban без спринтов) есть этот эндпоинт — пропускаем молча
+                        break
+                    data = await resp.json()
+            except Exception as e:
+                logger.error(f"Ошибка запроса спринтов доски {board_id}: {e}")
+                break
+
+            for sprint in data.get("values", []):
+                sprint_start_str = sprint.get("startDate")
+                if not sprint_start_str:
+                    continue
+                try:
+                    sprint_start = datetime.fromisoformat(sprint_start_str.replace("Z", "+00:00")).astimezone(TZ)
+                except ValueError:
+                    continue
+                if start <= sprint_start <= end:
+                    sprint_ids.add(sprint["id"])
+
+            if data.get("isLast", True):
+                break
+            start_at += 50
+
+    return list(sprint_ids)
+
+
+async def _fetch_sprint_tasks_count(session: aiohttp.ClientSession, base_url: str, jira_project_key: str, sprint_ids: list) -> int:
+    """Считает количество задач типов SPRINT_TASK_TYPES, которые лежат в
+    указанных спринтах (JQL 'sprint in (...)' — задача считается один раз,
+    даже если попадала в несколько спринтов из списка)."""
+    if not sprint_ids:
+        return 0
+
+    types_jql = ", ".join(f'"{t}"' for t in SPRINT_TASK_TYPES)
+    sprints_jql = ", ".join(str(s) for s in sprint_ids)
+    jql = f'project="{jira_project_key}" AND issuetype in ({types_jql}) AND sprint in ({sprints_jql})'
 
     search_url = f"{base_url}/rest/api/3/search/jql"
     payload = {
@@ -92,22 +164,25 @@ async def _fetch_created_tasks_count(session: aiohttp.ClientSession, base_url: s
     try:
         async with session.post(search_url, json=payload) as resp:
             if resp.status != 200:
-                logger.error(f"Ошибка поиска созданных задач: {resp.status}")
+                logger.error(f"Ошибка поиска задач по спринтам: {resp.status}")
                 return 0
             data = await resp.json()
             return len(data.get("issues", []))
     except Exception as e:
-        logger.error(f"Ошибка запроса созданных задач: {e}")
+        logger.error(f"Ошибка запроса задач по спринтам: {e}")
         return 0
 
 
+# =======================
+# Запрос данных в Jira
+# =======================
 async def _fetch_period_report(jira_email, jira_token, jira_project_key, jira_url, start: datetime, end: datetime):
     """
-    Возвращает {"releases": N, "tasks": N, "bugs": N, "created_tasks": N} по релизам,
+    Возвращает {"releases": N, "tasks": N, "bugs": N, "sprint_tasks": N} по релизам,
     вышедшим в [start, end], где "bugs" — суммарное количество подзадач во всех
     задачах этих релизов (та же логика, что уже используется в release_notifier.py),
-    а "created_tasks" — количество задач типов CREATED_TASK_TYPES, СОЗДАННЫХ в
-    этом же периоде (независимо от релизов).
+    а "sprint_tasks" — количество задач типов SPRINT_TASK_TYPES в спринтах,
+    СТАРТОВАВШИХ в этом периоде (независимо от релизов и статуса задачи).
     Возвращает None при ошибке запроса к Jira.
     """
     base_url = jira_url.rstrip("/")
@@ -164,8 +239,9 @@ async def _fetch_period_report(jira_email, jira_token, jira_project_key, jira_ur
                     total_tasks += len(issues)
                     total_bugs += sum(len(i["fields"].get("subtasks", [])) for i in issues)
 
-            # 4. Задачи, СОЗДАННЫЕ в периоде (см. CREATED_TASK_TYPES), отдельно от релизов
-            created_tasks = await _fetch_created_tasks_count(session, base_url, jira_project_key, start, end)
+            # 4. Задачи в спринтах, стартовавших в периоде (см. SPRINT_TASK_TYPES)
+            sprint_ids = await _fetch_sprint_ids_in_period(session, base_url, jira_project_key, start, end)
+            sprint_tasks = await _fetch_sprint_tasks_count(session, base_url, jira_project_key, sprint_ids)
 
     except Exception as e:
         logger.exception(f"Ошибка при формировании месячного отчета: {e}")
@@ -175,7 +251,7 @@ async def _fetch_period_report(jira_email, jira_token, jira_project_key, jira_ur
         "releases": releases_count,
         "tasks": total_tasks,
         "bugs": total_bugs,
-        "created_tasks": created_tasks,
+        "sprint_tasks": sprint_tasks,
     }
 
 
@@ -206,7 +282,7 @@ async def check_monthly_report(
     месяца, если он короче 30 дней) и только один раз за месяц.
 
     Сравнение с предыдущим месяцем считается не из сохраненной истории, а заново —
-    те же самые релизы/задачи/баги/созданные задачи пересчитываются за период
+    те же самые релизы/задачи/баги/задачи спринтов пересчитываются за период
     предыдущего месяца прямо из Jira, и просто сравниваются с текущим месяцем.
     """
     global _last_sent_month
@@ -240,7 +316,7 @@ async def check_monthly_report(
         return
 
     bugs_diff_line = _format_diff_line(current["bugs"], previous["bugs"])
-    created_diff_line = _format_diff_line(current["created_tasks"], previous["created_tasks"])
+    sprint_diff_line = _format_diff_line(current["sprint_tasks"], previous["sprint_tasks"])
 
     month_name = MONTHS_RU.get(now.month, now.strftime("%B"))
     text = (
@@ -249,9 +325,9 @@ async def check_monthly_report(
         f"📝 Задач: <b>{current['tasks']}</b>\n"
         f"🐞 Багов (подзадач в релизах): <b>{current['bugs']}</b>\n"
         f"{bugs_diff_line}\n\n"
-        f"🆕 Созданные задачи: <b>{current['created_tasks']}</b>\n"
+        f"🆕 Задачи в спринтах месяца: <b>{current['sprint_tasks']}</b>\n"
         f"<i>(Task DEV, Баг, Task BA, Улучшение, Задание)</i>\n"
-        f"{created_diff_line}"
+        f"{sprint_diff_line}"
     )
 
     try:
@@ -322,7 +398,7 @@ async def build_on_demand_report(
         return None
 
     bugs_diff_line = _format_diff_line(current["bugs"], previous["bugs"])
-    created_diff_line = _format_diff_line(current["created_tasks"], previous["created_tasks"])
+    sprint_diff_line = _format_diff_line(current["sprint_tasks"], previous["sprint_tasks"])
     month_name = MONTHS_RU.get(now.month, now.strftime("%B"))
 
     text = (
@@ -332,9 +408,9 @@ async def build_on_demand_report(
         f"📝 Задач: <b>{current['tasks']}</b>\n"
         f"🐞 Багов (подзадач в релизах): <b>{current['bugs']}</b>\n"
         f"{bugs_diff_line}\n\n"
-        f"🆕 Созданные задачи: <b>{current['created_tasks']}</b>\n"
+        f"🆕 Задачи в спринтах месяца: <b>{current['sprint_tasks']}</b>\n"
         f"<i>(Task DEV, Баг, Task BA, Улучшение, Задание)</i>\n"
-        f"{created_diff_line}\n\n"
+        f"{sprint_diff_line}\n\n"
         f"<i>Сравнение — с тем же отрезком прошлого месяца (01–{end_day:02d} число)</i>"
     )
     return text
