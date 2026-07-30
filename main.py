@@ -29,7 +29,7 @@ from monitors.monthly_report import check_monthly_report, register_monthly_repor
 from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
 from handlers.faq_handler import register_faq_handlers
 from handlers.team_tasks_handler import register_team_tasks_handlers
-from handlers.help_handler import register_help_handlers
+from handlers.help_handler import register_help_handlers, help_data
 from handlers.bugreport_handler import register_bugreport_handlers
 from services.db_service import init_db, close_db, get_latest_builds as get_stand_builds_from_db
 from web.miniapp_api import setup_miniapp_routes
@@ -141,14 +141,51 @@ webhook_handler = WebhookHandler(
     smoke_test_workflows=SMOKE_TEST_WORKFLOWS,
 )
 
+# =======================
+# Mini App Services
+# =======================
+# Создаем "клиенты"-заглушки, которые пробрасывают вызовы к существующим
+# функциям и переменным в твоем коде. Это позволяет miniapp_api.py
+# работать с ними в едином стиле (services['jira'].create_issue(...)).
+
+class JiraClientMock:
+    def __init__(self, config):
+        self.config = config
+    async def create_issue(self, title, description, priority, component):
+        # Используем существующую функцию из FSM-хендлера
+        return await create_jira_issue(bot, self.config, title, description, "Mini App", priority=priority, component=component)
+
+class StandsConfigMock:
+    async def get_recent_builds(self, key, limit=10):
+        # Используем существующую функцию из db_service
+        return await get_stand_builds_from_db(key, limit)
+
+class GithubStoreMock:
+    def __init__(self, handler):
+        self.handler = handler
+    async def get_last_event(self):
+        # Просто для примера, т.к. у тебя нет явного хранилища.
+        # В идеале, webhook_handler должен сохранять последнее событие.
+        return {
+            "actor": "system", "branch": "n/a", "commit_message": "No event store",
+            "timestamp": "n/a", "conclusion": "pending"
+        }
+
+jira_client = JiraClientMock(JIRA_CONFIG)
+stands_config = StandsConfigMock()
+github_store = GithubStoreMock(webhook_handler)
+
+# ask_engine уже является объектом ai_service, который можно передать напрямую
+ask_engine = ai_service
+
 
 setup_miniapp_routes(app, services={ # 'app' is now defined
     "jira": jira_client,           # твой существующий Jira-клиент
     "github_events": github_store, # хранилище последних webhook-событий
     "stands": stands_config,       # то, что уже отдаёт /stands
     "ask": ask_engine,             # confluence-поиск из /ask
-    "help": None,                  # пока не структурировано — оставь None
-    "releases": None,
+    "help": help_data,             # категории help из help_handler
+    "releases": None,              # пока не реализовано
 })
 
 # =======================
