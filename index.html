@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MechtaBot Console</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg:#0b0d12;
+    --surface:#12151c;
+    --surface-2:#181d29;
+    --border:#232838;
+    --text:#e8ebf2;
+    --muted:#8891a3;
+    --accent:#5b7fff;
+    --accent-dim:#5b7fff26;
+    --ok:#34d399;
+    --warn:#f5a623;
+    --danger:#ff5c7a;
+    --radius:14px;
+    --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+    --sans:-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); overscroll-behavior-y:contain;}
+  body{
+    padding-bottom:78px;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 20% -10%, #1a2140 0%, transparent 45%),
+      var(--bg);
+  }
+  ::selection{background:var(--accent-dim);}
+  a{color:var(--accent); text-decoration:none;}
+  button{font-family:inherit;}
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    position:sticky; top:0; z-index:20;
+    background:rgba(11,13,18,.85); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border);
+    padding:14px 18px 12px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .brand{display:flex; align-items:baseline; gap:8px; font-family:var(--mono);}
+  .brand .prompt{color:var(--accent); font-weight:700;}
+  .brand .cursor{display:inline-block; width:8px; height:16px; background:var(--accent); margin-left:2px; animation:blink 1.1s steps(1) infinite; vertical-align:-2px;}
+  @keyframes blink{50%{opacity:0;}}
+  .brand-name{font-size:15px; font-weight:600; letter-spacing:.2px;}
+  .live-dot{width:7px; height:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px #34d39926; display:inline-block; margin-right:6px;}
+  .clock{font-family:var(--mono); font-size:12px; color:var(--muted);}
+
+  /* ---------- layout ---------- */
+  main{padding:16px; max-width:640px; margin:0 auto;}
+  .page{display:none; animation:fadein .25s ease;}
+  .page.active{display:block;}
+  @keyframes fadein{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+
+  h1.page-title{font-family:var(--mono); font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin:4px 2px 14px;}
+  h1.page-title span{color:var(--accent);}
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px 16px 18px;
+    margin-bottom:14px;
+  }
+  .card-cmd{
+    font-family:var(--mono); font-size:11.5px; color:var(--accent);
+    display:flex; align-items:center; gap:6px; margin-bottom:10px;
+    text-transform:none;
+  }
+  .card-cmd::before{content:'$'; color:var(--muted);}
+  .card h2{font-size:16px; margin:0 0 4px; font-weight:650;}
+  .card p.desc{color:var(--muted); font-size:13px; margin:0 0 10px; line-height:1.45;}
+
+  .stat-row{display:flex; gap:10px; margin-top:10px;}
+  .stat{
+    flex:1; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:10px; padding:10px 12px;
+  }
+  .stat .num{font-family:var(--mono); font-size:20px; font-weight:700;}
+  .stat .lbl{font-size:11px; color:var(--muted); margin-top:2px;}
+
+  .badge{
+    font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:20px;
+    background:var(--accent-dim); color:var(--accent); display:inline-block;
+  }
+  .badge.ok{background:#34d39926; color:var(--ok);}
+  .badge.warn{background:#f5a62326; color:var(--warn);}
+  .badge.danger{background:#ff5c7a26; color:var(--danger);}
+
+  .demo-flag{
+    font-size:10.5px; color:var(--warn); font-family:var(--mono);
+    border:1px dashed #f5a62355; border-radius:8px; padding:3px 8px; display:inline-block; margin-bottom:10px;
+  }
+
+  /* ---------- chart ---------- */
+  canvas{width:100%; display:block;}
+
+  /* ---------- lists ---------- */
+  .list-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 4px; border-bottom:1px solid var(--border);
+  }
+  .list-item:last-child{border-bottom:none;}
+  .list-item .title{font-weight:600; font-size:14px;}
+  .list-item .sub{font-size:12px; color:var(--muted); margin-top:2px; font-family:var(--mono);}
+
+  /* ---------- stands ---------- */
+  .stand-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px 16px; margin-bottom:10px; cursor:pointer; transition:border-color .15s;
+  }
+  .stand-card:active{border-color:var(--accent);}
+  .stand-head{display:flex; justify-content:space-between; align-items:center;}
+  .stand-name{font-weight:650; font-size:14.5px;}
+  .stand-url{font-family:var(--mono); font-size:11.5px; color:var(--muted); margin-top:3px;}
+  .stand-detail{margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:none;}
+  .stand-detail.open{display:block;}
+  .build-row{padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;}
+  .build-row:last-child{border-bottom:none;}
+  .build-row .commit{font-weight:500;}
+  .build-row .meta{font-family:var(--mono); color:var(--muted); font-size:11.5px; margin-top:2px;}
+
+  /* ---------- forms ---------- */
+  label{display:block; font-size:12px; color:var(--muted); margin:14px 0 6px; font-family:var(--mono); text-transform:uppercase; letter-spacing:.5px;}
+  label:first-of-type{margin-top:0;}
+  input[type=text], textarea, select{
+    width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    border-radius:10px; padding:11px 12px; font-size:14px; font-family:var(--sans); outline:none;
+  }
+  input[type=text]:focus, textarea:focus, select:focus{border-color:var(--accent);}
+  textarea{min-height:96px; resize:vertical;}
+  .priority-row{display:flex; gap:8px;}
+  .priority-opt{
+    flex:1; text-align:center; padding:10px 4px; border-radius:10px; border:1px solid var(--border);
+    background:var(--surface-2); font-size:12.5px; cursor:pointer; user-select:none;
+  }
+  .priority-opt.selected{border-color:var(--accent); background:var(--accent-dim); color:var(--accent); font-weight:600;}
+  .btn{
+    width:100%; padding:13px; border-radius:10px; border:none; background:var(--accent);
+    color:#fff; font-weight:650; font-size:14.5px; margin-top:18px; cursor:pointer;
+  }
+  .btn:active{opacity:.85;}
+  .btn:disabled{opacity:.5;}
+  .btn.secondary{background:var(--surface-2); border:1px solid var(--border); color:var(--text);}
+  .result-box{margin-top:14px; padding:12px 14px; border-radius:10px; font-size:13.5px; display:none;}
+  .result-box.show{display:block;}
+  .result-box.ok{background:#34d39918; border:1px solid #34d39944; color:var(--ok);}
+  .result-box.err{background:#ff5c7a18; border:1px solid #ff5c7a44; color:var(--danger);}
+
+  /* ---------- ask chat ---------- */
+  .chat{display:flex; flex-direction:column; gap:10px; margin-bottom:12px; min-height:120px;}
+  .msg{max-width:85%; padding:10px 13px; border-radius:14px; font-size:13.5px; line-height:1.45;}
+  .msg.user{align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px;}
+  .msg.bot{align-self:flex-start; background:var(--surface-2); border:1px solid var(--border); border-bottom-left-radius:4px;}
+  .msg.bot .src{display:block; margin-top:6px; font-size:11px; color:var(--muted);}
+  .ask-input-row{display:flex; gap:8px; position:sticky; bottom:0;}
+  .ask-input-row input{flex:1;}
+  .ask-input-row button{
+    background:var(--accent); border:none; color:#fff; border-radius:10px; width:44px; font-size:16px;
+  }
+
+  /* ---------- help ---------- */
+  .help-cat{margin-bottom:10px;}
+  .help-cat summary{
+    list-style:none; cursor:pointer; padding:14px 16px; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--radius); font-weight:600; font-size:14px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .help-cat summary::-webkit-details-marker{display:none;}
+  .help-cat summary::after{content:'+'; color:var(--muted); font-family:var(--mono); font-weight:400;}
+  .help-cat[open] summary::after{content:'–';}
+  .help-cat .body{padding:14px 16px 4px; font-size:13.5px; color:var(--muted); line-height:1.6;}
+  .help-cat .body code{background:var(--surface-2); padding:1px 6px; border-radius:5px; color:var(--accent); font-family:var(--mono); font-size:12.5px;}
+
+  /* ---------- bottom nav ---------- */
+  nav.bottom{
+    position:fixed; bottom:0; left:0; right:0; z-index:30;
+    background:rgba(11,13,18,.92); backdrop-filter:blur(14px);
+    border-top:1px solid var(--border);
+    display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .nav-btn{
+    flex:1; background:none; border:none; color:var(--muted); display:flex; flex-direction:column;
+    align-items:center; gap:3px; padding:6px 2px; font-size:10px; font-family:var(--sans); border-radius:10px;
+  }
+  .nav-btn .icon{font-size:19px; line-height:1;}
+  .nav-btn.active{color:var(--accent);}
+  .nav-btn.active .icon{transform:translateY(-1px);}
+
+  .empty{text-align:center; padding:30px 10px; color:var(--muted); font-size:13px;}
+  .empty .icon{font-size:26px; display:block; margin-bottom:8px;}
+
+  .skeleton{background:linear-gradient(90deg,var(--surface-2) 25%, #1e2433 37%, var(--surface-2) 63%); background-size:400% 100%; animation:shimmer 1.4s infinite; border-radius:8px; height:14px; margin:6px 0;}
+  @keyframes shimmer{0%{background-position:100% 0;} 100%{background-position:-100% 0;}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="prompt">&gt;</span>
+    <span class="brand-name">mechtabot_console</span>
+    <span class="cursor"></span>
+  </div>
+  <div class="clock"><span class="live-dot"></span><span id="clockText">--:--</span></div>
+</header>
+
+<main id="main">
+
+  <!-- ================= HOME ================= -->
+  <section class="page active" data-page="home">
+    <h1 class="page-title">$ dashboard <span>// обзор</span></h1>
+
+    <div class="card">
+      <div class="card-cmd">/monthreport</div>
+      <h2>Активность за месяц</h2>
+      <div id="homeDemoFlag"></div>
+      <canvas id="activityChart" height="140"></canvas>
+      <div class="stat-row" id="homeStats">
+        <div class="stat"><div class="num">–</div><div class="lbl">задач</div></div>
+        <div class="stat"><div class="num">–</div><div class="lbl">багов</div></div>
+        <div class="stat"><div class="num">–</div><div class="lbl">релизов</div></div>
+      </div>
+    </div>
+
+    <div class="card" id="releaseCard">
+      <div class="card-cmd">release --latest</div>
+      <h2>Последний релиз</h2>
+      <div class="skeleton" style="width:60%"></div>
+      <div class="skeleton" style="width:90%"></div>
+    </div>
+
+    <div class="card" id="webhookCard">
+      <div class="card-cmd">github --last-event</div>
+      <h2>Последнее событие GitHub</h2>
+      <div class="skeleton" style="width:70%"></div>
+      <div class="skeleton" style="width:50%"></div>
+    </div>
+
+    <div class="card" id="nextReleaseCard">
+      <div class="card-cmd">jira --release-status</div>
+      <h2>Статус будущего релиза</h2>
+      <div class="skeleton" style="width:80%"></div>
+    </div>
+  </section>
+
+  <!-- ================= STANDS ================= -->
+  <section class="page" data-page="stands">
+    <h1 class="page-title">$ /stands <span>// окружения</span></h1>
+    <div id="standsList">
+      <div class="skeleton" style="height:64px;"></div>
+      <div class="skeleton" style="height:64px;"></div>
+      <div class="skeleton" style="height:64px;"></div>
+    </div>
+  </section>
+
+  <!-- ================= JIRA ================= -->
+  <section class="page" data-page="jira">
+    <h1 class="page-title">$ /jira <span>// новый баг</span></h1>
+    <div class="card">
+      <div class="card-cmd">jira issue create</div>
+      <label>Заголовок</label>
+      <input type="text" id="jiraTitle" placeholder="Коротко, что сломалось">
+
+      <label>Описание</label>
+      <textarea id="jiraDesc" placeholder="Что произошло, где, при каких условиях"></textarea>
+
+      <label>Приоритет</label>
+      <div class="priority-row" id="jiraPriority">
+        <div class="priority-opt" data-val="Low">🟢 Низкий</div>
+        <div class="priority-opt selected" data-val="Medium">🟡 Средний</div>
+        <div class="priority-opt" data-val="High">🔴 Высокий</div>
+      </div>
+
+      <label>Компонент <span style="color:var(--muted); text-transform:none;">(необязательно)</span></label>
+      <input type="text" id="jiraComponent" placeholder="Например: Front, Back, Integrations">
+
+      <button class="btn" id="jiraSubmit">Создать задачу</button>
+      <div class="result-box" id="jiraResult"></div>
+    </div>
+  </section>
+
+  <!-- ================= ASK ================= -->
+  <section class="page" data-page="ask">
+    <h1 class="page-title">$ /ask <span>// вопрос по документации</span></h1>
+    <div class="card">
+      <div class="card-cmd">confluence search</div>
+      <div class="chat" id="askChat">
+        <div class="msg bot">Привет! Спроси что-нибудь по документации — поищу в Confluence и отвечу.</div>
+      </div>
+      <div class="ask-input-row">
+        <input type="text" id="askInput" placeholder="Как оформить командировку?">
+        <button id="askSend">➤</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REPORT ================= -->
+  <section class="page" data-page="report">
+    <h1 class="page-title">$ /monthreport <span>// с 1 числа</span></h1>
+    <div class="card">
+      <div class="card-cmd" id="reportRange">monthreport --from=... --to=...</div>
+      <div id="reportDemoFlag"></div>
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="repReleases">–</div><div class="lbl">релизов</div></div>
+        <div class="stat"><div class="num" id="repTasks">–</div><div class="lbl">задач</div></div>
+        <div class="stat"><div class="num" id="repBugs">–</div><div class="lbl">багов</div></div>
+      </div>
+      <canvas id="reportChart" height="150" style="margin-top:16px;"></canvas>
+    </div>
+    <div class="card">
+      <h2 style="margin-bottom:10px;">Задачи периода</h2>
+      <div id="reportTaskList"></div>
+    </div>
+  </section>
+
+  <!-- ================= HELP ================= -->
+  <section class="page" data-page="help">
+    <h1 class="page-title">$ /help <span>// что умеет бот</span></h1>
+    <div id="helpList"></div>
+  </section>
+
+</main>
+
+<nav class="bottom">
+  <button class="nav-btn active" data-nav="home"><span class="icon">🏠</span>Обзор</button>
+  <button class="nav-btn" data-nav="stands"><span class="icon">🖥</span>Стенды</button>
+  <button class="nav-btn" data-nav="jira"><span class="icon">🐞</span>Баг</button>
+  <button class="nav-btn" data-nav="ask"><span class="icon">💬</span>Спросить</button>
+  <button class="nav-btn" data-nav="report"><span class="icon">📊</span>Отчет</button>
+  <button class="nav-btn" data-nav="help"><span class="icon">ℹ️</span>Помощь</button>
+</nav>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ===================================================================
+     КОНФИГ
+     Замени на адрес своего backend (Render). Бэкенд должен отдавать
+     JSON-эндпоинты, описанные ниже в APIов — их пока нет в существующем
+     aiohttp-приложении бота (main.py), их нужно добавить отдельно.
+     Пока API недоступен/не отвечает — интерфейс показывает демо-данные
+     с пометкой "демо", чтобы страница всегда выглядела рабочей.
+  =================================================================== */
+  var API_BASE = window.MECHTABOT_API_BASE || "https://mechtabot.onrender.com";
+
+  var ENDPOINTS = {
+    monthReport:   API_BASE + "/api/monthreport",
+    latestRelease: API_BASE + "/api/release/latest",
+    lastWebhook:   API_BASE + "/api/github/last-event",
+    nextRelease:   API_BASE + "/api/release/next-status",
+    stands:        API_BASE + "/api/stands",
+    standDetail:   function(key){ return API_BASE + "/api/stands/" + encodeURIComponent(key); },
+    jiraCreate:    API_BASE + "/api/jira/create",
+    ask:           API_BASE + "/api/ask",
+    help:          API_BASE + "/api/help"
+  };
+
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) {
+    try {
+      tg.ready();
+      tg.expand();
+      if (tg.setHeaderColor) tg.setHeaderColor("#0b0d12");
+      if (tg.setBackgroundColor) tg.setBackgroundColor("#0b0d12");
+    } catch(e) {}
+  }
+
+  function initData(){
+    return (tg && tg.initData) ? tg.initData : "";
+  }
+
+  function apiFetch(url, opts){
+    opts = opts || {};
+    opts.headers = Object.assign({
+      "Content-Type": "application/json",
+      "X-Telegram-Init-Data": initData()
+    }, opts.headers || {});
+    return fetch(url, opts).then(function(r){
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+
+  /* ===================== навигация ===================== */
+  var pages = document.querySelectorAll(".page");
+  var navBtns = document.querySelectorAll(".nav-btn");
+  var loaded = {};
+
+  function goTo(name){
+    pages.forEach(function(p){ p.classList.toggle("active", p.dataset.page === name); });
+    navBtns.forEach(function(b){ b.classList.toggle("active", b.dataset.nav === name); });
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+    if (!loaded[name]) { loaded[name] = true; loadPage(name); }
+  }
+  navBtns.forEach(function(b){ b.addEventListener("click", function(){ goTo(b.dataset.nav); }); });
+
+  function loadPage(name){
+    if (name === "home") loadHome();
+    if (name === "stands") loadStands();
+    if (name === "ask") {} // ленивая загрузка не нужна, чат пуст изначально
+    if (name === "report") loadReport();
+    if (name === "help") loadHelp();
+  }
+
+  /* ===================== часы ===================== */
+  function tickClock(){
+    var d = new Date();
+    var hh = String(d.getHours()).padStart(2,"0");
+    var mm = String(d.getMinutes()).padStart(2,"0");
+    document.getElementById("clockText").textContent = hh + ":" + mm;
+  }
+  tickClock(); setInterval(tickClock, 15000);
+
+  /* ===================== утилиты ===================== */
+  function esc(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function flagDemo(el){
+    el.innerHTML = '<span class="demo-flag">⚠ демо-данные — API недоступен</span>';
+  }
+  function clearFlag(el){ el.innerHTML = ""; }
+
+  function drawBarChart(canvas, labels, values, color){
+    var ctx = canvas.getContext("2d");
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth || 300, h = canvas.height;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0,0,w,h);
+    var max = Math.max.apply(null, values.concat([1]));
+    var gap = 6;
+    var barW = (w - gap * (values.length - 1)) / values.length;
+    values.forEach(function(v, i){
+      var barH = Math.max(2, (v / max) * (h - 22));
+      var x = i * (barW + gap);
+      var y = h - barH - 16;
+      ctx.fillStyle = color || "#5b7fff";
+      ctx.globalAlpha = 0.55 + 0.45 * (v / max);
+      roundRect(ctx, x, y, barW, barH, 4);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      if (labels && labels[i] && values.length <= 15) {
+        ctx.fillStyle = "#8891a3";
+        ctx.font = "9px JetBrains Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(labels[i], x + barW/2, h - 4);
+      }
+    });
+  }
+  function roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  /* ===================== демо-данные (fallback) ===================== */
+  function demoMonthData(){
+    var days = new Date().getDate();
+    var labels = [], values = [];
+    for (var i=1;i<=Math.min(days,30);i++){
+      labels.push(String(i));
+      values.push(Math.floor(Math.random()*6));
+    }
+    return {
+      tasks: values.reduce(function(a,b){return a+b;},0),
+      bugs: Math.floor(values.reduce(function(a,b){return a+b;},0)*1.6),
+      releases: Math.max(1, Math.floor(days/10)),
+      days: labels, byDay: values
+    };
+  }
+
+  /* ===================== HOME ===================== */
+  function loadHome(){
+    var flagEl = document.getElementById("homeDemoFlag");
+    apiFetch(ENDPOINTS.monthReport).then(function(data){
+      clearFlag(flagEl);
+      renderHomeStats(data);
+    }).catch(function(){
+      flagDemo(flagEl);
+      renderHomeStats(demoMonthData());
+    });
+
+    apiFetch(ENDPOINTS.latestRelease).then(renderReleaseCard).catch(function(){
+      renderReleaseCard({
+        demo:true, version:"3.22.1", date:"28.07.2026",
+        description:"Исправлены задержки при синхронизации остатков и починен экспорт отчетов в 1С.",
+        url:null
+      });
+    });
+
+    apiFetch(ENDPOINTS.lastWebhook).then(renderWebhookCard).catch(function(){
+      renderWebhookCard({
+        demo:true, actor:"peaceffuul", branch:"predprod", commit:"fix: синхронизация остатков",
+        time:"29.07.2026 18:42", conclusion:"success"
+      });
+    });
+
+    apiFetch(ENDPOINTS.nextRelease).then(renderNextRelease).catch(function(){
+      renderNextRelease({demo:true, name:"3.23.0", total:14, done:9, inProgress:3, pending:2});
+    });
+  }
+
+  function renderHomeStats(data){
+    var stats = document.getElementById("homeStats");
+    stats.innerHTML =
+      stat(data.tasks, "задач") + stat(data.bugs, "багов") + stat(data.releases, "релизов");
+    var canvas = document.getElementById("activityChart");
+    drawBarChart(canvas, data.days || [], data.byDay || [], "#5b7fff");
+  }
+  function stat(num, lbl){
+    return '<div class="stat"><div class="num">'+esc(num)+'</div><div class="lbl">'+esc(lbl)+'</div></div>';
+  }
+
+  function renderReleaseCard(d){
+    var el = document.getElementById("releaseCard");
+    var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
+    el.innerHTML =
+      '<div class="card-cmd">release --latest</div>' +
+      '<h2>Последний релиз</h2>' + demo +
+      '<div style="display:flex; align-items:center; gap:8px; margin-top:6px;">' +
+        '<span class="badge ok">' + esc(d.version || "—") + '</span>' +
+        '<span style="font-family:var(--mono); font-size:12px; color:var(--muted);">' + esc(d.date || "") + '</span>' +
+      '</div>' +
+      '<p class="desc" style="margin-top:10px;">' + esc(d.description || "Описание отсутствует.") + '</p>' +
+      (d.url ? '<a href="'+esc(d.url)+'" target="_blank">Открыть в Jira →</a>' : "");
+  }
+
+  function renderWebhookCard(d){
+    var el = document.getElementById("webhookCard");
+    var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
+    var badgeClass = d.conclusion === "success" ? "ok" : d.conclusion === "failure" ? "danger" : "warn";
+    el.innerHTML =
+      '<div class="card-cmd">github --last-event</div>' +
+      '<h2>Последнее событие GitHub</h2>' + demo +
+      '<div class="list-item" style="border:none; padding-top:6px;">' +
+        '<div>' +
+          '<div class="title">@' + esc(d.actor || "unknown") + ' → <code style="font-family:var(--mono)">' + esc(d.branch || "?") + '</code></div>' +
+          '<div class="sub">' + esc(d.commit || "") + '</div>' +
+        '</div>' +
+        '<span class="badge ' + badgeClass + '">' + esc(d.conclusion || "?") + '</span>' +
+      '</div>' +
+      '<div class="sub" style="padding-left:4px;">' + esc(d.time || "") + '</div>';
+  }
+
+  function renderNextRelease(d){
+    var el = document.getElementById("nextReleaseCard");
+    var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
+    var pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
+    el.innerHTML =
+      '<div class="card-cmd">jira --release-status</div>' +
+      '<h2>Релиз ' + esc(d.name || "?") + '</h2>' + demo +
+      '<div style="background:var(--surface-2); border-radius:8px; height:10px; overflow:hidden; margin:10px 0 8px;">' +
+        '<div style="width:'+pct+'%; height:100%; background:linear-gradient(90deg, var(--accent), var(--ok));"></div>' +
+      '</div>' +
+      '<div class="sub" style="font-size:12px; margin-bottom:10px;">' + pct + '% готово · ' + esc(d.done||0) + ' из ' + esc(d.total||0) + '</div>' +
+      '<div class="stat-row">' +
+        stat(d.done||0, "готово") + stat(d.inProgress||0, "в работе") + stat(d.pending||0, "ожидает") +
+      '</div>';
+  }
+
+  /* ===================== STANDS ===================== */
+  function loadStands(){
+    var wrap = document.getElementById("standsList");
+    apiFetch(ENDPOINTS.stands).then(function(list){
+      renderStands(list, false);
+    }).catch(function(){
+      renderStands([
+        {key:"deploy preprod", label:"PREPROD", url:"https://pp.yc.mechta.kz/", status:"ok"},
+        {key:"deploy d2", label:"D2", url:"http://d2.im.mdev.kz/", status:"ok"},
+        {key:"deploy d3", label:"D3", url:"http://d3.im.mdev.kz/", status:"warn"},
+        {key:"deploy ssr prod", label:"PRODUCTION", url:"https://mechta.kz/", status:"ok"}
+      ], true);
+    });
+  }
+
+  function renderStands(list, demo){
+    var wrap = document.getElementById("standsList");
+    if (!list || !list.length){
+      wrap.innerHTML = '<div class="empty"><span class="icon">🖥</span>Стенды не найдены</div>';
+      return;
+    }
+    var demoTag = demo ? '<span class="demo-flag">⚠ демо-данные — API недоступен</span>' : "";
+    wrap.innerHTML = demoTag + list.map(function(s){
+      var badgeClass = s.status === "ok" ? "ok" : s.status === "warn" ? "warn" : "danger";
+      return (
+        '<div class="stand-card" data-key="'+esc(s.key)+'">' +
+          '<div class="stand-head">' +
+            '<div>' +
+              '<div class="stand-name">🖥 ' + esc(s.label) + '</div>' +
+              '<div class="stand-url">' + esc(s.url || "") + '</div>' +
+            '</div>' +
+            '<span class="badge '+badgeClass+'">' + (s.status === "ok" ? "online" : s.status || "?") + '</span>' +
+          '</div>' +
+          '<div class="stand-detail" id="detail-'+esc(s.key)+'"></div>' +
+        '</div>'
+      );
+    }).join("");
+
+    wrap.querySelectorAll(".stand-card").forEach(function(card){
+      card.addEventListener("click", function(){
+        var key = card.dataset.key;
+        var detail = card.querySelector(".stand-detail");
+        var willOpen = !detail.classList.contains("open");
+        detail.classList.toggle("open");
+        if (willOpen && !detail.dataset.loaded){
+          detail.dataset.loaded = "1";
+          detail.innerHTML = '<div class="skeleton" style="height:40px;"></div>';
+          apiFetch(ENDPOINTS.standDetail(key)).then(function(builds){
+            renderBuilds(detail, builds);
+          }).catch(function(){
+            renderBuilds(detail, [
+              {commit:"fix: обработка пустого ответа API", actor:"nurgi17", date:"29.07.2026 14:02"},
+              {commit:"chore: обновление зависимостей", actor:"peaceffuul", date:"28.07.2026 09:15"}
+            ]);
+          });
+        }
+      });
+    });
+  }
+
+  function renderBuilds(detail, builds){
+    if (!builds || !builds.length){
+      detail.innerHTML = '<div class="empty" style="padding:14px 0;">Данных о сборках пока нет</div>';
+      return;
+    }
+    detail.innerHTML = builds.map(function(b, i){
+      return (
+        '<div class="build-row">' +
+          '<div class="commit">' + (i===0 ? '🟢 ' : '🔹 ') + esc(b.commit || "—") + '</div>' +
+          '<div class="meta">@' + esc(b.actor || "?") + ' · ' + esc(b.date || "") + '</div>' +
+        '</div>'
+      );
+    }).join("");
+  }
+
+  /* ===================== JIRA FORM ===================== */
+  var jiraPriority = "Medium";
+  document.querySelectorAll("#jiraPriority .priority-opt").forEach(function(opt){
+    opt.addEventListener("click", function(){
+      document.querySelectorAll("#jiraPriority .priority-opt").forEach(function(o){ o.classList.remove("selected"); });
+      opt.classList.add("selected");
+      jiraPriority = opt.dataset.val;
+    });
+  });
+
+  document.getElementById("jiraSubmit").addEventListener("click", function(){
+    var btn = this;
+    var title = document.getElementById("jiraTitle").value.trim();
+    var desc = document.getElementById("jiraDesc").value.trim();
+    var component = document.getElementById("jiraComponent").value.trim();
+    var resultBox = document.getElementById("jiraResult");
+    resultBox.className = "result-box";
+
+    if (!title){
+      showResult(resultBox, false, "Укажи заголовок задачи.");
+      return;
+    }
+
+    btn.disabled = true; btn.textContent = "Создаю...";
+
+    apiFetch(ENDPOINTS.jiraCreate, {
+      method: "POST",
+      body: JSON.stringify({
+        title: title, description: desc, priority: jiraPriority, component: component,
+        author: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ?
+          (tg.initDataUnsafe.user.first_name + " " + (tg.initDataUnsafe.user.last_name || "")).trim() :
+          "Mini App"
+      })
+    }).then(function(res){
+      showResult(resultBox, true, "✅ Задача " + esc(res.key || "") + " создана" + (res.url ? (' — <a href="'+esc(res.url)+'" target="_blank">открыть</a>') : "."));
+      document.getElementById("jiraTitle").value = "";
+      document.getElementById("jiraDesc").value = "";
+      document.getElementById("jiraComponent").value = "";
+    }).catch(function(){
+      showResult(resultBox, false, "❌ Не удалось создать задачу. API недоступен — проверь, что backend запущен и адрес API_BASE указан верно.");
+    }).finally(function(){
+      btn.disabled = false; btn.textContent = "Создать задачу";
+    });
+  });
+
+  function showResult(box, ok, html){
+    box.className = "result-box show " + (ok ? "ok" : "err");
+    box.innerHTML = html;
+  }
+
+  /* ===================== ASK ===================== */
+  var askChat = document.getElementById("askChat");
+  var askInput = document.getElementById("askInput");
+  var askSend = document.getElementById("askSend");
+
+  function addMsg(role, html){
+    var div = document.createElement("div");
+    div.className = "msg " + role;
+    div.innerHTML = html;
+    askChat.appendChild(div);
+    askChat.scrollTop = askChat.scrollHeight;
+  }
+
+  function sendAsk(){
+    var q = askInput.value.trim();
+    if (!q) return;
+    addMsg("user", esc(q));
+    askInput.value = "";
+    askSend.disabled = true;
+    var thinkingId = "t" + Date.now();
+    addMsg("bot", '<span id="'+thinkingId+'">Ищу в документации…</span>');
+
+    apiFetch(ENDPOINTS.ask, { method:"POST", body: JSON.stringify({ question: q }) })
+      .then(function(res){
+        var srcHtml = (res.sources || []).map(function(s){
+          return '<a href="'+esc(s.url)+'" target="_blank">'+esc(s.title)+'</a>';
+        }).join(" · ");
+        document.getElementById(thinkingId).parentElement.innerHTML =
+          esc(res.answer || "Ответ не найден.") + (srcHtml ? '<span class="src">'+srcHtml+'</span>' : "");
+      })
+      .catch(function(){
+        document.getElementById(thinkingId).parentElement.innerHTML =
+          "⚠ API недоступен (демо-режим). В документации по запросу «" + esc(q) + "» обычно стоит проверить раздел FAQ бота — команда <code>/ask</code> работает через живой backend.";
+      })
+      .finally(function(){ askSend.disabled = false; });
+  }
+  askSend.addEventListener("click", sendAsk);
+  askInput.addEventListener("keydown", function(e){ if (e.key === "Enter") sendAsk(); });
+
+  /* ===================== REPORT ===================== */
+  function loadReport(){
+    var now = new Date();
+    var from = new Date(now.getFullYear(), now.getMonth(), 1);
+    document.getElementById("reportRange").textContent =
+      "monthreport --from=" + fmtDate(from) + " --to=" + fmtDate(now);
+
+    var flagEl = document.getElementById("reportDemoFlag");
+    apiFetch(ENDPOINTS.monthReport).then(function(data){
+      clearFlag(flagEl);
+      renderReport(data);
+    }).catch(function(){
+      flagDemo(flagEl);
+      renderReport(demoMonthData());
+    });
+  }
+  function fmtDate(d){
+    return String(d.getDate()).padStart(2,"0") + "." + String(d.getMonth()+1).padStart(2,"0") + "." + d.getFullYear();
+  }
+
+  function renderReport(data){
+    document.getElementById("repReleases").textContent = data.releases != null ? data.releases : "0";
+    document.getElementById("repTasks").textContent = data.tasks != null ? data.tasks : "0";
+    document.getElementById("repBugs").textContent = data.bugs != null ? data.bugs : "0";
+    drawBarChart(document.getElementById("reportChart"), data.days || [], data.byDay || [], "#34d399");
+
+    var listEl = document.getElementById("reportTaskList");
+    if (data.taskList && data.taskList.length){
+      listEl.innerHTML = data.taskList.map(function(t){
+        return (
+          '<div class="list-item">' +
+            '<div><div class="title">' + esc(t.key) + '</div><div class="sub">' + esc(t.summary || "") + '</div></div>' +
+            '<span class="badge">' + esc(t.status || "") + '</span>' +
+          '</div>'
+        );
+      }).join("");
+    } else {
+      listEl.innerHTML = '<div class="empty"><span class="icon">📭</span>Список задач подтянется, когда подключится backend</div>';
+    }
+  }
+
+  /* ===================== HELP ===================== */
+  var HELP_FALLBACK = [
+    {key:"jira", label:"🐞 Jira и баги", text:'<code>#bug</code>/<code>#jira</code> в тексте или фото — создаст подзадачу в Jira. <code>/jira</code> — пошаговая форма. <code>#check</code> — проверка живости.'},
+    {key:"stress", label:"🚦 Нагрузочное тестирование", text:'<code>/stress</code> — выбери стенд, число пользователей и длительность. Живой прогресс и отчет в чате. После деплоя запускается smoke-тест автоматически.'},
+    {key:"faq", label:"📚 FAQ / документация", text:'<code>/ask вопрос</code> или тег <code>#faq</code> — поиск ответа в Confluence.'},
+    {key:"team", label:"👥 Команда и спринт", text:'<code>/team</code> — задачи и подзадачи участника в активном спринте (без «Готово»/«Ожидает релиза»).'},
+    {key:"github", label:"🚀 GitHub и стенды", text:'<code>/stands</code> — статус последней сборки по каждому стенду. Уведомление о деплое приходит автоматически.'},
+    {key:"misc", label:"📅 Напоминания, релизы и HR", text:'Утро/вечер — напоминание про Clockster. О релизе бот сообщает сам, с AI-описанием. 30 числа — месячный отчет. <code>#hr</code> — HR-темы.'}
+  ];
+
+  function loadHelp(){
+    apiFetch(ENDPOINTS.help).then(renderHelp).catch(function(){ renderHelp(HELP_FALLBACK); });
+  }
+  function renderHelp(list){
+    var wrap = document.getElementById("helpList");
+    wrap.innerHTML = list.map(function(c, i){
+      return (
+        '<details class="help-cat"' + (i===0 ? " open" : "") + '>' +
+          '<summary>' + esc(c.label) + '</summary>' +
+          '<div class="body">' + (c.text || "") + '</div>' +
+        '</details>'
+      );
+    }).join("");
+  }
+
+  /* ===================== старт ===================== */
+  loadHome();
+})();
+</script>
+</body>
+</html>

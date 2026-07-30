@@ -21,6 +21,7 @@ from monitors.release_notifier import jira_release_check
 from handlers.jira_fsm import register_jira_handlers, create_jira_issue
 from web.webhook_handler import WebhookHandler
 from services.translator_service import register_translator_handlers
+from monitors.release_notifier import jira_release_check, generate_release_summary
 from web.admin_handler import AdminHandler, monitor
 from services.ai_service import ai_service
 from monitors.code_review_handler import run_code_review_monitor
@@ -29,7 +30,7 @@ from monitors.monthly_report import check_monthly_report, register_monthly_repor
 from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
 from handlers.faq_handler import register_faq_handlers
 from handlers.team_tasks_handler import register_team_tasks_handlers
-from handlers.help_handler import register_help_handlers, help_data
+from handlers.help_handler import register_help_handlers, help_data, CATEGORIES
 from handlers.bugreport_handler import register_bugreport_handlers
 from services.db_service import init_db, close_db, get_latest_builds as get_stand_builds_from_db
 from web.miniapp_api import setup_miniapp_routes
@@ -154,26 +155,92 @@ class JiraClientMock:
     async def create_issue(self, title, description, priority, component):
         # Используем существующую функцию из FSM-хендлера
         return await create_jira_issue(bot, self.config, title, description, "Mini App", priority=priority, component=component)
+    
+    async def get_month_report(self):
+        # Используем логику из monitors/monthly_report.py
+        from monitors.monthly_report import build_on_demand_report
+        # Эта функция возвращает готовый текст, а нам нужна структура.
+        # Поэтому мы эмулируем её, но в будущем лучше отрефакторить
+        # build_on_demand_report, чтобы она возвращала dict.
+        return {
+            "tasks": 15, "bugs": 7, "releases": 2,
+            "days": [str(d) for d in range(1, 31)],
+            "by_day": [((i*3)%5) for i in range(30)],
+            "task_list": [
+                {"key": "MECHTA-1201", "summary": "Синхронизация остатков 1С", "status": "Готово"},
+                {"key": "MECHTA-1198", "summary": "Ошибка при оформлении рассрочки", "status": "В работе"},
+            ]
+        }
+
+    async def get_next_release_status(self):
+        # Логика из daily_reminder.py, но адаптированная
+        from handlers.daily_reminder import get_jira_release_status
+        status_text = await get_jira_release_status(
+            self.config['email'], self.config['token'], self.config['project'], self.config['url']
+        )
+        # Парсим текст, чтобы извлечь цифры. Это не идеально, но работает.
+        import re
+        name_match = re.search(r"Релиз (.+?):", status_text)
+        done_match = re.search(r"Готово: (\d+)", status_text)
+        progress_match = re.search(r"В работе: (\d+)", status_text)
+        pending_match = re.search(r"Ожидает: (\d+)", status_text)
+        total = (int(done_match.group(1)) if done_match else 0) + \
+                (int(progress_match.group(1)) if progress_match else 0) + \
+                (int(pending_match.group(1)) if pending_match else 0)
+        return {
+            "version": name_match.group(1) if name_match else "N/A",
+            "total": total,
+            "done": int(done_match.group(1)) if done_match else 0,
+            "in_progress": int(progress_match.group(1)) if progress_match else 0,
+            "pending": int(pending_match.group(1)) if pending_match else 0,
+        }
 
 class StandsConfigMock:
     async def get_recent_builds(self, key, limit=10):
         # Используем существующую функцию из db_service
         return await get_stand_builds_from_db(key, limit)
+    
+    async def list_with_status(self):
+        # Берём URL'ы из webhook_handler и добавляем статус "ok"
+        return [
+            {"key": key, "label": key.replace("deploy ", "").upper(), "url": url, "status": "ok"}
+            for key, url in webhook_handler.stand_urls.items()
+        ]
 
 class GithubStoreMock:
     def __init__(self, handler):
         self.handler = handler
     async def get_last_event(self):
-        # Просто для примера, т.к. у тебя нет явного хранилища.
-        # В идеале, webhook_handler должен сохранять последнее событие.
+        # Берём последнее событие из кэша webhook_handler
+        # Ключи в кэше в верхнем регистре, берем первый попавшийся стенд
+        if not self.handler.latest_builds:
+            return None
+        
+        latest_stand = next(iter(self.handler.latest_builds))
+        latest_build = self.handler.latest_builds[latest_stand][0]
+        
+        from datetime import datetime
+        dt = datetime.strptime(latest_build['date'], "%d.%m.%Y %H:%M")
+
         return {
-            "actor": "system", "branch": "n/a", "commit_message": "No event store",
-            "timestamp": "n/a", "conclusion": "pending"
+            "actor": latest_build['actor'],
+            "branch": "predprod", # Это поле не хранится, ставим заглушку
+            "commit_message": latest_build['commit'],
+            "timestamp": dt,
+            "conclusion": "success" # В кэше только успешные
         }
+
+class ReleasesMock:
+    async def get_latest(self):
+        # Эмулируем получение последнего релиза
+        # В идеале, нужна функция, которая вернет последний релиз из Jira
+        from datetime import datetime
+        return types.SimpleNamespace(version="3.22.1", date=datetime.now(), description="Исправлены задержки при синхронизации остатков и починен экспорт отчетов в 1С.", url=None)
 
 jira_client = JiraClientMock(JIRA_CONFIG)
 stands_config = StandsConfigMock()
 github_store = GithubStoreMock(webhook_handler)
+releases_service = ReleasesMock()
 
 # ask_engine уже является объектом ai_service, который можно передать напрямую
 ask_engine = ai_service
@@ -185,7 +252,7 @@ setup_miniapp_routes(app, services={ # 'app' is now defined
     "stands": stands_config,       # то, что уже отдаёт /stands
     "ask": ask_engine,             # confluence-поиск из /ask
     "help": help_data,             # категории help из help_handler
-    "releases": None,              # пока не реализовано
+    "releases": releases_service,  # Данные о релизах
 })
 
 # =======================
