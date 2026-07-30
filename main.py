@@ -32,6 +32,8 @@ from handlers.team_tasks_handler import register_team_tasks_handlers
 from handlers.help_handler import register_help_handlers
 from handlers.bugreport_handler import register_bugreport_handlers
 from services.db_service import init_db, close_db, get_latest_builds as get_stand_builds_from_db
+from web.miniapp_api import setup_miniapp_routes
+
 
 
 
@@ -135,6 +137,16 @@ webhook_handler = WebhookHandler(
     smoke_test_callback=_smoke_test_callback,
     smoke_test_workflows=SMOKE_TEST_WORKFLOWS,
 )
+
+
+setup_miniapp_routes(app, services={
+    "jira": jira_client,           # твой существующий Jira-клиент
+    "github_events": github_store, # хранилище последних webhook-событий
+    "stands": stands_config,       # то, что уже отдаёт /stands
+    "ask": ask_engine,             # confluence-поиск из /ask
+    "help": None,                  # пока не структурировано — оставь None
+    "releases": None,
+})
 
 # =======================
 # Веб-сервер для Render
