@@ -117,6 +117,9 @@ logger = setup_logger()
 # Инициализация бота
 # =======================
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
+# Initialize aiohttp application globally
+app = web.Application()
 dp = Dispatcher()
 
 # Коллбэк для WebhookHandler: запускает smoke-тест после успешного деплоя
@@ -139,7 +142,7 @@ webhook_handler = WebhookHandler(
 )
 
 
-setup_miniapp_routes(app, services={
+setup_miniapp_routes(app, services={ # 'app' is now defined
     "jira": jira_client,           # твой существующий Jira-клиент
     "github_events": github_store, # хранилище последних webhook-событий
     "stands": stands_config,       # то, что уже отдаёт /stands
@@ -154,9 +157,8 @@ setup_miniapp_routes(app, services={
 async def handle_web_root(request):
     return web.Response(text="Bot is alive!")
 
-async def start_web_server(webhook_h: WebhookHandler, bot_info: types.User):
-    app = web.Application()
-    
+async def start_web_server(app: web.Application, webhook_h: WebhookHandler, bot_info: types.User): # Pass app as argument
+
     admin_h = AdminHandler(bot_username=bot_info.username)
 
     app.router.add_get('/', handle_web_root)
@@ -424,8 +426,8 @@ async def main():
     await init_db()
 
     # Запуск Health Check сервера
-    logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...")
-    asyncio.create_task(start_web_server(webhook_handler, bot_user))
+    logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...") # Pass the globally defined 'app'
+    asyncio.create_task(start_web_server(app, webhook_handler, bot_user))
 
     # Обновляем начальные статусы в админке
     monitor.update_status("Core", "OK")
