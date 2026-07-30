@@ -480,6 +480,12 @@ async def build_on_demand_report(
 # =======================
 def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
 
+
+# =======================
+# Команда /monthreport — отчет по запросу в любой момент
+# =======================
+def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
+
     @dp.message(F.text.startswith("/monthreport"))
     async def monthreport_command(message: Message):
         monitor.update_status("Monthly Report", "OK")
@@ -501,9 +507,8 @@ def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
         now = report_data["now"]
         
         # Calculate end_day for the previous month's comparison text
-        # Need to ensure previous["now"] exists or handle its absence
-        prev_month_now = report_data["previous"].get("now", now.replace(day=1) - timedelta(days=1))
-        end_day = min(now.day, calendar.monthrange(prev_month_now.year, prev_month_now.month)[1])
+        prev_ref = _prev_month_reference(now)
+        end_day = min(now.day, calendar.monthrange(prev_ref.year, prev_ref.month)[1])
 
         bugs_diff_line = _format_diff_line(current["bugs"], previous["bugs"])
         sprint_diff_line = _format_diff_line(current["sprint_tasks"], previous["sprint_tasks"])
@@ -521,33 +526,4 @@ def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
             f"{sprint_diff_line}\n\n"
             f"<i>Сравнение — с тем же отрезком прошлого месяца (01–{end_day:02d} число)</i>"
         )
-        await loading.edit_text(text)
-
-
-# =======================
-# Команда /monthreport — отчет по запросу в любой момент
-# =======================
-def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
-
-    @dp.message(F.text.startswith("/monthreport"))
-    async def monthreport_command(message: Message):
-        monitor.update_status("Monthly Report", "OK")
-        loading = await message.reply("⏳ Формирую отчет с начала месяца по текущий момент...")
-
-        try:
-            text = await build_on_demand_report(
-                jira_config['email'],
-                jira_config['token'],
-                jira_config['project'],
-                jira_config['url'],
-            )
-        except Exception as e:
-            logger.exception(f"Ошибка формирования отчета по запросу: {e}")
-            text = None
-
-        if text is None:
-            monitor.update_status("Monthly Report", "ERROR")
-            await loading.edit_text("❌ Не удалось получить данные из Jira для отчета. Попробуй позже.")
-            return
-
         await loading.edit_text(text)

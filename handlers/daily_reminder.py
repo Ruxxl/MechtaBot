@@ -74,59 +74,12 @@ async def handle_jira_release_status(callback: CallbackQuery,
                                      JIRA_URL):
     await callback.answer()
 
-    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
-
-    # Получаем версии проекта
-    versions_url = f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
-    async with aiohttp.ClientSession(auth=auth) as session:
-        async with session.get(versions_url, ssl=SSL_CONTEXT) as resp:
-            if resp.status != 200:
-                await callback.message.answer(f"❌ Не удалось получить версии проекта (статус {resp.status})")
-                return
-            versions = await resp.json()
-
-    # Фильтруем только невыпущенные версии
-    unreleased = [v for v in versions if not v.get("released", False)]
-    if not unreleased:
-        await callback.message.answer("✅ Все запланированные релизы уже выпущены!")
-        return
-
-    # Находим версию с наименьшим номером (следующую в очереди)
-    # Функция извлекает все числа из строки: "Хотфикс 3.22.1" -> [3, 22, 1]
-    def parse_version(v_name):
-        return [int(s) for s in re.findall(r'\d+', v_name)]
-
-    target_release = min(unreleased, key=lambda v: parse_version(v["name"]) or [0])
-    release_name = target_release["name"]
-    version_id = target_release.get("id")
-
-    jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id} ORDER BY priority DESC'
-    # Добавляем 'subtasks' в запрашиваемые поля для подсчета
-    search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status,subtasks&maxResults=200"
-
-    async with aiohttp.ClientSession(auth=auth) as session:
-        async with session.get(search_url, ssl=SSL_CONTEXT) as resp:
-            if resp.status != 200:
-                await callback.message.answer(f"❌ Не удалось получить задачи релиза (статус {resp.status})")
-                return
-            data = await resp.json()
-            issues = data.get("issues", [])
-            
-            # Подсчитываем общее количество подзадач (багов)
-            total_subtasks = sum(len(issue["fields"].get("subtasks", [])) for issue in issues)
-
-            if not issues:
-                text = f"✅ Задачи для релиза <b>{release_name}</b> не найдены."
-            else:
-                lines = [f"📊 <b>Статус задач будущего релиза {release_name}:</b>\n",
-                         f"🐞 Найдено багов: <b>{total_subtasks}</b>\n"]
-                for issue in issues:
-                    key = issue.get("key")
-                    summary = issue["fields"].get("summary", "Без названия")
-                    status = issue["fields"]["status"]["name"]
-                    url = f"{JIRA_URL}/browse/{key}"
-                    lines.append(f"🔹 <a href='{url}'>{key} — {summary}</a> — <b>{status}</b>")
-                text = "\n".join(lines)
+    text = await get_jira_release_status(
+        JIRA_EMAIL,
+        JIRA_API_TOKEN,
+        JIRA_PROJECT_KEY,
+        JIRA_URL
+    )
 
     # Ответ на callback всегда идет в тот же чат/поток, где была кнопка
     await callback.message.answer(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)

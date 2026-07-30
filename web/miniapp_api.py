@@ -311,6 +311,14 @@ async def get_last_github_event(request: web.Request) -> web.Response:
     event = await github_store.get_last_event()
     return json_response(
         {
+            "actor": "system",
+            "branch": "n/a",
+            "commit": "Событий пока нет",
+            "time": datetime.now().strftime("%d.%m.%Y %H:%M"),
+            "conclusion": "pending",
+        }
+    ) if event is None else json_response(
+        {
             "actor": event["actor"],
             "branch": event["branch"],
             "commit": event["commit_message"],

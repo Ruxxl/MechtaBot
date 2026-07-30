@@ -1,5 +1,6 @@
 import asyncio
 import os
+import types as std_types
 import logging
 from dotenv import load_dotenv
 from aiohttp import web
@@ -253,7 +254,7 @@ class ReleasesMock:
         # Эмулируем получение последнего релиза
         # В идеале, нужна функция, которая вернет последний релиз из Jira
         from datetime import datetime
-        return types.SimpleNamespace(version="3.22.1", date=datetime.now(), description="Исправлены задержки при синхронизации остатков и починен экспорт отчетов в 1С.", url=None)
+        return std_types.SimpleNamespace(version="3.22.1", date=datetime.now(), description="Исправлены задержки при синхронизации остатков и починен экспорт отчетов в 1С.", url=None)
 
 jira_client = JiraClientMock(JIRA_CONFIG)
 stands_config = StandsConfigMock()
@@ -261,6 +262,27 @@ github_store = GithubStoreMock(webhook_handler)
 releases_service = ReleasesMock()
 
 # ask_engine уже является объектом ai_service, который можно передать напрямую
+# Добавим ему метод answer для совместимости с Mini App API
+async def ai_answer_wrapper(question: str) -> dict:
+    from services.confluence_service import search_confluence
+    from handlers.faq_handler import _generate_answer as generate_faq_answer
+
+    pages = await search_confluence(CONFLUENCE_CONFIG, question, limit=3)
+    if not pages:
+        return {
+            "answer": "🤷 Не нашел релевантных страниц в документации по этому вопросу.",
+            "sources": []
+        }
+
+    answer_text = await generate_faq_answer(question, pages)
+    sources = [{"title": p['title'], "url": p['url']} for p in pages]
+    
+    return {
+        "answer": answer_text,
+        "sources": sources
+    }
+
+ai_service.answer = ai_answer_wrapper
 ask_engine = ai_service
 
 
