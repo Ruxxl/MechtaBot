@@ -65,6 +65,62 @@ def get_clockster_keyboard():
     )
 
 # =============================
+# Логика получения статуса релиза (для callback и Mini App)
+# =============================
+async def get_jira_release_status(
+    JIRA_EMAIL: str,
+    JIRA_API_TOKEN: str,
+    JIRA_PROJECT_KEY: str,
+    JIRA_URL: str
+) -> str:
+    """
+    Возвращает отформатированный HTML-текст со статусом следующего релиза.
+    """
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+
+    # Получаем версии проекта
+    versions_url = f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(versions_url, ssl=SSL_CONTEXT) as resp:
+            if resp.status != 200:
+                return f"❌ Не удалось получить версии проекта (статус {resp.status})"
+            versions = await resp.json()
+
+    # Фильтруем только невыпущенные версии
+    unreleased = [v for v in versions if not v.get("released", False)]
+    if not unreleased:
+        return "✅ Все запланированные релизы уже выпущены!"
+
+    # Находим версию с наименьшим номером (следующую в очереди)
+    def parse_version(v_name):
+        return [int(s) for s in re.findall(r'\d+', v_name)]
+
+    target_release = min(unreleased, key=lambda v: parse_version(v["name"]) or [0])
+    release_name = target_release["name"]
+    version_id = target_release.get("id")
+
+    jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id} ORDER BY priority DESC'
+    search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status,subtasks&maxResults=200"
+
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(search_url, ssl=SSL_CONTEXT) as resp:
+            if resp.status != 200:
+                return f"❌ Не удалось получить задачи релиза (статус {resp.status})"
+            data = await resp.json()
+            issues = data.get("issues", [])
+            
+            total_subtasks = sum(len(issue["fields"].get("subtasks", [])) for issue in issues)
+
+            if not issues:
+                return f"✅ Задачи для релиза <b>{release_name}</b> не найдены."
+            
+            lines = [f"📊 <b>Статус задач будущего релиза {release_name}:</b>\n",
+                     f"🐞 Найдено багов: <b>{total_subtasks}</b>\n"]
+            for issue in issues:
+                lines.append(f"🔹 <a href='{JIRA_URL}/browse/{issue['key']}'>{issue['key']} — {issue['fields']['summary']}</a> — <b>{issue['fields']['status']['name']}</b>")
+            return "\n".join(lines)
+
+# =============================
 # Callback кнопки "Посмотреть статус релиза"
 # =============================
 async def handle_jira_release_status(callback: CallbackQuery,
