@@ -22,9 +22,9 @@ MONTHS_RU = {
     9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь",
 }
 
-# Типы задач, которые считаем в строке "Созданные задачи" (см. типы проекта
-# в Jira). "Эпик" и "Подзадача" сознательно не учитываются: эпик — контейнер
-# для группы задач, подзадачи уже считаются отдельно (поле "bugs" ниже).
+# Типы задач, которые считаем в строке "Задачи в спринтах месяца" (см. типы
+# проекта в Jira). "Эпик" и "Подзадача" сознательно не учитываются: эпик —
+# контейнер для группы задач, подзадачи уже считаются отдельно (поле "bugs").
 SPRINT_TASK_TYPES = ["Task DEV", "Баг", "Task BA", "Улучшение", "Задание"]
 
 # Месяц, за который отчет уже отправлен (в формате "YYYY-MM").
@@ -97,11 +97,12 @@ async def _fetch_project_board_ids(session: aiohttp.ClientSession, base_url: str
 
 
 async def _fetch_sprint_ids_in_period(session: aiohttp.ClientSession, base_url: str, jira_project_key: str, start: datetime, end: datetime) -> list:
-    """Возвращает ID всех спринтов проекта (по всем его доскам), у которых
-    ДАТА НАЧАЛА спринта попадает в период [start, end] — то есть "спринты
-    этого месяца". Спринт может быть в состоянии active/closed/future —
-    берем все, чтобы не пропустить, например, спринт, который стартовал
-    в этом месяце, но еще не закрыт."""
+    """Возвращает ID всех спринтов проекта (по всем его доскам), которые
+    ПЕРЕСЕКАЮТСЯ с периодом [start, end] — то есть хотя бы часть дат спринта
+    (от startDate до endDate) попадает в отчетный месяц. Это включает и
+    спринты, начавшиеся в прошлом месяце, но завершившиеся в этом (например
+    спринт с 15 июня по 2 июля учитывается в отчете за июль). Спринт может
+    быть в состоянии active/closed/future — берем все."""
     board_ids = await _fetch_project_board_ids(session, base_url, jira_project_key)
     if not board_ids:
         logger.warning(f"Не найдено ни одной доски для проекта {jira_project_key} — спринты не будут учтены")
@@ -127,13 +128,30 @@ async def _fetch_sprint_ids_in_period(session: aiohttp.ClientSession, base_url: 
 
             for sprint in data.get("values", []):
                 sprint_start_str = sprint.get("startDate")
+                sprint_end_str = sprint.get("endDate")
                 if not sprint_start_str:
                     continue
                 try:
                     sprint_start = datetime.fromisoformat(sprint_start_str.replace("Z", "+00:00")).astimezone(TZ)
                 except ValueError:
                     continue
-                if start <= sprint_start <= end:
+
+                # endDate может отсутствовать у активных/future спринтов без
+                # заданной даты завершения — в этом случае считаем, что спринт
+                # длится "по настоящее время" (не исключаем по верхней границе).
+                if sprint_end_str:
+                    try:
+                        sprint_end = datetime.fromisoformat(sprint_end_str.replace("Z", "+00:00")).astimezone(TZ)
+                    except ValueError:
+                        sprint_end = sprint_start
+                else:
+                    sprint_end = sprint_start
+
+                # Пересечение диапазонов: спринт учитывается, если его период
+                # [sprint_start, sprint_end] пересекается с отчетным периодом
+                # [start, end] — то есть спринт "затрагивает" этот месяц, даже
+                # если стартовал раньше или закончится позже.
+                if sprint_start <= end and sprint_end >= start:
                     sprint_ids.add(sprint["id"])
 
             if data.get("isLast", True):
@@ -146,7 +164,8 @@ async def _fetch_sprint_ids_in_period(session: aiohttp.ClientSession, base_url: 
 async def _fetch_sprint_tasks_count(session: aiohttp.ClientSession, base_url: str, jira_project_key: str, sprint_ids: list) -> int:
     """Считает количество задач типов SPRINT_TASK_TYPES, которые лежат в
     указанных спринтах (JQL 'sprint in (...)' — задача считается один раз,
-    даже если попадала в несколько спринтов из списка)."""
+    даже если попадала в несколько спринтов из списка). Учитывает пагинацию
+    через nextPageToken — без нее результат может тихо обрезаться."""
     if not sprint_ids:
         return 0
 
@@ -155,22 +174,34 @@ async def _fetch_sprint_tasks_count(session: aiohttp.ClientSession, base_url: st
     jql = f'project="{jira_project_key}" AND issuetype in ({types_jql}) AND sprint in ({sprints_jql})'
 
     search_url = f"{base_url}/rest/api/3/search/jql"
-    payload = {
-        "jql": jql,
-        "fields": ["key"],
-        "maxResults": 200,
-    }
+    total = 0
+    next_page_token = None
 
     try:
-        async with session.post(search_url, json=payload) as resp:
-            if resp.status != 200:
-                logger.error(f"Ошибка поиска задач по спринтам: {resp.status}")
-                return 0
-            data = await resp.json()
-            return len(data.get("issues", []))
+        while True:
+            payload = {
+                "jql": jql,
+                "fields": ["key"],
+                "maxResults": 100,
+            }
+            if next_page_token:
+                payload["nextPageToken"] = next_page_token
+
+            async with session.post(search_url, json=payload) as resp:
+                if resp.status != 200:
+                    logger.error(f"Ошибка поиска задач по спринтам: {resp.status}")
+                    return total
+                data = await resp.json()
+
+            total += len(data.get("issues", []))
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        return total
     except Exception as e:
         logger.error(f"Ошибка запроса задач по спринтам: {e}")
-        return 0
+        return total
 
 
 # =======================
@@ -182,7 +213,7 @@ async def _fetch_period_report(jira_email, jira_token, jira_project_key, jira_ur
     вышедшим в [start, end], где "bugs" — суммарное количество подзадач во всех
     задачах этих релизов (та же логика, что уже используется в release_notifier.py),
     а "sprint_tasks" — количество задач типов SPRINT_TASK_TYPES в спринтах,
-    СТАРТОВАВШИХ в этом периоде (независимо от релизов и статуса задачи).
+    ПЕРЕСЕКАЮЩИХСЯ с этим периодом (независимо от релизов и статуса задачи).
     Возвращает None при ошибке запроса к Jira.
     """
     base_url = jira_url.rstrip("/")
@@ -239,7 +270,7 @@ async def _fetch_period_report(jira_email, jira_token, jira_project_key, jira_ur
                     total_tasks += len(issues)
                     total_bugs += sum(len(i["fields"].get("subtasks", [])) for i in issues)
 
-            # 4. Задачи в спринтах, стартовавших в периоде (см. SPRINT_TASK_TYPES)
+            # 4. Задачи в спринтах, пересекающихся с периодом (см. SPRINT_TASK_TYPES)
             sprint_ids = await _fetch_sprint_ids_in_period(session, base_url, jira_project_key, start, end)
             sprint_tasks = await _fetch_sprint_tasks_count(session, base_url, jira_project_key, sprint_ids)
 
