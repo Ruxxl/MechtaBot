@@ -204,6 +204,43 @@ async def _fetch_sprint_tasks_count(session: aiohttp.ClientSession, base_url: st
         return total
 
 
+async def _fetch_tasks_for_month_report(jira_email, jira_token, jira_project_key, jira_url, start: datetime, end: datetime):
+    """
+    Fetches a list of tasks (key, summary, status) for the given period.
+    """
+    base_url = jira_url.rstrip("/")
+    auth = aiohttp.BasicAuth(jira_email, jira_token)
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
+    # JQL для получения задач, которые были обновлены в течение месяца.
+    # Можно изменить на 'created >= ...' если нужны задачи, созданные в этот период.
+    jql = (
+        f'project="{jira_project_key}" AND updated >= "{start.strftime("%Y-%m-%d %H:%M")}" '
+        f'AND updated <= "{end.strftime("%Y-%m-%d %H:%M")}" ORDER BY updated DESC'
+    )
+
+    payload = {
+        "jql": jql,
+        "fields": ["key", "summary", "status"],
+        "maxResults": 50, # Ограничиваем количество задач для Mini App
+    }
+
+    task_list = []
+    try:
+        async with aiohttp.ClientSession(auth=auth, headers=headers) as session:
+            async with session.post(f"{base_url}/rest/api/3/search/jql", json=payload) as resp:
+                if resp.status != 200:
+                    logger.error(f"Error fetching tasks for month report: {resp.status}")
+                    return []
+                data = await resp.json()
+                for issue in data.get("issues", []):
+                    task_list.append({"key": issue["key"], "summary": issue["fields"]["summary"], "status": issue["fields"]["status"]["name"]})
+    except Exception as e:
+        logger.error(f"Exception fetching tasks for month report: {e}")
+        return []
+    return task_list
+
+
 # =======================
 # Запрос данных в Jira
 # =======================
@@ -415,7 +452,7 @@ async def build_on_demand_report(
     current = await _fetch_period_report(jira_email, jira_token, jira_project_key, jira_url, start, end)
     if current is None:
         return None
-
+    
     # Тот же по длине отрезок предыдущего месяца: с 1-го числа до того же
     # дня/времени, но не дальше последнего дня прошлого месяца.
     prev_ref = _prev_month_reference(now)
@@ -427,24 +464,64 @@ async def build_on_demand_report(
     previous = await _fetch_period_report(jira_email, jira_token, jira_project_key, jira_url, prev_start, prev_end)
     if previous is None:
         return None
+    
+    task_list = await _fetch_tasks_for_month_report(jira_email, jira_token, jira_project_key, jira_url, start, end)
 
-    bugs_diff_line = _format_diff_line(current["bugs"], previous["bugs"])
-    sprint_diff_line = _format_diff_line(current["sprint_tasks"], previous["sprint_tasks"])
-    month_name = MONTHS_RU.get(now.month, now.strftime("%B"))
+    return {
+        "current": current,
+        "previous": previous,
+        "task_list": task_list,
+        "now": now
+    }
 
-    text = (
-        f"📊 <b>Отчет с начала месяца — {month_name} {now.year}</b>\n"
-        f"🗓 Период: 01.{now.month:02d}.{now.year} — {now.strftime('%d.%m.%Y %H:%M')}\n\n"
-        f"🚀 Релизов: <b>{current['releases']}</b>\n"
-        f"📝 Задач: <b>{current['tasks']}</b>\n"
-        f"🐞 Багов (подзадач в релизах): <b>{current['bugs']}</b>\n"
-        f"{bugs_diff_line}\n\n"
-        f"🆕 Задачи в спринтах месяца: <b>{current['sprint_tasks']}</b>\n"
-        f"<i>(Task DEV, Баг, Task BA, Улучшение, Задание)</i>\n"
-        f"{sprint_diff_line}\n\n"
-        f"<i>Сравнение — с тем же отрезком прошлого месяца (01–{end_day:02d} число)</i>"
-    )
-    return text
+
+# =======================
+# Команда /monthreport — отчет по запросу в любой момент
+# =======================
+def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
+
+    @dp.message(F.text.startswith("/monthreport"))
+    async def monthreport_command(message: Message):
+        monitor.update_status("Monthly Report", "OK")
+        loading = await message.reply("⏳ Формирую отчет с начала месяца по текущий момент...")
+
+        report_data = await build_on_demand_report(
+            jira_config['email'],
+            jira_config['token'],
+            jira_config['project'],
+            jira_config['url'],
+        )
+        if report_data is None:
+            monitor.update_status("Monthly Report", "ERROR")
+            await loading.edit_text("❌ Не удалось получить данные из Jira для отчета. Попробуй позже.")
+            return
+
+        current = report_data["current"]
+        previous = report_data["previous"]
+        now = report_data["now"]
+        
+        # Calculate end_day for the previous month's comparison text
+        # Need to ensure previous["now"] exists or handle its absence
+        prev_month_now = report_data["previous"].get("now", now.replace(day=1) - timedelta(days=1))
+        end_day = min(now.day, calendar.monthrange(prev_month_now.year, prev_month_now.month)[1])
+
+        bugs_diff_line = _format_diff_line(current["bugs"], previous["bugs"])
+        sprint_diff_line = _format_diff_line(current["sprint_tasks"], previous["sprint_tasks"])
+        month_name = MONTHS_RU.get(now.month, now.strftime("%B"))
+
+        text = (
+            f"📊 <b>Отчет с начала месяца — {month_name} {now.year}</b>\n"
+            f"🗓 Период: 01.{now.month:02d}.{now.year} — {now.strftime('%d.%m.%Y %H:%M')}\n\n"
+            f"🚀 Релизов: <b>{current['releases']}</b>\n"
+            f"📝 Задач: <b>{current['tasks']}</b>\n"
+            f"🐞 Багов (подзадач в релизах): <b>{current['bugs']}</b>\n"
+            f"{bugs_diff_line}\n\n"
+            f"🆕 Задачи в спринтах месяца: <b>{current['sprint_tasks']}</b>\n"
+            f"<i>(Task DEV, Баг, Task BA, Улучшение, Задание)</i>\n"
+            f"{sprint_diff_line}\n\n"
+            f"<i>Сравнение — с тем же отрезком прошлого месяца (01–{end_day:02d} число)</i>"
+        )
+        await loading.edit_text(text)
 
 
 # =======================

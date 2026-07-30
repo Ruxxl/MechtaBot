@@ -405,7 +405,7 @@ async def get_stand_builds(request: web.Request) -> web.Response:
         )
     return json_response(
         [
-            {"commit": b["commit_message"], "actor": b["actor"], "date": b["date"].strftime("%d.%m.%Y %H:%M")}
+            {"commit": b["commit"], "actor": b["actor"], "date": b["date"]}
             for b in builds
         ]
     )

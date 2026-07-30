@@ -155,21 +155,39 @@ class JiraClientMock:
     async def create_issue(self, title, description, priority, component):
         # Используем существующую функцию из FSM-хендлера
         return await create_jira_issue(bot, self.config, title, description, "Mini App", priority=priority, component=component)
-    
+
     async def get_month_report(self):
-        # Используем логику из monitors/monthly_report.py
         from monitors.monthly_report import build_on_demand_report
-        # Эта функция возвращает готовый текст, а нам нужна структура.
-        # Поэтому мы эмулируем её, но в будущем лучше отрефакторить
-        # build_on_demand_report, чтобы она возвращала dict.
+        report_data = await build_on_demand_report(
+            self.config['email'],
+            self.config['token'],
+            self.config['project'],
+            self.config['url'],
+        )
+        if report_data is None:
+            # Fallback to empty data if API call fails
+            return {
+                "tasks": 0, "bugs": 0, "releases": 0,
+                "days": [], "byDay": [], "task_list": []
+            }
+
+        current = report_data["current"]
+        now = report_data["now"]
+
+        # Для графика "по дням" (days, byDay) требуется более детальная логика
+        # получения данных из Jira (например, ежедневное количество задач/багов).
+        # В текущей реализации _fetch_period_report возвращает только общие
+        # счетчики за период. Поэтому пока возвращаем заглушки для графика.
+        days = [str(d) for d in range(1, now.day + 1)]
+        by_day = [0] * len(days) # Заглушка, т.к. нет ежедневной разбивки
+
         return {
-            "tasks": 15, "bugs": 7, "releases": 2,
-            "days": [str(d) for d in range(1, 31)],
-            "by_day": [((i*3)%5) for i in range(30)],
-            "task_list": [
-                {"key": "MECHTA-1201", "summary": "Синхронизация остатков 1С", "status": "Готово"},
-                {"key": "MECHTA-1198", "summary": "Ошибка при оформлении рассрочки", "status": "В работе"},
-            ]
+            "tasks": current["tasks"],
+            "bugs": current["bugs"],
+            "releases": current["releases"],
+            "days": days,
+            "byDay": by_day,
+            "task_list": report_data["task_list"],
         }
 
     async def get_next_release_status(self):
