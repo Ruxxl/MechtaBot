@@ -100,6 +100,25 @@ CATEGORIES = {
     },
 }
 
+# =======================
+# Адаптер для Mini App API
+# =======================
+class HelpData:
+    def __init__(self, categories_dict):
+        self.categories = categories_dict
+
+    def as_miniapp_list(self) -> list:
+        """Преобразует словарь CATEGORIES в список, который ожидает
+        Mini App API (/api/help)."""
+        return [
+            {"key": key, "label": data["label"], "text": data["text"]}
+            for key, data in self.categories.items()
+        ]
+
+# Экземпляр, который будет импортироваться в main.py и передаваться
+# в miniapp_api в качестве сервиса 'help'.
+help_data = HelpData(CATEGORIES)
+
 
 def _main_menu_keyboard() -> InlineKeyboardMarkup:
     keys = list(CATEGORIES.keys())

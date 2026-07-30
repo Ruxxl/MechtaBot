@@ -515,7 +515,7 @@ async def get_help(request: web.Request) -> web.Response:
     if help_data is not None:
         # TODO: help_data — если категории уже описаны в help_handler.py как
         # структура (список/словарь), просто преобразуй её в этот контракт.
-        return json_response(help_data.as_miniapp_list())
+        return json_response(help_data.as_miniapp_list()) # Теперь этот вызов будет работать
 
     return json_response(
         [
