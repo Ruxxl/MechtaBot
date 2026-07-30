@@ -49,6 +49,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 VISION_THREAD_ID = 1886
+MINIAPP_FRONTEND_URL = os.getenv("MINIAPP_FRONTEND_URL", "https://ruxxl.github.io/telegramminiapp/")
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 PERSONAL_CALENDAR_URL = "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
@@ -338,6 +339,15 @@ register_team_tasks_handlers(dp=dp, bot=bot, jira_config=JIRA_CONFIG)
 # Регистрация команды /monthreport — отчет с 1-го числа по текущий момент
 logger.info("📊 Регистрация команды /monthreport...")
 register_monthly_report_handlers(dp=dp, bot=bot, jira_config=JIRA_CONFIG)
+
+# Регистрация команды /miniapp — запуск Telegram Mini App
+logger.info("📱 Регистрация команды /miniapp...")
+@dp.message(F.text == "/miniapp")
+async def launch_miniapp_command(message: Message):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Открыть Mini App", web_app=WebAppInfo(url=MINIAPP_FRONTEND_URL))]
+    ])
+    await message.reply("Нажмите кнопку, чтобы открыть Mini App:", reply_markup=keyboard)
 
 # рядом с register_team_tasks_handlers(...)
 logger.info("🐛 Регистрация хендлера /bugreport...")
