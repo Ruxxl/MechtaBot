@@ -22,6 +22,11 @@ MONTHS_RU = {
     9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь",
 }
 
+# Типы задач, которые считаем в строке "Созданные задачи" (см. скриншот
+# меню типов задач в Jira). "Эпик" сознательно не учитываем — это
+# контейнер для группы задач, а не сама задача.
+CREATED_TASK_TYPES = ["Task DEV", "Баг", "Task BA", "Улучшение", "Задание"]
+
 # Месяц, за который отчет уже отправлен (в формате "YYYY-MM").
 # Хранится в памяти процесса — так же, как и другие "защелки" в проекте
 # (processed_issues в code_review_handler.py, notified_versions в release_notifier.py).
@@ -64,11 +69,45 @@ def _prev_month_reference(dt: datetime) -> datetime:
 # =======================
 # Запрос данных в Jira
 # =======================
+async def _fetch_created_tasks_count(session: aiohttp.ClientSession, base_url: str, jira_project_key: str, start: datetime, end: datetime) -> int:
+    """Считает количество задач указанных типов (CREATED_TASK_TYPES), СОЗДАННЫХ
+    в периоде [start, end] — в отличие от остальных метрик отчета, которые
+    считаются по дате релиза (fixVersion), эта метрика — по дате создания
+    задачи, независимо от того, вошла она уже в релиз или нет."""
+    types_jql = ", ".join(f'"{t}"' for t in CREATED_TASK_TYPES)
+    start_str = start.strftime("%Y-%m-%d %H:%M")
+    end_str = end.strftime("%Y-%m-%d %H:%M")
+    jql = (
+        f'project="{jira_project_key}" AND issuetype in ({types_jql}) '
+        f'AND created >= "{start_str}" AND created <= "{end_str}"'
+    )
+
+    search_url = f"{base_url}/rest/api/3/search/jql"
+    payload = {
+        "jql": jql,
+        "fields": ["key"],
+        "maxResults": 200,
+    }
+
+    try:
+        async with session.post(search_url, json=payload) as resp:
+            if resp.status != 200:
+                logger.error(f"Ошибка поиска созданных задач: {resp.status}")
+                return 0
+            data = await resp.json()
+            return len(data.get("issues", []))
+    except Exception as e:
+        logger.error(f"Ошибка запроса созданных задач: {e}")
+        return 0
+
+
 async def _fetch_period_report(jira_email, jira_token, jira_project_key, jira_url, start: datetime, end: datetime):
     """
-    Возвращает {"releases": N, "tasks": N, "bugs": N} по релизам, вышедшим в [start, end],
-    где "bugs" — суммарное количество подзадач во всех задачах этих релизов
-    (та же логика, что уже используется в release_notifier.py).
+    Возвращает {"releases": N, "tasks": N, "bugs": N, "created_tasks": N} по релизам,
+    вышедшим в [start, end], где "bugs" — суммарное количество подзадач во всех
+    задачах этих релизов (та же логика, что уже используется в release_notifier.py),
+    а "created_tasks" — количество задач типов CREATED_TASK_TYPES, СОЗДАННЫХ в
+    этом же периоде (независимо от релизов).
     Возвращает None при ошибке запроса к Jira.
     """
     base_url = jira_url.rstrip("/")
@@ -125,20 +164,28 @@ async def _fetch_period_report(jira_email, jira_token, jira_project_key, jira_ur
                     total_tasks += len(issues)
                     total_bugs += sum(len(i["fields"].get("subtasks", [])) for i in issues)
 
+            # 4. Задачи, СОЗДАННЫЕ в периоде (см. CREATED_TASK_TYPES), отдельно от релизов
+            created_tasks = await _fetch_created_tasks_count(session, base_url, jira_project_key, start, end)
+
     except Exception as e:
         logger.exception(f"Ошибка при формировании месячного отчета: {e}")
         return None
 
-    return {"releases": releases_count, "tasks": total_tasks, "bugs": total_bugs}
+    return {
+        "releases": releases_count,
+        "tasks": total_tasks,
+        "bugs": total_bugs,
+        "created_tasks": created_tasks,
+    }
 
 
-def _format_diff_line(current_bugs: int, prev_bugs: int) -> str:
-    diff = current_bugs - prev_bugs
+def _format_diff_line(current_value: int, prev_value: int, label: str = "прошлым месяцем") -> str:
+    diff = current_value - prev_value
     if diff > 0:
-        return f"📈 На {diff} больше, чем в прошлом месяце ({prev_bugs})"
+        return f"📈 На {diff} больше, чем {label} ({prev_value})"
     elif diff < 0:
-        return f"📉 На {abs(diff)} меньше, чем в прошлом месяце ({prev_bugs})"
-    return f"➖ Столько же, сколько и в прошлом месяце ({prev_bugs})"
+        return f"📉 На {abs(diff)} меньше, чем {label} ({prev_value})"
+    return f"➖ Столько же, сколько и {label} ({prev_value})"
 
 
 # =======================
@@ -159,8 +206,8 @@ async def check_monthly_report(
     месяца, если он короче 30 дней) и только один раз за месяц.
 
     Сравнение с предыдущим месяцем считается не из сохраненной истории, а заново —
-    те же самые релизы/задачи/баги пересчитываются за период предыдущего месяца
-    прямо из Jira, и просто сравниваются с текущим месяцем.
+    те же самые релизы/задачи/баги/созданные задачи пересчитываются за период
+    предыдущего месяца прямо из Jira, и просто сравниваются с текущим месяцем.
     """
     global _last_sent_month
 
@@ -192,7 +239,8 @@ async def check_monthly_report(
         logger.warning("Не удалось получить данные за предыдущий месяц — попробуем при следующей проверке")
         return
 
-    diff_line = _format_diff_line(current["bugs"], previous["bugs"])
+    bugs_diff_line = _format_diff_line(current["bugs"], previous["bugs"])
+    created_diff_line = _format_diff_line(current["created_tasks"], previous["created_tasks"])
 
     month_name = MONTHS_RU.get(now.month, now.strftime("%B"))
     text = (
@@ -200,7 +248,10 @@ async def check_monthly_report(
         f"🚀 Релизов: <b>{current['releases']}</b>\n"
         f"📝 Задач: <b>{current['tasks']}</b>\n"
         f"🐞 Багов (подзадач в релизах): <b>{current['bugs']}</b>\n"
-        f"{diff_line}"
+        f"{bugs_diff_line}\n\n"
+        f"🆕 Созданные задачи: <b>{current['created_tasks']}</b>\n"
+        f"<i>(Task DEV, Баг, Task BA, Улучшение, Задание)</i>\n"
+        f"{created_diff_line}"
     )
 
     try:
@@ -270,7 +321,8 @@ async def build_on_demand_report(
     if previous is None:
         return None
 
-    diff_line = _format_diff_line(current["bugs"], previous["bugs"])
+    bugs_diff_line = _format_diff_line(current["bugs"], previous["bugs"])
+    created_diff_line = _format_diff_line(current["created_tasks"], previous["created_tasks"])
     month_name = MONTHS_RU.get(now.month, now.strftime("%B"))
 
     text = (
@@ -279,7 +331,10 @@ async def build_on_demand_report(
         f"🚀 Релизов: <b>{current['releases']}</b>\n"
         f"📝 Задач: <b>{current['tasks']}</b>\n"
         f"🐞 Багов (подзадач в релизах): <b>{current['bugs']}</b>\n"
-        f"{diff_line}\n\n"
+        f"{bugs_diff_line}\n\n"
+        f"🆕 Созданные задачи: <b>{current['created_tasks']}</b>\n"
+        f"<i>(Task DEV, Баг, Task BA, Улучшение, Задание)</i>\n"
+        f"{created_diff_line}\n\n"
         f"<i>Сравнение — с тем же отрезком прошлого месяца (01–{end_day:02d} число)</i>"
     )
     return text
