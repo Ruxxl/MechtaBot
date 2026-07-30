@@ -480,12 +480,6 @@ async def build_on_demand_report(
 # =======================
 def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
 
-
-# =======================
-# Команда /monthreport — отчет по запросу в любой момент
-# =======================
-def register_monthly_report_handlers(dp, bot: Bot, jira_config: dict):
-
     @dp.message(F.text.startswith("/monthreport"))
     async def monthreport_command(message: Message):
         monitor.update_status("Monthly Report", "OK")
