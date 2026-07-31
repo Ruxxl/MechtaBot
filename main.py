@@ -223,6 +223,52 @@ class JiraClientMock:
             "pending": int(pending_match.group(1)) if pending_match else 0,
         }
 
+class TeamClientMock:
+    """Отдает те же данные, что и команда /team (handlers/team_tasks_handler.py),
+    но в JSON-формате для Mini App вместо сообщений в Telegram."""
+    def __init__(self, config):
+        self.config = config
+
+    async def list_users(self):
+        from handlers.team_tasks_handler import fetch_assignable_users
+        return await fetch_assignable_users(self.config)
+
+    async def get_user_tasks(self, account_id: str) -> dict:
+        from handlers.team_tasks_handler import (
+            fetch_user_sprint_tasks,
+            fetch_subtasks_by_parents,
+            _is_excluded,
+        )
+        issues = await fetch_user_sprint_tasks(self.config, account_id)
+        parent_keys = [i["key"] for i in issues if i.get("key")]
+        subtasks_by_parent = await fetch_subtasks_by_parents(self.config, parent_keys)
+
+        base_url = self.config["url"].rstrip("/")
+        tasks = []
+        for issue in issues:
+            key = issue.get("key")
+            fields = issue.get("fields", {})
+            visible_subtasks = [
+                sub for sub in subtasks_by_parent.get(key, [])
+                if not _is_excluded(sub.get("fields", {}).get("status", {}).get("name", ""))
+            ]
+            tasks.append({
+                "key": key,
+                "summary": fields.get("summary", ""),
+                "status": fields.get("status", {}).get("name", "?"),
+                "url": f"{base_url}/browse/{key}",
+                "subtasks": [
+                    {
+                        "key": sub.get("key"),
+                        "summary": sub.get("fields", {}).get("summary", ""),
+                        "status": sub.get("fields", {}).get("status", {}).get("name", "?"),
+                        "url": f"{base_url}/browse/{sub.get('key')}",
+                    }
+                    for sub in visible_subtasks
+                ],
+            })
+        return {"tasks": tasks}
+
 class StandsConfigMock:
     async def get_recent_builds(self, key, limit=10):
         # Используем существующую функцию из db_service
@@ -323,6 +369,7 @@ class JiraReleasesClient:
         return std_types.SimpleNamespace(**result)
 
 jira_client = JiraClientMock(JIRA_CONFIG)
+team_client = TeamClientMock(JIRA_CONFIG)
 stands_config = StandsConfigMock()
 github_store = GithubStoreMock(webhook_handler)
 releases_service = JiraReleasesClient(JIRA_CONFIG)
@@ -354,6 +401,7 @@ ask_engine = ai_service
 
 setup_miniapp_routes(app, services={ # 'app' is now defined
     "jira": jira_client,           # твой существующий Jira-клиент
+    "team": team_client,           # список участников и их задачи в спринте (/team)
     "github_events": github_store, # хранилище последних webhook-событий
     "stands": stands_config,       # то, что уже отдаёт /stands
     "ask": ask_engine,             # confluence-поиск из /ask

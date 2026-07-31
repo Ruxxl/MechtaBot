@@ -49,6 +49,13 @@ POST /api/ask
 GET  /api/help
      -> [ { key, label, text }, ... ]   (text может содержать простой HTML: <code>)
 
+GET  /api/team/users
+     -> [ { accountId, displayName }, ... ]
+
+GET  /api/team/users/{accountId}
+     -> { tasks: [ { key, summary, status, url,
+                      subtasks: [ {key, summary, status, url}, ... ] }, ... ] }
+
 ============================================================================
 БЕЗОПАСНОСТЬ
 ============================================================================
@@ -577,6 +584,80 @@ async def get_help(request: web.Request) -> web.Response:
     )
 
 
+# ---------------------------------------------------------------------------
+# /api/team
+# ---------------------------------------------------------------------------
+
+def _mock_team_users() -> list:
+    return [
+        {"accountId": "demo-1", "displayName": "Алия Сатпаева"},
+        {"accountId": "demo-2", "displayName": "Данияр Ахметов"},
+        {"accountId": "demo-3", "displayName": "Марат Исенов"},
+    ]
+
+
+def _mock_team_user_tasks() -> dict:
+    return {
+        "tasks": [
+            {
+                "key": "MECHTA-1210",
+                "summary": "Проверка формы оплаты рассрочки",
+                "status": "В работе",
+                "url": None,
+                "subtasks": [
+                    {"key": "MECHTA-1211", "summary": "Валидация номера карты", "status": "Код ревью", "url": None},
+                ],
+            },
+            {
+                "key": "MECHTA-1207",
+                "summary": "Исправить дублирование уведомлений",
+                "status": "Тестирование",
+                "url": None,
+                "subtasks": [],
+            },
+        ]
+    }
+
+
+@routes.get("/api/team/users")
+@require_auth
+async def get_team_users(request: web.Request) -> web.Response:
+    services = request.app["miniapp_services"]
+    team = services.get("team")
+
+    if team is None:
+        return json_response(_mock_team_users())
+
+    try:
+        users = await team.list_users()
+    except Exception as e:
+        logger.exception(f"Ошибка получения списка участников для Mini App: {e}")
+        return json_response(_mock_team_users())
+
+    return json_response(
+        [{"accountId": u["accountId"], "displayName": u["displayName"]} for u in users]
+    )
+
+
+@routes.get("/api/team/users/{accountId}")
+@require_auth
+async def get_team_user_tasks(request: web.Request) -> web.Response:
+    account_id = request.match_info["accountId"]
+    services = request.app["miniapp_services"]
+    team = services.get("team")
+
+    if team is None:
+        return json_response(_mock_team_user_tasks())
+
+    try:
+        result = await team.get_user_tasks(account_id)
+    except Exception as e:
+        logger.exception(f"Ошибка получения задач участника {account_id} для Mini App: {e}")
+        return json_response(_mock_team_user_tasks())
+
+    return json_response(result)
+
+
 # ============================================================================
 # ПОДКЛЮЧЕНИЕ К СУЩЕСТВУЮЩЕМУ aiohttp-ПРИЛОЖЕНИЮ
 # ============================================================================
@@ -589,6 +670,7 @@ def setup_miniapp_routes(app: web.Application, services: Optional[dict] = None) 
 
         setup_miniapp_routes(app, services={
             "jira": jira_client,          # твой существующий Jira-клиент
+            "team": team_client,           # участники проекта и их задачи в спринте (/team)
             "github_events": github_store, # хранилище последних webhook-событий
             "stands": stands_config,       # конфиг/сервис стендов
             "ask": ask_engine,             # confluence-поиск для /ask
@@ -624,6 +706,8 @@ def setup_miniapp_routes(app: web.Application, services: Optional[dict] = None) 
         "/api/jira/create",
         "/api/ask",
         "/api/help",
+        "/api/team/users",
+        "/api/team/users/{accountId}",
     ]:
         app.router.add_route("OPTIONS", path, options_handler)
 

@@ -125,6 +125,25 @@
   .build-row .commit{font-weight:500;}
   .build-row .meta{font-family:var(--mono); color:var(--muted); font-size:11.5px; margin-top:2px;}
 
+  /* ---------- team ---------- */
+  .team-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px 16px; margin-bottom:10px; cursor:pointer; transition:border-color .15s;
+  }
+  .team-card:active{border-color:var(--accent);}
+  .team-head{display:flex; justify-content:space-between; align-items:center;}
+  .team-name{font-weight:650; font-size:14.5px;}
+  .team-hint{color:var(--muted); font-family:var(--mono); font-size:11.5px;}
+  .team-detail{margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:none;}
+  .team-detail.open{display:block;}
+  .task-row{padding:10px 0; border-bottom:1px solid var(--border); font-size:13px;}
+  .task-row:last-child{border-bottom:none;}
+  .task-row .title{font-weight:600; font-size:13.5px;}
+  .task-row .sub{font-size:12px; color:var(--muted); margin-top:2px;}
+  .subtask-row{margin:8px 0 0 12px; padding:6px 0 6px 10px; border-left:2px solid var(--border); font-size:12.5px;}
+  .subtask-row .title{font-size:12.5px; font-weight:600;}
+  .subtask-row .sub{font-size:11px; color:var(--muted); margin-top:2px;}
+
   /* ---------- forms ---------- */
   label{display:block; font-size:12px; color:var(--muted); margin:14px 0 6px; font-family:var(--mono); text-transform:uppercase; letter-spacing:.5px;}
   label:first-of-type{margin-top:0;}
@@ -285,6 +304,16 @@
     </div>
   </section>
 
+  <!-- ================= TEAM ================= -->
+  <section class="page" data-page="team">
+    <h1 class="page-title">$ /team <span>// участники и спринт</span></h1>
+    <div id="teamList">
+      <div class="skeleton" style="height:52px;"></div>
+      <div class="skeleton" style="height:52px;"></div>
+      <div class="skeleton" style="height:52px;"></div>
+    </div>
+  </section>
+
   <!-- ================= ASK ================= -->
   <section class="page" data-page="ask">
     <h1 class="page-title">$ /ask <span>// вопрос по документации</span></h1>
@@ -331,6 +360,7 @@
   <button class="nav-btn active" data-nav="home"><span class="icon">🏠</span>Обзор</button>
   <button class="nav-btn" data-nav="stands"><span class="icon">🖥</span>Стенды</button>
   <button class="nav-btn" data-nav="jira"><span class="icon">🐞</span>Баг</button>
+  <button class="nav-btn" data-nav="team"><span class="icon">👥</span>Команда</button>
   <button class="nav-btn" data-nav="ask"><span class="icon">💬</span>Спросить</button>
   <button class="nav-btn" data-nav="report"><span class="icon">📊</span>Отчет</button>
   <button class="nav-btn" data-nav="help"><span class="icon">ℹ️</span>Помощь</button>
@@ -359,7 +389,9 @@
     standDetail:   function(key){ return API_BASE + "/api/stands/" + encodeURIComponent(key); },
     jiraCreate:    API_BASE + "/api/jira/create",
     ask:           API_BASE + "/api/ask",
-    help:          API_BASE + "/api/help"
+    help:          API_BASE + "/api/help",
+    teamUsers:     API_BASE + "/api/team/users",
+    teamUserTasks: function(id){ return API_BASE + "/api/team/users/" + encodeURIComponent(id); }
   };
 
   var tg = window.Telegram && window.Telegram.WebApp;
@@ -404,6 +436,7 @@
   function loadPage(name){
     if (name === "home") loadHome();
     if (name === "stands") loadStands();
+    if (name === "team") loadTeam();
     if (name === "ask") {} // ленивая загрузка не нужна, чат пуст изначально
     if (name === "report") loadReport();
     if (name === "help") loadHelp();
@@ -648,6 +681,85 @@
         '<div class="build-row">' +
           '<div class="commit">' + (i===0 ? '🟢 ' : '🔹 ') + esc(b.commit || "—") + '</div>' +
           '<div class="meta">@' + esc(b.actor || "?") + ' · ' + esc(b.date || "") + '</div>' +
+        '</div>'
+      );
+    }).join("");
+  }
+
+  /* ===================== TEAM ===================== */
+  function loadTeam(){
+    apiFetch(ENDPOINTS.teamUsers).then(function(list){
+      renderTeamUsers(list, false);
+    }).catch(function(){
+      renderTeamUsers([
+        {accountId:"demo-1", displayName:"Алия Сатпаева"},
+        {accountId:"demo-2", displayName:"Данияр Ахметов"},
+        {accountId:"demo-3", displayName:"Марат Исенов"}
+      ], true);
+    });
+  }
+
+  function renderTeamUsers(list, demo){
+    var wrap = document.getElementById("teamList");
+    if (!list || !list.length){
+      wrap.innerHTML = '<div class="empty"><span class="icon">👥</span>Участники не найдены</div>';
+      return;
+    }
+    var demoTag = demo ? '<span class="demo-flag">⚠ демо-данные — API недоступен</span>' : "";
+    wrap.innerHTML = demoTag + list.map(function(u){
+      return (
+        '<div class="team-card" data-id="'+esc(u.accountId)+'">' +
+          '<div class="team-head">' +
+            '<div class="team-name">👤 ' + esc(u.displayName) + '</div>' +
+            '<span class="team-hint">спринт →</span>' +
+          '</div>' +
+          '<div class="team-detail" id="team-detail-'+esc(u.accountId)+'"></div>' +
+        '</div>'
+      );
+    }).join("");
+
+    wrap.querySelectorAll(".team-card").forEach(function(card){
+      card.addEventListener("click", function(){
+        var id = card.dataset.id;
+        var detail = card.querySelector(".team-detail");
+        var willOpen = !detail.classList.contains("open");
+        detail.classList.toggle("open");
+        if (willOpen && !detail.dataset.loaded){
+          detail.dataset.loaded = "1";
+          detail.innerHTML = '<div class="skeleton" style="height:40px;"></div>';
+          apiFetch(ENDPOINTS.teamUserTasks(id)).then(function(data){
+            renderTeamTasks(detail, data.tasks || []);
+          }).catch(function(){
+            renderTeamTasks(detail, [
+              {key:"MECHTA-1210", summary:"Проверка формы оплаты рассрочки", status:"В работе", url:null,
+                subtasks:[{key:"MECHTA-1211", summary:"Валидация номера карты", status:"Код ревью", url:null}]},
+              {key:"MECHTA-1207", summary:"Исправить дублирование уведомлений", status:"Тестирование", url:null, subtasks:[]}
+            ]);
+          });
+        }
+      });
+    });
+  }
+
+  function renderTeamTasks(detail, tasks){
+    if (!tasks || !tasks.length){
+      detail.innerHTML = '<div class="empty" style="padding:14px 0;"><span class="icon">📭</span>Нет задач в текущем спринте</div>';
+      return;
+    }
+    detail.innerHTML = tasks.map(function(t){
+      var subtasksHtml = (t.subtasks || []).map(function(s){
+        return (
+          '<div class="subtask-row">' +
+            '<div class="title">🔹 ' + (s.url ? '<a href="'+esc(s.url)+'" target="_blank">'+esc(s.key)+'</a>' : esc(s.key)) + ' — ' + esc(s.status || "?") + '</div>' +
+            '<div class="sub">' + esc(s.summary || "") + '</div>' +
+          '</div>'
+        );
+      }).join("");
+      return (
+        '<div class="task-row">' +
+          '<div class="title">📌 ' + (t.url ? '<a href="'+esc(t.url)+'" target="_blank">'+esc(t.key)+'</a>' : esc(t.key)) + ' — ' + esc(t.status || "?") + '</div>' +
+          '<div class="sub">' + esc(t.summary || "") + '</div>' +
+          subtasksHtml +
         '</div>'
       );
     }).join("");
