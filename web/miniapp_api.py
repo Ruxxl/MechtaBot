@@ -661,6 +661,33 @@ async def get_team_user_tasks(request: web.Request) -> web.Response:
     return json_response(result)
 
 
+# ---------------------------------------------------------------------------
+# /api/tasks/completed-recent
+# ---------------------------------------------------------------------------
+
+@routes.get("/api/tasks/completed-recent")
+@require_auth
+async def get_completed_recent(request: web.Request) -> web.Response:
+    try:
+        days = int(request.query.get("days", 7))
+    except ValueError:
+        days = 7
+
+    services = request.app["miniapp_services"]
+    jira = services.get("jira")
+
+    if jira is None:
+        return json_response({"count": 20, "days": days})
+
+    try:
+        result = await jira.get_recently_completed(days=days)
+    except Exception as e:
+        logger.exception(f"Ошибка получения счетчика выполненных задач для Mini App: {e}")
+        return json_response({"count": 20, "days": days})
+
+    return json_response(result)
+
+
 # ============================================================================
 # ПОДКЛЮЧЕНИЕ К СУЩЕСТВУЮЩЕМУ aiohttp-ПРИЛОЖЕНИЮ
 # ============================================================================
@@ -711,6 +738,7 @@ def setup_miniapp_routes(app: web.Application, services: Optional[dict] = None) 
         "/api/help",
         "/api/team/users",
         "/api/team/users/{accountId}",
+        "/api/tasks/completed-recent",
     ]:
         app.router.add_route("OPTIONS", path, options_handler)
 
