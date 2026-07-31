@@ -28,7 +28,7 @@ GET  /api/release/latest
 
 GET  /api/release/search?date=YYYY-MM-DD
      -> { date, matchType: "exact"|"nearby"|"week"|"none",
-          releases: [{version, date, url|null, tasks}, ...] }
+          releases: [{version, date, url|null, tasks, description}, ...] }
 
 GET  /api/github/last-event
      -> { actor, branch, commit, time, conclusion: "success"|"failure"|"pending" }
@@ -327,7 +327,10 @@ def _mock_release_search(date_str: str) -> dict:
         "date": date_str,
         "matchType": "nearby",
         "releases": [
-            {"version": "3.24.0", "date": "16.06.2026", "url": None, "tasks": 9},
+            {
+                "version": "3.24.0", "date": "16.06.2026", "url": None, "tasks": 9,
+                "description": "Мок-данные: подключи services['releases'] в main.py.",
+            },
         ],
     }
 
