@@ -3,5 +3,7 @@
     "allow": [
       "Bash(pkill -f \"http.server 8934\")"
     ]
-  }
+  },
+  "language": "russian"
 }
+
