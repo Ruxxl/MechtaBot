@@ -22,7 +22,7 @@ from monitors.release_notifier import jira_release_check
 from handlers.jira_fsm import register_jira_handlers, create_jira_issue
 from web.webhook_handler import WebhookHandler
 from services.translator_service import register_translator_handlers
-from monitors.release_notifier import jira_release_check, generate_release_summary
+from monitors.release_notifier import jira_release_check, generate_release_summary, get_latest_released_version
 from web.admin_handler import AdminHandler, monitor
 from services.ai_service import ai_service
 from monitors.code_review_handler import run_code_review_monitor
@@ -276,17 +276,35 @@ class GithubStoreMock:
             "conclusion": "success",
         }
 
-class ReleasesMock:
+class JiraReleasesClient:
+    """Реальный источник данных о последнем релизе для Mini App
+    (/api/release/latest, см. web/miniapp_api.py::get_latest_release).
+
+    Заменяет прежний ReleasesMock, который отдавал захардкоженные
+    заглушечные данные (версия/описание никогда не менялись и не
+    соответствовали Jira)."""
+    def __init__(self, config):
+        self.config = config
+
     async def get_latest(self):
-        # Эмулируем получение последнего релиза
-        # В идеале, нужна функция, которая вернет последний релиз из Jira
-        from datetime import datetime
-        return std_types.SimpleNamespace(version="3.22.1", date=datetime.now(), description="Исправлены задержки при синхронизации остатков и починен экспорт отчетов в 1С.", url=None)
+        result = await get_latest_released_version(
+            self.config['email'], self.config['token'], self.config['project'], self.config['url']
+        )
+        if result is None:
+            from datetime import datetime
+            logger.warning("Не удалось получить последний релиз из Jira для Mini App — отдаю заглушку")
+            return std_types.SimpleNamespace(
+                version="—",
+                date=datetime.now(),
+                description="Не удалось получить данные о релизе из Jira.",
+                url=None,
+            )
+        return std_types.SimpleNamespace(**result)
 
 jira_client = JiraClientMock(JIRA_CONFIG)
 stands_config = StandsConfigMock()
 github_store = GithubStoreMock(webhook_handler)
-releases_service = ReleasesMock()
+releases_service = JiraReleasesClient(JIRA_CONFIG)
 
 # ask_engine уже является объектом ai_service, который можно передать напрямую
 # Добавим ему метод answer для совместимости с Mini App API
