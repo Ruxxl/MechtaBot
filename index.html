@@ -159,11 +159,12 @@
   /* ---------- forms ---------- */
   label{display:block; font-size:12px; color:var(--muted); margin:14px 0 6px; font-family:var(--mono); text-transform:uppercase; letter-spacing:.5px;}
   label:first-of-type{margin-top:0;}
-  input[type=text], textarea, select{
+  input[type=text], input[type=date], textarea, select{
     width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text);
     border-radius:10px; padding:11px 12px; font-size:14px; font-family:var(--sans); outline:none;
   }
-  input[type=text]:focus, textarea:focus, select:focus{border-color:var(--accent);}
+  input[type=date]{color-scheme:dark;}
+  input[type=text]:focus, input[type=date]:focus, textarea:focus, select:focus{border-color:var(--accent);}
   textarea{min-height:96px; resize:vertical;}
   .priority-row{display:flex; gap:8px;}
   .priority-opt{
@@ -419,6 +420,19 @@
     </div>
   </section>
 
+  <!-- ================= RELEASES SEARCH ================= -->
+  <section class="page" data-page="releases">
+    <h1 class="page-title">/releases <span>// поиск по релизам</span></h1>
+    <div class="card">
+      <label>Дата</label>
+      <input type="date" id="releaseSearchDate">
+      <button class="btn" id="releaseSearchBtn" style="margin-top:14px;">Найти</button>
+    </div>
+    <div class="card" id="releaseSearchResult">
+      <div class="empty"><span class="icon">📅</span>Выбери дату и нажми «Найти»</div>
+    </div>
+  </section>
+
   <!-- ================= HELP ================= -->
   <section class="page" data-page="help">
     <h1 class="page-title">/help <span>// что умеет бот</span></h1>
@@ -439,6 +453,7 @@
   <button class="nav-btn" data-nav="team"><span class="icon">👥</span>Команда</button>
   <button class="nav-btn" data-nav="ask"><span class="icon">💬</span>Спросить</button>
   <button class="nav-btn" data-nav="report"><span class="icon">📊</span>Отчет</button>
+  <button class="nav-btn" data-nav="releases"><span class="icon">🚀</span>Релизы</button>
   <button class="nav-btn" data-nav="help"><span class="icon">ℹ️</span>Помощь</button>
 </nav>
 
@@ -463,6 +478,7 @@
   var ENDPOINTS = {
     monthReport:   API_BASE + "/api/monthreport",
     latestRelease: API_BASE + "/api/release/latest",
+    releaseSearch: function(date){ return API_BASE + "/api/release/search?date=" + encodeURIComponent(date); },
     lastWebhook:   API_BASE + "/api/github/last-event",
     nextRelease:   API_BASE + "/api/release/next-status",
     stands:        API_BASE + "/api/stands",
@@ -523,6 +539,7 @@
     if (name === "team") loadTeam();
     if (name === "ask") {} // ленивая загрузка не нужна, чат пуст изначально
     if (name === "report") loadReport();
+    if (name === "releases") loadReleasesPage();
     if (name === "help") loadHelp();
   }
 
@@ -1175,6 +1192,73 @@
     } else {
       listEl.innerHTML = '<div class="empty"><span class="icon">📭</span>Список задач подтянется, когда подключится backend</div>';
     }
+  }
+
+  /* ===================== RELEASES SEARCH ===================== */
+  var releaseSearchInitialized = false;
+
+  function loadReleasesPage(){
+    var dateInput = document.getElementById("releaseSearchDate");
+    if (!dateInput.value){
+      dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+    if (!releaseSearchInitialized){
+      releaseSearchInitialized = true;
+      document.getElementById("releaseSearchBtn").addEventListener("click", runReleaseSearch);
+    }
+  }
+
+  function runReleaseSearch(){
+    var date = document.getElementById("releaseSearchDate").value;
+    var resultEl = document.getElementById("releaseSearchResult");
+    if (!date){
+      resultEl.innerHTML = '<div class="empty"><span class="icon">📅</span>Выбери дату</div>';
+      return;
+    }
+    resultEl.innerHTML = '<div class="skeleton" style="height:44px;"></div><div class="skeleton" style="height:44px;"></div>';
+
+    apiFetch(ENDPOINTS.releaseSearch(date)).then(function(data){
+      renderReleaseSearch(data, false);
+    }).catch(function(){
+      renderReleaseSearch({
+        matchType: "nearby",
+        releases: [{version: "3.24.0", date: "16.06.2026", url: null, tasks: 9}]
+      }, true);
+    });
+  }
+
+  var RELEASE_MATCH_LABELS = {
+    exact: "🎯 Вышло в этот день:",
+    nearby: "📍 В этот день релизов не было, но был рядом:",
+    week: "🗓 Релизов рядом не было, но вот что вышло на этой неделе:"
+  };
+
+  function renderReleaseSearch(data, demo){
+    var resultEl = document.getElementById("releaseSearchResult");
+    var releases = data.releases || [];
+    var demoTag = demo ? '<span class="demo-flag">⚠ демо-данные — API недоступен</span>' : "";
+
+    if (!releases.length){
+      resultEl.innerHTML = demoTag +
+        '<div class="empty"><span class="icon">📭</span>Релизов не найдено ни в этот день, ни в течение недели</div>';
+      return;
+    }
+
+    var label = RELEASE_MATCH_LABELS[data.matchType] || "Найдено:";
+
+    resultEl.innerHTML = demoTag +
+      '<div class="sub" style="margin-bottom:10px; font-size:13px;">' + esc(label) + '</div>' +
+      releases.map(function(r){
+        return (
+          '<div class="list-item">' +
+            '<div>' +
+              '<div class="title">' + (r.url ? '<a href="'+esc(r.url)+'" target="_blank">'+esc(r.version)+'</a>' : esc(r.version)) + '</div>' +
+              '<div class="sub">' + esc(r.date || "") + '</div>' +
+            '</div>' +
+            '<span class="badge">' + esc(r.tasks != null ? r.tasks : "—") + ' задач</span>' +
+          '</div>'
+        );
+      }).join("");
   }
 
   /* ===================== HELP ===================== */

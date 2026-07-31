@@ -389,6 +389,12 @@ class JiraReleasesClient:
             )
         return std_types.SimpleNamespace(**result)
 
+    async def search_by_date(self, date_str: str) -> dict | None:
+        from monitors.release_notifier import search_releases_by_date
+        return await search_releases_by_date(
+            self.config['email'], self.config['token'], self.config['project'], self.config['url'], date_str
+        )
+
 jira_client = JiraClientMock(JIRA_CONFIG)
 team_client = TeamClientMock(JIRA_CONFIG)
 stands_config = StandsConfigMock()

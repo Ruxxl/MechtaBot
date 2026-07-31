@@ -26,6 +26,10 @@ GET  /api/monthreport
 GET  /api/release/latest
      -> { version, date, description, url|null }
 
+GET  /api/release/search?date=YYYY-MM-DD
+     -> { date, matchType: "exact"|"nearby"|"week"|"none",
+          releases: [{version, date, url|null, tasks}, ...] }
+
 GET  /api/github/last-event
      -> { actor, branch, commit, time, conclusion: "success"|"failure"|"pending" }
 
@@ -312,6 +316,49 @@ async def get_latest_release(request: web.Request) -> web.Response:
             "url": latest.url,
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# /api/release/search
+# ---------------------------------------------------------------------------
+
+def _mock_release_search(date_str: str) -> dict:
+    return {
+        "date": date_str,
+        "matchType": "nearby",
+        "releases": [
+            {"version": "3.24.0", "date": "16.06.2026", "url": None, "tasks": 9},
+        ],
+    }
+
+
+@routes.get("/api/release/search")
+@require_auth
+async def search_releases(request: web.Request) -> web.Response:
+    date_str = (request.query.get("date") or "").strip()
+    if not date_str:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": "date_required"}), content_type="application/json"
+        )
+
+    services = request.app["miniapp_services"]
+    releases = services.get("releases")
+
+    if releases is None or not hasattr(releases, "search_by_date"):
+        return json_response(_mock_release_search(date_str))
+
+    try:
+        result = await releases.search_by_date(date_str)
+    except Exception as e:
+        logger.exception(f"Ошибка поиска релизов по дате {date_str}: {e}")
+        return json_response(_mock_release_search(date_str))
+
+    if result is None:
+        raise web.HTTPBadRequest(
+            text=json.dumps({"error": "invalid_date_or_jira_error"}), content_type="application/json"
+        )
+
+    return json_response({"date": date_str, "matchType": result["matchType"], "releases": result["releases"]})
 
 
 # ---------------------------------------------------------------------------
@@ -833,6 +880,7 @@ def setup_miniapp_routes(app: web.Application, services: Optional[dict] = None) 
     for path in [
         "/api/monthreport",
         "/api/release/latest",
+        "/api/release/search",
         "/api/github/last-event",
         "/api/release/next-status",
         "/api/stands",
