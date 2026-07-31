@@ -113,6 +113,14 @@
   .list-item .title{font-weight:600; font-size:14px;}
   .list-item .sub{font-size:12px; color:var(--muted); margin-top:2px; font-family:var(--mono);}
 
+  .toggle-row{
+    margin-top:14px; padding-top:12px; border-top:1px solid var(--border);
+    font-size:13px; color:var(--accent); font-weight:600; cursor:pointer; user-select:none;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .toggle-body{display:none; margin-top:8px;}
+  .toggle-body.open{display:block;}
+
   /* ---------- stands ---------- */
   .stand-card{
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
@@ -684,7 +692,15 @@
     });
 
     apiFetch(ENDPOINTS.nextRelease).then(renderNextRelease).catch(function(){
-      renderNextRelease({demo:true, name:"3.23.0", total:14, done:9, inProgress:3, pending:2});
+      renderNextRelease({
+        demo:true, name:"3.23.0", total:14, done:9, inProgress:3, pending:2,
+        description:"В релиз войдут доработки корзины, push-уведомления о статусе заказа и фиксы оплаты рассрочкой.",
+        tasks:[
+          {key:"MECHTA-1301", summary:"Рефакторинг корзины", status:"В работе", url:null},
+          {key:"MECHTA-1302", summary:"Push-уведомления о статусе заказа", status:"Готово", url:null},
+          {key:"MECHTA-1303", summary:"Фикс расчёта рассрочки на чекауте", status:"Ожидает", url:null}
+        ]
+      });
     });
 
     loadCompletedWidget();
@@ -831,18 +847,44 @@
     var el = document.getElementById("nextReleaseCard");
     var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
     var pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
+    var tasks = d.tasks || [];
+
+    var tasksHtml = tasks.length
+      ? tasks.map(function(t){
+          return (
+            '<div class="list-item">' +
+              '<div>' +
+                '<div class="title">' + (t.url ? '<a href="'+esc(t.url)+'" target="_blank">'+esc(t.key)+'</a>' : esc(t.key)) + '</div>' +
+                '<div class="sub">' + esc(t.summary || "") + '</div>' +
+              '</div>' +
+              '<span class="badge">' + esc(t.status || "") + '</span>' +
+            '</div>'
+          );
+        }).join("")
+      : '<div class="empty" style="padding:14px 0;"><span class="icon">📭</span>Задачи не найдены</div>';
+
     el.innerHTML =
       '<div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">' +
         '<h2 style="margin:0;">Будущий релиз</h2>' +
         '<span class="badge">' + esc(d.name || "N/A") + '</span>' +
       '</div>' + demo +
+      (d.description ? '<p class="desc" style="margin-top:10px;">' + esc(d.description) + '</p>' : '') +
       '<div style="background:var(--surface-2); border-radius:8px; height:10px; overflow:hidden; margin:10px 0 8px;">' +
         '<div style="width:'+pct+'%; height:100%; background:linear-gradient(90deg, var(--accent), var(--ok));"></div>' +
       '</div>' +
       '<div class="sub" style="font-size:12px; margin-bottom:10px;">' + pct + '% готово · ' + esc(d.done||0) + ' из ' + esc(d.total||0) + '</div>' +
       '<div class="stat-row">' +
         stat(d.done||0, "готово") + stat(d.inProgress||0, "в работе") + stat(d.pending||0, "ожидает") +
-      '</div>';
+      '</div>' +
+      '<div class="toggle-row" id="nextReleaseToggle"><span id="nextReleaseToggleLabel">Показать задачи (' + tasks.length + ') ▾</span></div>' +
+      '<div class="toggle-body" id="nextReleaseTasks">' + tasksHtml + '</div>';
+
+    document.getElementById("nextReleaseToggle").addEventListener("click", function(){
+      var body = document.getElementById("nextReleaseTasks");
+      var open = body.classList.toggle("open");
+      document.getElementById("nextReleaseToggleLabel").textContent =
+        "Показать задачи (" + tasks.length + ") " + (open ? "▴" : "▾");
+    });
   }
 
   /* ===================== STANDS ===================== */
