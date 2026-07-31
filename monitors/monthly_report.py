@@ -8,6 +8,7 @@ from aiogram import Bot, F, types
 from aiogram.types import Message
 from dateutil import tz
 
+from services.db_service import get_last_sent_report_month, set_last_sent_report_month
 from web.admin_handler import monitor
 
 logger = logging.getLogger("bot.monthly_report")
@@ -26,15 +27,6 @@ MONTHS_RU = {
 # проекта в Jira). "Эпик" и "Подзадача" сознательно не учитываются: эпик —
 # контейнер для группы задач, подзадачи уже считаются отдельно (поле "bugs").
 SPRINT_TASK_TYPES = ["Task DEV", "Баг", "Task BA", "Улучшение", "Задание"]
-
-# Месяц, за который отчет уже отправлен (в формате "YYYY-MM").
-# Хранится в памяти процесса — так же, как и другие "защелки" в проекте
-# (processed_issues в code_review_handler.py, notified_versions в release_notifier.py).
-# Если воркер перезапустится в тот же отчетный день после отправки — отчет
-# теоретически может отправиться повторно, но это тот же риск, что и у
-# остальных подобных мониторов в проекте.
-_last_sent_month = None
-
 
 # =======================
 # Вспомогательные функции по датам
@@ -353,8 +345,6 @@ async def check_monthly_report(
     те же самые релизы/задачи/баги/задачи спринтов пересчитываются за период
     предыдущего месяца прямо из Jira, и просто сравниваются с текущим месяцем.
     """
-    global _last_sent_month
-
     monitor.update_status("Monthly Report", "OK")
     now = datetime.now(TZ)
     report_day = _report_day(now)
@@ -365,7 +355,8 @@ async def check_monthly_report(
         return
 
     month_key = _month_key(now)
-    if _last_sent_month == month_key:
+    last_sent_month = await get_last_sent_report_month()
+    if last_sent_month == month_key:
         return  # отчет за этот месяц уже отправлен
 
     # Текущий месяц
@@ -422,7 +413,7 @@ async def check_monthly_report(
         logger.error(f"Ошибка отправки ежемесячного отчета: {e}")
         return  # не помечаем месяц как отправленный, если сообщение не дошло
 
-    _last_sent_month = month_key
+    await set_last_sent_report_month(month_key)
 
 
 # =======================
