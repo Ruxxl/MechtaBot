@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS stand_builds (
 );
 CREATE INDEX IF NOT EXISTS idx_stand_builds_stand_key_created_at
     ON stand_builds (stand_key, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS monthly_report_state (
+    id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+    last_sent_month TEXT
+);
 """
 
 
@@ -94,3 +99,35 @@ async def get_latest_builds(stand_key: str, limit: int = 5) -> List[dict]:
     except Exception as e:
         logger.error(f"Ошибка чтения истории заливок из БД (stand_key={stand_key}): {e}")
         return []
+
+
+async def get_last_sent_report_month() -> Optional[str]:
+    """Месяц (формат "YYYY-MM"), за который ежемесячный отчет уже был отправлен.
+    Хранится в БД (а не в памяти процесса), чтобы рестарт/редеплой бота в
+    отчетный день не приводил к повторной отправке отчета."""
+    if not _pool:
+        return None
+    try:
+        async with _pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT last_sent_month FROM monthly_report_state LIMIT 1")
+        return row["last_sent_month"] if row else None
+    except Exception as e:
+        logger.error(f"Ошибка чтения статуса ежемесячного отчета из БД: {e}")
+        return None
+
+
+async def set_last_sent_report_month(month_key: str):
+    """Отмечает месяц как отправленный."""
+    if not _pool:
+        return
+    try:
+        async with _pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO monthly_report_state (id, last_sent_month) VALUES (TRUE, $1)
+                ON CONFLICT (id) DO UPDATE SET last_sent_month = EXCLUDED.last_sent_month
+                """,
+                month_key,
+            )
+    except Exception as e:
+        logger.error(f"Ошибка сохранения статуса ежемесячного отчета в БД: {e}")
