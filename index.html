@@ -804,11 +804,11 @@
     var el = document.getElementById("releaseCard");
     var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
     el.innerHTML =
-      '<h2>Последний релиз</h2>' + demo +
-      '<div style="display:flex; align-items:center; gap:8px; margin-top:6px;">' +
+      '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+        '<h2 style="margin:0;">Последний релиз</h2>' +
         '<span class="badge ok">' + esc(d.version || "—") + '</span>' +
-        '<span style="font-family:var(--mono); font-size:12px; color:var(--muted);">' + esc(d.date || "") + '</span>' +
-      '</div>' +
+      '</div>' + demo +
+      '<div style="font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:6px;">' + esc(d.date || "") + '</div>' +
       '<p class="desc" style="margin-top:10px;">' + esc(d.description || "Описание отсутствует.") + '</p>' +
       (d.url ? '<a href="'+esc(d.url)+'" target="_blank">Открыть в Jira →</a>' : "");
   }
