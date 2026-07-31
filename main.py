@@ -223,6 +223,13 @@ class JiraClientMock:
             "pending": int(pending_match.group(1)) if pending_match else 0,
         }
 
+    async def get_recently_completed(self, days: int = 7) -> dict:
+        from monitors.monthly_report import fetch_recently_completed_count
+        count = await fetch_recently_completed_count(
+            self.config['email'], self.config['token'], self.config['project'], self.config['url'], days=days
+        )
+        return {"count": count, "days": days}
+
 class TeamClientMock:
     """Отдает те же данные, что и команда /team (handlers/team_tasks_handler.py),
     но в JSON-формате для Mini App вместо сообщений в Telegram."""

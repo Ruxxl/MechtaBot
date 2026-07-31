@@ -56,6 +56,9 @@ GET  /api/team/users/{accountId}
      -> { tasks: [ { key, summary, status, url,
                       subtasks: [ {key, summary, status, url}, ... ] }, ... ] }
 
+GET  /api/tasks/completed-recent?days=7
+     -> { count: int, days: int }
+
 ============================================================================
 БЕЗОПАСНОСТЬ
 ============================================================================
