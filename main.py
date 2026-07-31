@@ -201,26 +201,18 @@ class JiraClientMock:
         }
 
     async def get_next_release_status(self):
-        # Логика из daily_reminder.py, но адаптированная
-        from handlers.daily_reminder import get_jira_release_status
-        status_text = await get_jira_release_status(
+        from handlers.daily_reminder import get_release_status_data
+        data = await get_release_status_data(
             self.config['email'], self.config['token'], self.config['project'], self.config['url']
         )
-        # Парсим текст, чтобы извлечь цифры. Это не идеально, но работает.
-        import re
-        name_match = re.search(r"Релиз (.+?):", status_text)
-        done_match = re.search(r"Готово: (\d+)", status_text)
-        progress_match = re.search(r"В работе: (\d+)", status_text)
-        pending_match = re.search(r"Ожидает: (\d+)", status_text)
-        total = (int(done_match.group(1)) if done_match else 0) + \
-                (int(progress_match.group(1)) if progress_match else 0) + \
-                (int(pending_match.group(1)) if pending_match else 0)
+        if data is None:
+            raise RuntimeError("Не удалось получить статус будущего релиза из Jira")
         return {
-            "version": name_match.group(1) if name_match else "N/A",
-            "total": total,
-            "done": int(done_match.group(1)) if done_match else 0,
-            "in_progress": int(progress_match.group(1)) if progress_match else 0,
-            "pending": int(pending_match.group(1)) if pending_match else 0,
+            "version": data["version"] or "N/A",
+            "total": data["total"],
+            "done": data["done"],
+            "in_progress": data["in_progress"],
+            "pending": data["pending"],
         }
 
     async def get_recently_completed(self, days: int = 7) -> dict:
