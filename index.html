@@ -113,6 +113,12 @@
   .list-item .title{font-weight:600; font-size:14px;}
   .list-item .sub{font-size:12px; color:var(--muted); margin-top:2px; font-family:var(--mono);}
 
+  .release-item{padding:12px 4px; border-bottom:1px solid var(--border);}
+  .release-item:last-child{border-bottom:none;}
+  .release-item-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px;}
+  .release-item .title{font-weight:600; font-size:14px;}
+  .release-item .sub{font-size:12px; color:var(--muted); margin-top:2px; font-family:var(--mono);}
+
   .toggle-row{
     margin-top:14px; padding-top:12px; border-top:1px solid var(--border);
     font-size:13px; color:var(--accent); font-weight:600; cursor:pointer; user-select:none;
@@ -1218,12 +1224,12 @@
     resultEl.innerHTML = '<div class="skeleton" style="height:44px;"></div><div class="skeleton" style="height:44px;"></div>';
 
     apiFetch(ENDPOINTS.releaseSearch(date)).then(function(data){
-      renderReleaseSearch(data, false);
+      renderReleaseSearch(data, false, date);
     }).catch(function(){
       renderReleaseSearch({
         matchType: "nearby",
-        releases: [{version: "3.24.0", date: "16.06.2026", url: null, tasks: 9}]
-      }, true);
+        releases: [{version: "3.24.0", date: "16.06.2026", url: null, tasks: 9, description: "В релиз вошли фиксы оплаты рассрочкой и улучшение синхронизации остатков."}]
+      }, true, date);
     });
   }
 
@@ -1233,7 +1239,23 @@
     week: "🗓 Релизов рядом не было, но вот что вышло на этой неделе:"
   };
 
-  function renderReleaseSearch(data, demo){
+  // r.date приходит в формате "дд.мм.гггг", targetDate — "гггг-мм-дд" (значение <input type=date>)
+  function releaseDayOffsetLabel(releaseDateStr, targetDateStr){
+    var parts = (releaseDateStr || "").split(".");
+    if (parts.length !== 3) return "";
+    var releaseDate = new Date(parts[2], parts[1] - 1, parts[0]);
+    var targetDate = new Date(targetDateStr + "T00:00:00");
+    if (isNaN(releaseDate.getTime()) || isNaN(targetDate.getTime())) return "";
+    var diffDays = Math.round((releaseDate - targetDate) / 86400000);
+    if (diffDays === 0) return "· в искомый день";
+    var abs = Math.abs(diffDays);
+    var unit = abs === 1 ? "день" : (abs < 5 ? "дня" : "дней");
+    return diffDays < 0
+      ? ("· на " + abs + " " + unit + " раньше")
+      : ("· на " + abs + " " + unit + " позже");
+  }
+
+  function renderReleaseSearch(data, demo, targetDate){
     var resultEl = document.getElementById("releaseSearchResult");
     var releases = data.releases || [];
     var demoTag = demo ? '<span class="demo-flag">⚠ демо-данные — API недоступен</span>' : "";
@@ -1249,13 +1271,15 @@
     resultEl.innerHTML = demoTag +
       '<div class="sub" style="margin-bottom:10px; font-size:13px;">' + esc(label) + '</div>' +
       releases.map(function(r){
+        var offsetLabel = data.matchType !== "exact" ? releaseDayOffsetLabel(r.date, targetDate) : "";
         return (
-          '<div class="list-item">' +
-            '<div>' +
+          '<div class="release-item">' +
+            '<div class="release-item-head">' +
               '<div class="title">' + (r.url ? '<a href="'+esc(r.url)+'" target="_blank">'+esc(r.version)+'</a>' : esc(r.version)) + '</div>' +
-              '<div class="sub">' + esc(r.date || "") + '</div>' +
+              '<span class="badge">' + esc(r.tasks != null ? r.tasks : "—") + ' задач</span>' +
             '</div>' +
-            '<span class="badge">' + esc(r.tasks != null ? r.tasks : "—") + ' задач</span>' +
+            '<div class="sub">' + esc(r.date || "") + (offsetLabel ? " " + esc(offsetLabel) : "") + '</div>' +
+            (r.description ? '<p class="desc" style="margin:6px 0 0;">' + esc(r.description) + '</p>' : "") +
           '</div>'
         );
       }).join("");

@@ -235,18 +235,21 @@ async def search_releases_by_date(
                 version_name = v.get("name", "?")
 
                 jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
-                search_params = {"jql": jql, "fields": "key", "maxResults": 100}
-                tasks_count = 0
+                search_params = {"jql": jql, "fields": "key,summary,subtasks", "maxResults": 100}
+                issues = []
                 async with session.get(f"{base_url}/rest/api/3/search/jql", params=search_params) as resp_issues:
                     if resp_issues.status == 200:
                         data = await resp_issues.json()
-                        tasks_count = len(data.get("issues", []))
+                        issues = data.get("issues", [])
+
+                description = await generate_release_summary(issues)
 
                 releases.append({
                     "version": version_name,
                     "date": release_date.strftime("%d.%m.%Y"),
                     "url": f"{base_url}/projects/{JIRA_PROJECT_KEY}/versions/{version_id}",
-                    "tasks": tasks_count,
+                    "tasks": len(issues),
+                    "description": description,
                 })
     except Exception as e:
         module_logger.exception(f"Ошибка поиска релизов по дате {target_date}: {e}")
