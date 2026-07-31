@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import aiohttp
 from aiogram import types
 from aiogram.enums import ParseMode
@@ -154,6 +154,105 @@ async def get_latest_released_version(
         "description": description,
         "url": version_url,
     }
+
+
+async def search_releases_by_date(
+    JIRA_EMAIL: str,
+    JIRA_API_TOKEN: str,
+    JIRA_PROJECT_KEY: str,
+    JIRA_URL: str,
+    target_date: str,
+) -> dict | None:
+    """
+    Ищет выпущенные релизы вокруг заданной даты (формат "YYYY-MM-DD") —
+    для вкладки "Поиск по релизам" в Mini App.
+
+    Порядок поиска:
+    1. Точное совпадение — релизы, вышедшие именно в этот день.
+    2. Если пусто — соседние дни (день до и день после).
+    3. Если и там пусто — вся неделя (пн-вс), в которую попадает дата.
+
+    Возвращает {"matchType": "exact"|"nearby"|"week"|"none", "releases": [...]}
+    (releases — список {version, date, url, tasks}, отсортированный по дате),
+    либо None при ошибке запроса к Jira / некорректной дате.
+    """
+    base_url = JIRA_URL.rstrip("/")
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+
+    try:
+        target = datetime.strptime(target_date, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+    try:
+        async with aiohttp.ClientSession(auth=auth) as session:
+            async with session.get(f"{base_url}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions") as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    module_logger.error(f"Ошибка получения версий проекта: {resp.status} — {body[:300]}")
+                    return None
+                versions = await resp.json()
+
+            released = []
+            for v in versions:
+                if not v.get("released"):
+                    continue
+                release_date_str = v.get("releaseDate")
+                if not release_date_str:
+                    continue
+                try:
+                    release_date = datetime.strptime(release_date_str, "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+                released.append((release_date, v))
+
+            def _match(dates_wanted):
+                return [(d, v) for d, v in released if d in dates_wanted]
+
+            match_type = "none"
+            matched = _match({target})
+            if matched:
+                match_type = "exact"
+            else:
+                matched = _match({target - timedelta(days=1), target + timedelta(days=1)})
+                if matched:
+                    match_type = "nearby"
+                else:
+                    week_start = target - timedelta(days=target.weekday())
+                    week_dates = {week_start + timedelta(days=i) for i in range(7)}
+                    matched = _match(week_dates)
+                    if matched:
+                        match_type = "week"
+
+            if not matched:
+                return {"matchType": "none", "releases": []}
+
+            matched.sort(key=lambda pair: pair[0])
+
+            releases = []
+            for release_date, v in matched:
+                version_id = v.get("id")
+                version_name = v.get("name", "?")
+
+                jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
+                search_params = {"jql": jql, "fields": "key", "maxResults": 100}
+                tasks_count = 0
+                async with session.get(f"{base_url}/rest/api/3/search/jql", params=search_params) as resp_issues:
+                    if resp_issues.status == 200:
+                        data = await resp_issues.json()
+                        tasks_count = len(data.get("issues", []))
+
+                releases.append({
+                    "version": version_name,
+                    "date": release_date.strftime("%d.%m.%Y"),
+                    "url": f"{base_url}/projects/{JIRA_PROJECT_KEY}/versions/{version_id}",
+                    "tasks": tasks_count,
+                })
+    except Exception as e:
+        module_logger.exception(f"Ошибка поиска релизов по дате {target_date}: {e}")
+        return None
+
+    return {"matchType": match_type, "releases": releases}
 
 
 async def jira_release_check(
