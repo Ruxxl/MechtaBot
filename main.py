@@ -236,6 +236,12 @@ class JiraClientMock:
         )
         return {"count": count, "days": days}
 
+    async def get_active_sprint(self) -> dict | None:
+        from monitors.monthly_report import fetch_active_sprint
+        return await fetch_active_sprint(
+            self.config['email'], self.config['token'], self.config['project'], self.config['url']
+        )
+
 class TeamClientMock:
     """Отдает те же данные, что и команда /team (handlers/team_tasks_handler.py),
     но в JSON-формате для Mini App вместо сообщений в Telegram."""

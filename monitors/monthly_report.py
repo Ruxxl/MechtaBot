@@ -351,6 +351,35 @@ async def fetch_due_soon_count(jira_email, jira_token, jira_project_key, jira_ur
     return total
 
 
+async def fetch_active_sprint(jira_email, jira_token, jira_project_key, jira_url) -> dict | None:
+    """Активный спринт проекта (первый найденный по доскам проекта) — для
+    строки в шапке Mini App (название спринта + обратный отсчёт до конца).
+    Возвращает {"name": str, "endDate": iso-строка | None} или None, если
+    активного спринта нет / не удалось получить."""
+    base_url = jira_url.rstrip("/")
+    auth = aiohttp.BasicAuth(jira_email, jira_token)
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
+    try:
+        async with aiohttp.ClientSession(auth=auth, headers=headers) as session:
+            board_ids = await _fetch_project_board_ids(session, base_url, jira_project_key)
+            for board_id in board_ids:
+                sprints_url = f"{base_url}/rest/agile/1.0/board/{board_id}/sprint"
+                async with session.get(sprints_url, params={"state": "active", "maxResults": 1}) as resp:
+                    if resp.status != 200:
+                        continue
+                    data = await resp.json()
+                    sprints = data.get("values", [])
+                    if sprints:
+                        sprint = sprints[0]
+                        return {"name": sprint.get("name"), "endDate": sprint.get("endDate")}
+    except Exception as e:
+        logger.error(f"Ошибка получения активного спринта: {e}")
+        return None
+
+    return None
+
+
 # =======================
 # Запрос данных в Jira
 # =======================
