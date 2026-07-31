@@ -243,10 +243,14 @@ class GithubStoreMock:
         """Возвращает самое свежее событие среди ВСЕХ стендов (по фактической
         дате сборки), а не первый ключ словаря — раньше после рестарта бота
         всегда отдавался первый по порядку вставки стенд, даже если он
-        не деплоился неделями."""
-        if not self.handler.latest_builds:
-            return None
+        не деплоился неделями.
 
+        Сначала смотрит in-memory кэш вебхуков (быстро, но пустеет при каждом
+        рестарте процесса бота на Render). Если он пуст — идёт в Postgres
+        (services/db_service.py), куда save_build() дублирует каждую успешную
+        заливку и что переживает рестарт. Без этого фолбэка карточка в Mini
+        App показывала "pending / Событий пока нет" сразу после любого
+        редеплоя бота, пока не прилетал следующий вебхук."""
         from datetime import datetime
         best_stand = None
         best_build = None
@@ -264,6 +268,23 @@ class GithubStoreMock:
                 best_dt = dt
                 best_stand = stand
                 best_build = build
+
+        if best_build is None:
+            # In-memory кэш пуст — пробуем БД по каждому известному стенду
+            # (ключи те же workflow-имена, что save_build() пишет как stand_key).
+            for workflow_key, stand_url in self.handler.stand_urls.items():
+                db_builds = await get_stand_builds_from_db(workflow_key, limit=1)
+                if not db_builds:
+                    continue
+                build = db_builds[0]
+                try:
+                    dt = datetime.strptime(build['date'], "%d.%m.%Y %H:%M")
+                except (ValueError, KeyError):
+                    continue
+                if best_dt is None or dt > best_dt:
+                    best_dt = dt
+                    best_stand = workflow_key.upper()
+                    best_build = build
 
         if best_build is None:
             return None
