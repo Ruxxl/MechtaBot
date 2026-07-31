@@ -436,7 +436,14 @@
     canvas.width = w * dpr; canvas.height = h * dpr;
     ctx.scale(dpr, dpr);
     ctx.clearRect(0,0,w,h);
-    var max = Math.max.apply(null, values.concat([1]));
+    var max = values.length ? Math.max.apply(null, values) : 0;
+    if (max === 0) {
+      ctx.fillStyle = "#8891a3";
+      ctx.font = "12px JetBrains Mono, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("нет данных по дням", w / 2, h / 2);
+      return;
+    }
     var gap = 6;
     var barW = (w - gap * (values.length - 1)) / values.length;
     values.forEach(function(v, i){
