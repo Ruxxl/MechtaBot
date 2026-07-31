@@ -213,6 +213,8 @@ class JiraClientMock:
             "done": data["done"],
             "in_progress": data["in_progress"],
             "pending": data["pending"],
+            "tasks": data.get("tasks", []),
+            "description": data.get("description", ""),
         }
 
     async def get_recently_completed(self, days: int = 7) -> dict:

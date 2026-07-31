@@ -30,7 +30,8 @@ GET  /api/github/last-event
      -> { actor, branch, commit, time, conclusion: "success"|"failure"|"pending" }
 
 GET  /api/release/next-status
-     -> { name, total, done, inProgress, pending }
+     -> { name, total, done, inProgress, pending, description,
+          tasks: [{key, summary, status, url}, ...] }
 
 GET  /api/stands
      -> [ { key, label, url, status: "ok"|"warn"|"danger" }, ... ]
@@ -373,10 +374,16 @@ async def get_next_release_status(request: web.Request) -> web.Response:
 
     if jira is None:
         return json_response(
-            {"name": "3.23.0", "total": 14, "done": 9, "inProgress": 3, "pending": 2}
+            {
+                "name": "3.23.0", "total": 14, "done": 9, "inProgress": 3, "pending": 2,
+                "description": "Мок-данные: подключи services['jira'] в main.py.",
+                "tasks": [
+                    {"key": "MECHTA-1301", "summary": "Рефакторинг корзины", "status": "В работе", "url": None},
+                    {"key": "MECHTA-1302", "summary": "Push-уведомления о статусе заказа", "status": "Готово", "url": None},
+                ],
+            }
         )
 
-    # TODO: JQL-запрос по задачам будущего релиза (fixVersion = следующий релиз).
     status = await jira.get_next_release_status()
     return json_response(
         {
@@ -385,6 +392,8 @@ async def get_next_release_status(request: web.Request) -> web.Response:
             "done": status["done"],
             "inProgress": status["in_progress"],
             "pending": status["pending"],
+            "description": status.get("description", ""),
+            "tasks": status.get("tasks", []),
         }
     )
 

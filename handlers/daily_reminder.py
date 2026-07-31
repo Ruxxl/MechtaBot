@@ -145,7 +145,7 @@ async def get_release_status_data(
 
     unreleased = [v for v in versions if not v.get("released", False)]
     if not unreleased:
-        return {"version": None, "total": 0, "done": 0, "in_progress": 0, "pending": 0}
+        return {"version": None, "total": 0, "done": 0, "in_progress": 0, "pending": 0, "tasks": [], "description": ""}
 
     def parse_version(v_name):
         return [int(s) for s in re.findall(r'\d+', v_name)]
@@ -165,6 +165,7 @@ async def get_release_status_data(
             issues = data.get("issues", [])
 
     done = in_progress = pending = 0
+    tasks = []
     for issue in issues:
         category_key = issue["fields"]["status"].get("statusCategory", {}).get("key", "")
         if category_key == "done":
@@ -173,6 +174,15 @@ async def get_release_status_data(
             in_progress += 1
         else:
             pending += 1
+        tasks.append({
+            "key": issue["key"],
+            "summary": issue["fields"].get("summary", "Без названия"),
+            "status": issue["fields"]["status"].get("name", "?"),
+            "url": f"{JIRA_URL}/browse/{issue['key']}",
+        })
+
+    from monitors.release_notifier import generate_release_summary
+    description = await generate_release_summary(issues)
 
     return {
         "version": release_name,
@@ -180,6 +190,8 @@ async def get_release_status_data(
         "done": done,
         "in_progress": in_progress,
         "pending": pending,
+        "tasks": tasks,
+        "description": description,
     }
 
 # =============================
