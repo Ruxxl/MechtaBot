@@ -228,13 +228,16 @@
   .typing-dots span:nth-child(3){animation-delay:.3s;}
   @keyframes typing-bounce{0%,60%,100%{opacity:.35; transform:translateY(0);} 30%{opacity:1; transform:translateY(-3px);}}
 
-  /* ---------- виджет "N задач выполнено за последние N дней" (главная) ---------- */
-  .metric-card{display:flex; align-items:center; gap:14px;}
+  /* ---------- виджеты "N задач выполнено/создано за последние N дней" (главная) ---------- */
+  .metric-row{display:flex; gap:10px;}
+  .metric-row .card{flex:1; min-width:0; margin-bottom:14px;}
+  .metric-card{display:flex; align-items:center; gap:12px;}
   .metric-icon{
     width:40px; height:40px; border-radius:10px; flex-shrink:0;
     display:flex; align-items:center; justify-content:center; font-size:19px;
   }
   .metric-icon.ok{background:#34d39926; color:var(--ok);}
+  .metric-icon.neutral{background:var(--accent-dim); color:var(--accent);}
   .metric-num{font-size:20px; font-weight:700; font-family:var(--mono);}
   .metric-sub{font-size:12.5px; color:var(--muted); margin-top:2px;}
 </style>
@@ -256,12 +259,21 @@
   <section class="page active" data-page="home">
     <h1 class="page-title">$ dashboard <span>// обзор</span></h1>
 
-    <!-- виджет "N задач выполнено за последние N дней" — см. loadCompletedWidget() ниже -->
-    <div class="card metric-card" id="completedWidgetSlot">
-      <div class="metric-icon ok">✓</div>
-      <div>
-        <div class="metric-num"><span class="skeleton num-skeleton"></span></div>
-        <div class="metric-sub">выполнено за последние 7 дней</div>
+    <!-- виджеты "N задач выполнено/создано за последние N дней" — см. loadCompletedWidget()/loadCreatedWidget() ниже -->
+    <div class="metric-row">
+      <div class="card metric-card" id="completedWidgetSlot">
+        <div class="metric-icon ok">✓</div>
+        <div>
+          <div class="metric-num"><span class="skeleton num-skeleton"></span></div>
+          <div class="metric-sub">выполнено за последние 7 дней</div>
+        </div>
+      </div>
+      <div class="card metric-card" id="createdWidgetSlot">
+        <div class="metric-icon neutral">☑</div>
+        <div>
+          <div class="metric-num"><span class="skeleton num-skeleton"></span></div>
+          <div class="metric-sub">создано за последние 7 дней</div>
+        </div>
       </div>
     </div>
 
@@ -438,7 +450,8 @@
     help:          API_BASE + "/api/help",
     teamUsers:     API_BASE + "/api/team/users",
     teamUserTasks: function(id){ return API_BASE + "/api/team/users/" + encodeURIComponent(id); },
-    completedRecent: function(days){ return API_BASE + "/api/tasks/completed-recent?days=" + days; }
+    completedRecent: function(days){ return API_BASE + "/api/tasks/completed-recent?days=" + days; },
+    createdRecent: function(days){ return API_BASE + "/api/tasks/created-recent?days=" + days; }
   };
 
   var tg = window.Telegram && window.Telegram.WebApp;
@@ -619,10 +632,12 @@
     });
 
     loadCompletedWidget();
+    loadCreatedWidget();
   }
 
-  /* ---------- виджет "N задач выполнено за последние N дней" ---------- */
+  /* ---------- виджеты "N задач выполнено/создано за последние N дней" ---------- */
   var COMPLETED_WIDGET_DAYS = 7;
+  var CREATED_WIDGET_DAYS = 7;
 
   function loadCompletedWidget(){
     document.getElementById("completedWidgetSlot").innerHTML =
@@ -648,6 +663,33 @@
       '<div>' +
         '<div class="metric-num">' + esc(count) + ' задач</div>' +
         '<div class="metric-sub">выполнено за последние ' + esc(days) + ' дней' + (demo ? ' · демо' : '') + '</div>' +
+      '</div>';
+  }
+
+  function loadCreatedWidget(){
+    document.getElementById("createdWidgetSlot").innerHTML =
+      '<div class="metric-icon neutral">☑</div>' +
+      '<div>' +
+        '<div class="metric-num"><span class="skeleton num-skeleton"></span></div>' +
+        '<div class="metric-sub">создано за последние ' + CREATED_WIDGET_DAYS + ' дней</div>' +
+      '</div>';
+
+    apiFetch(ENDPOINTS.createdRecent(CREATED_WIDGET_DAYS)).then(function(data){
+      renderCreatedWidget(data, false);
+    }).catch(function(){
+      renderCreatedWidget({count: 22, days: CREATED_WIDGET_DAYS}, true);
+    });
+  }
+
+  function renderCreatedWidget(data, demo){
+    var slot = document.getElementById("createdWidgetSlot");
+    var count = data.count != null ? data.count : 0;
+    var days = data.days != null ? data.days : CREATED_WIDGET_DAYS;
+    slot.innerHTML =
+      '<div class="metric-icon neutral">☑</div>' +
+      '<div>' +
+        '<div class="metric-num">' + esc(count) + ' задач</div>' +
+        '<div class="metric-sub">создано за последние ' + esc(days) + ' дней' + (demo ? ' · демо' : '') + '</div>' +
       '</div>';
   }
 

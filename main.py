@@ -230,6 +230,13 @@ class JiraClientMock:
         )
         return {"count": count, "days": days}
 
+    async def get_recently_created(self, days: int = 7) -> dict:
+        from monitors.monthly_report import fetch_recently_created_count
+        count = await fetch_recently_created_count(
+            self.config['email'], self.config['token'], self.config['project'], self.config['url'], days=days
+        )
+        return {"count": count, "days": days}
+
 class TeamClientMock:
     """Отдает те же данные, что и команда /team (handlers/team_tasks_handler.py),
     но в JSON-формате для Mini App вместо сообщений в Telegram."""
