@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime
 import aiohttp
 from aiogram import types
 from aiogram.enums import ParseMode
@@ -73,6 +74,86 @@ async def generate_release_summary(issues: list, max_chars: int = 350) -> str:
     except Exception as e:
         module_logger.error(f"Ошибка генерации описания релиза через AI: {e}")
         return "Описание релиза временно недоступно."
+
+
+async def get_latest_released_version(
+    JIRA_EMAIL: str,
+    JIRA_API_TOKEN: str,
+    JIRA_PROJECT_KEY: str,
+    JIRA_URL: str,
+) -> dict | None:
+    """
+    Возвращает самую свежую ВЫПУЩЕННУЮ версию проекта (по released=true и
+    максимальной releaseDate) для карточки "Последний релиз" в Mini App
+    (/api/release/latest, см. web/miniapp_api.py::get_latest_release).
+
+    Формат результата: {"version": str, "date": datetime, "description": str, "url": str}
+    Возвращает None при ошибке запроса к Jira или если выпущенных версий нет.
+    """
+    base_url = JIRA_URL.rstrip("/")
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+
+    try:
+        async with aiohttp.ClientSession(auth=auth) as session:
+            # 1. Все версии проекта
+            async with session.get(f"{base_url}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions") as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    module_logger.error(f"Ошибка получения версий проекта: {resp.status} — {body[:300]}")
+                    return None
+                versions = await resp.json()
+
+            # 2. Оставляем только выпущенные версии с releaseDate, берем самую свежую
+            released = []
+            for v in versions:
+                if not v.get("released"):
+                    continue
+                release_date_str = v.get("releaseDate")
+                if not release_date_str:
+                    continue
+                try:
+                    release_date = datetime.strptime(release_date_str, "%Y-%m-%d")
+                except ValueError:
+                    continue
+                released.append((release_date, v))
+
+            if not released:
+                module_logger.warning("Не найдено ни одной выпущенной версии с releaseDate")
+                return None
+
+            release_date, latest_version = max(released, key=lambda pair: pair[0])
+            version_id = latest_version.get("id")
+            version_name = latest_version.get("name", "?")
+
+            # 3. Задачи релиза (+ подзадачи) — для AI-описания, как в jira_release_check
+            jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id}'
+            search_params = {
+                "jql": jql,
+                "fields": "key,summary,subtasks",
+                "maxResults": 200,
+            }
+            async with session.get(f"{base_url}/rest/api/3/search/jql", params=search_params) as resp_issues:
+                issues = []
+                if resp_issues.status == 200:
+                    data = await resp_issues.json()
+                    issues = data.get("issues", [])
+                else:
+                    body = await resp_issues.text()
+                    module_logger.warning(f"Не удалось получить задачи релиза {version_name}: {resp_issues.status} — {body[:300]}")
+
+    except Exception as e:
+        module_logger.exception(f"Ошибка запроса последнего релиза из Jira: {e}")
+        return None
+
+    description = await generate_release_summary(issues)
+    version_url = f"{base_url}/projects/{JIRA_PROJECT_KEY}/versions/{version_id}"
+
+    return {
+        "version": version_name,
+        "date": release_date,
+        "description": description,
+        "url": version_url,
+    }
 
 
 async def jira_release_check(
