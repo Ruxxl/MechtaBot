@@ -489,38 +489,57 @@
   }
   function clearFlag(el){ el.innerHTML = ""; }
 
-  function drawBarChart(canvas, labels, values, color){
+  function drawPieChart(canvas, segments){
     var ctx = canvas.getContext("2d");
     var dpr = window.devicePixelRatio || 1;
     var w = canvas.clientWidth || 300, h = canvas.height;
     canvas.width = w * dpr; canvas.height = h * dpr;
     ctx.scale(dpr, dpr);
     ctx.clearRect(0,0,w,h);
-    var max = values.length ? Math.max.apply(null, values) : 0;
-    if (max === 0) {
+
+    var total = segments.reduce(function(sum, s){ return sum + (s.value || 0); }, 0);
+    var cx = h / 2 + 8, cy = h / 2, radius = h / 2 - 10;
+
+    if (total <= 0) {
       ctx.fillStyle = "#8891a3";
       ctx.font = "12px JetBrains Mono, monospace";
       ctx.textAlign = "center";
-      ctx.fillText("нет данных по дням", w / 2, h / 2);
+      ctx.fillText("нет данных", w / 2, h / 2);
       return;
     }
-    var gap = 6;
-    var barW = (w - gap * (values.length - 1)) / values.length;
-    values.forEach(function(v, i){
-      var barH = Math.max(2, (v / max) * (h - 22));
-      var x = i * (barW + gap);
-      var y = h - barH - 16;
-      ctx.fillStyle = color || "#5b7fff";
-      ctx.globalAlpha = 0.55 + 0.45 * (v / max);
-      roundRect(ctx, x, y, barW, barH, 4);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      if (labels && labels[i] && values.length <= 15) {
-        ctx.fillStyle = "#8891a3";
-        ctx.font = "9px JetBrains Mono, monospace";
-        ctx.textAlign = "center";
-        ctx.fillText(labels[i], x + barW/2, h - 4);
+
+    var start = -Math.PI / 2;
+    segments.forEach(function(s){
+      var slice = (s.value / total) * Math.PI * 2;
+      if (s.value > 0) {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, start, start + slice);
+        ctx.closePath();
+        ctx.fillStyle = s.color;
+        ctx.fill();
       }
+      start += slice;
+    });
+
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.58, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    var legendX = cx + radius + 22;
+    var legendY = cy - ((segments.length - 1) * 20) / 2;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.font = "12.5px -apple-system, sans-serif";
+    segments.forEach(function(s, i){
+      var y = legendY + i * 20;
+      ctx.fillStyle = s.color;
+      roundRect(ctx, legendX, y - 5, 10, 10, 3);
+      ctx.fill();
+      ctx.fillStyle = "#e8ebf2";
+      ctx.fillText(s.label + " — " + s.value, legendX + 16, y);
     });
   }
   function roundRect(ctx,x,y,w,h,r){
@@ -536,16 +555,11 @@
   /* ===================== демо-данные (fallback) ===================== */
   function demoMonthData(){
     var days = new Date().getDate();
-    var labels = [], values = [];
-    for (var i=1;i<=Math.min(days,30);i++){
-      labels.push(String(i));
-      values.push(Math.floor(Math.random()*6));
-    }
+    var tasks = 20 + Math.floor(Math.random() * 60);
     return {
-      tasks: values.reduce(function(a,b){return a+b;},0),
-      bugs: Math.floor(values.reduce(function(a,b){return a+b;},0)*1.6),
-      releases: Math.max(1, Math.floor(days/10)),
-      days: labels, byDay: values
+      tasks: tasks,
+      bugs: Math.floor(tasks * 1.6),
+      releases: Math.max(1, Math.floor(days / 10))
     };
   }
 
@@ -590,7 +604,11 @@
     stats.innerHTML =
       stat(data.tasks, "задач") + stat(data.bugs, "багов") + stat(data.releases, "релизов");
     var canvas = document.getElementById("activityChart");
-    drawBarChart(canvas, data.days || [], data.byDay || [], "#5b7fff");
+    drawPieChart(canvas, [
+      {label:"Задачи", value:data.tasks || 0, color:"#5b7fff"},
+      {label:"Баги", value:data.bugs || 0, color:"#ff5c7a"},
+      {label:"Релизы", value:data.releases || 0, color:"#34d399"}
+    ]);
     var chartSkeleton = document.getElementById("activityChartSkeleton");
     if (chartSkeleton) chartSkeleton.classList.remove("show");
   }
@@ -912,7 +930,11 @@
     document.getElementById("repReleases").textContent = data.releases != null ? data.releases : "0";
     document.getElementById("repTasks").textContent = data.tasks != null ? data.tasks : "0";
     document.getElementById("repBugs").textContent = data.bugs != null ? data.bugs : "0";
-    drawBarChart(document.getElementById("reportChart"), data.days || [], data.byDay || [], "#34d399");
+    drawPieChart(document.getElementById("reportChart"), [
+      {label:"Задачи", value:data.tasks || 0, color:"#5b7fff"},
+      {label:"Баги", value:data.bugs || 0, color:"#ff5c7a"},
+      {label:"Релизы", value:data.releases || 0, color:"#34d399"}
+    ]);
     var reportChartSkeleton = document.getElementById("reportChartSkeleton");
     if (reportChartSkeleton) reportChartSkeleton.classList.remove("show");
 
