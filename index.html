@@ -262,21 +262,18 @@
     </div>
 
     <div class="card" id="releaseCard">
-      <div class="card-cmd">release --latest</div>
       <h2>Последний релиз</h2>
       <div class="skeleton" style="width:60%"></div>
       <div class="skeleton" style="width:90%"></div>
     </div>
 
     <div class="card" id="webhookCard">
-      <div class="card-cmd">github --last-event</div>
       <h2>Последнее событие GitHub</h2>
       <div class="skeleton" style="width:70%"></div>
       <div class="skeleton" style="width:50%"></div>
     </div>
 
     <div class="card" id="nextReleaseCard">
-      <div class="card-cmd">jira --release-status</div>
       <h2>Статус будущего релиза</h2>
       <div class="skeleton" style="width:80%"></div>
     </div>
@@ -608,7 +605,6 @@
     var el = document.getElementById("releaseCard");
     var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
     el.innerHTML =
-      '<div class="card-cmd">release --latest</div>' +
       '<h2>Последний релиз</h2>' + demo +
       '<div style="display:flex; align-items:center; gap:8px; margin-top:6px;">' +
         '<span class="badge ok">' + esc(d.version || "—") + '</span>' +
@@ -623,7 +619,6 @@
     var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
     var badgeClass = d.conclusion === "success" ? "ok" : d.conclusion === "failure" ? "danger" : "warn";
     el.innerHTML =
-      '<div class="card-cmd">github --last-event</div>' +
       '<h2>Последнее событие GitHub</h2>' + demo +
       '<div class="list-item" style="border:none; padding-top:6px;">' +
         '<div>' +
@@ -640,7 +635,6 @@
     var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
     var pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
     el.innerHTML =
-      '<div class="card-cmd">jira --release-status</div>' +
       '<h2>Релиз ' + esc(d.name || "?") + '</h2>' + demo +
       '<div style="background:var(--surface-2); border-radius:8px; height:10px; overflow:hidden; margin:10px 0 8px;">' +
         '<div style="width:'+pct+'%; height:100%; background:linear-gradient(90deg, var(--accent), var(--ok));"></div>' +
