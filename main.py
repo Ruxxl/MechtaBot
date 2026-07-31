@@ -35,6 +35,7 @@ from handlers.help_handler import register_help_handlers, help_data, CATEGORIES
 from handlers.bugreport_handler import register_bugreport_handlers
 from services.db_service import init_db, close_db, get_latest_builds as get_stand_builds_from_db
 from web.miniapp_api import setup_miniapp_routes
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 
 
@@ -49,7 +50,14 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 VISION_THREAD_ID = 1886
-MINIAPP_FRONTEND_URL = os.getenv("MINIAPP_FRONTEND_URL", "https://ruxxl.github.io/telegramminiapp/")
+# Render автоматически прокидывает RENDER_EXTERNAL_URL для web-сервисов —
+# используем его, чтобы Mini App раздавался тем же сервером, где крутится бот
+# (index.html теперь лежит в корне репозитория). Если переменной нет
+# (локальный запуск, другой хостинг) — падаем на GitHub Pages как раньше.
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+_DEFAULT_MINIAPP_URL = f"{RENDER_EXTERNAL_URL}/app" if RENDER_EXTERNAL_URL else "https://ruxxl.github.io/telegramminiapp/"
+MINIAPP_FRONTEND_URL = os.getenv("MINIAPP_FRONTEND_URL", _DEFAULT_MINIAPP_URL)
+INDEX_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 PERSONAL_CALENDAR_URL = "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
@@ -230,24 +238,42 @@ class StandsConfigMock:
 class GithubStoreMock:
     def __init__(self, handler):
         self.handler = handler
+
     async def get_last_event(self):
-        # Берём последнее событие из кэша webhook_handler
-        # Ключи в кэше в верхнем регистре, берем первый попавшийся стенд
+        """Возвращает самое свежее событие среди ВСЕХ стендов (по фактической
+        дате сборки), а не первый ключ словаря — раньше после рестарта бота
+        всегда отдавался первый по порядку вставки стенд, даже если он
+        не деплоился неделями."""
         if not self.handler.latest_builds:
             return None
-        
-        latest_stand = next(iter(self.handler.latest_builds))
-        latest_build = self.handler.latest_builds[latest_stand][0]
-        
+
         from datetime import datetime
-        dt = datetime.strptime(latest_build['date'], "%d.%m.%Y %H:%M")
+        best_stand = None
+        best_build = None
+        best_dt = None
+
+        for stand, builds in self.handler.latest_builds.items():
+            if not builds:
+                continue
+            build = builds[0]
+            try:
+                dt = datetime.strptime(build['date'], "%d.%m.%Y %H:%M")
+            except (ValueError, KeyError):
+                continue
+            if best_dt is None or dt > best_dt:
+                best_dt = dt
+                best_stand = stand
+                best_build = build
+
+        if best_build is None:
+            return None
 
         return {
-            "actor": latest_build['actor'],
-            "branch": "predprod", # Это поле не хранится, ставим заглушку
-            "commit_message": latest_build['commit'],
-            "timestamp": dt,
-            "conclusion": "success" # В кэше только успешные
+            "actor": best_build['actor'],
+            "branch": best_stand,  # реальное имя стенда вместо хардкода "predprod"
+            "commit_message": best_build['commit'],
+            "timestamp": best_dt,
+            "conclusion": "success",
         }
 
 class ReleasesMock:
@@ -302,14 +328,20 @@ setup_miniapp_routes(app, services={ # 'app' is now defined
 async def handle_web_root(request):
     return web.Response(text="Bot is alive!")
 
-async def start_web_server(app: web.Application, webhook_h: WebhookHandler, bot_info: types.User): # Pass app as argument
+async def start_web_server(app: web.Application, webhook_h: WebhookHandler, bot_info: types.User):
 
     admin_h = AdminHandler(bot_username=bot_info.username)
 
+    async def handle_miniapp_page(request):
+        if not os.path.exists(INDEX_HTML_PATH):
+            return web.Response(text="index.html не найден на сервере", status=404)
+        return web.FileResponse(INDEX_HTML_PATH)
+
     app.router.add_get('/', handle_web_root)
+    app.router.add_get('/app', handle_miniapp_page)
     app.router.add_post('/webhook/notify', webhook_h.handle_notification)
     app.router.add_get('/admin', admin_h.handle_dashboard)
-    
+
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))

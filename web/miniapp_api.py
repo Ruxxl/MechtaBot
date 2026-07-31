@@ -172,6 +172,14 @@ def require_auth(handler: Callable[[web.Request], Awaitable[web.Response]]):
 # CORS
 # ============================================================================
 
+ALLOWED_ORIGINS = {
+    o.strip() for o in os.environ.get(
+        "MINIAPP_ALLOWED_ORIGIN", "https://ruxxl.github.io"
+    ).split(",")
+    if o.strip()
+}
+
+
 @web.middleware
 async def cors_middleware(request: web.Request, handler):
     if request.method == "OPTIONS":
@@ -181,7 +189,14 @@ async def cors_middleware(request: web.Request, handler):
             resp = await handler(request)
         except web.HTTPException as exc:
             resp = exc
-    resp.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
+
+    origin = request.headers.get("Origin")
+    # Same-origin запросы (Mini App теперь раздаётся тем же сервером, что и
+    # API) обычно приходят вообще без заголовка Origin — тогда CORS-заголовок
+    # не нужен. Кросс-доменные (GitHub Pages и т.п.) — сверяем со списком.
+    if origin and (origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS):
+        resp.headers["Access-Control-Allow-Origin"] = origin
+
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Telegram-Init-Data"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return resp
@@ -211,17 +226,12 @@ async def get_monthreport(request: web.Request) -> web.Response:
     if jira is None:
         return json_response(_mock_monthreport())
 
-    # TODO: подключить реальный источник — например, тот же JQL/логику,
-    # что использует существующая команда /monthreport в боте.
-    # Пример ожидаемой формы вызова (адаптируй под свой jira-клиент):
-    #
-    #   today = datetime.now()
-    #   start = today.replace(day=1)
-    #   issues = await jira.search_issues_created_between(start, today)
-    #   report = build_month_report(issues)  # твоя существующая функция
-    #
-    # и дальше просто скопировать поля report в контракт ниже.
-    report = await jira.get_month_report()  # <-- метод твоего клиента
+    try:
+        report = await jira.get_month_report()
+    except Exception as e:
+        logger.exception(f"Ошибка получения месячного отчета для Mini App: {e}")
+        return json_response(_mock_monthreport())
+
     return json_response(
         {
             "tasks": report.get("tasks", 0),
@@ -287,7 +297,6 @@ async def get_latest_release(request: web.Request) -> web.Response:
 # ---------------------------------------------------------------------------
 # /api/github/last-event
 # ---------------------------------------------------------------------------
-
 @routes.get("/api/github/last-event")
 @require_auth
 async def get_last_github_event(request: web.Request) -> web.Response:
@@ -305,19 +314,24 @@ async def get_last_github_event(request: web.Request) -> web.Response:
             }
         )
 
-    # TODO: github_store — то место, куда уже пишутся webhook-события
-    # (тот же обработчик, что шлёт уведомление о деплое в чат).
-    # Нужно просто прочитать последнюю запись вместо/вместе с отправкой в Telegram.
-    event = await github_store.get_last_event()
+    try:
+        event = await github_store.get_last_event()
+    except Exception as e:
+        logger.exception(f"Ошибка получения последнего события GitHub: {e}")
+        event = None
+
+    if event is None:
+        return json_response(
+            {
+                "actor": "system",
+                "branch": "n/a",
+                "commit": "Событий пока нет",
+                "time": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                "conclusion": "pending",
+            }
+        )
+
     return json_response(
-        {
-            "actor": "system",
-            "branch": "n/a",
-            "commit": "Событий пока нет",
-            "time": datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "conclusion": "pending",
-        }
-    ) if event is None else json_response(
         {
             "actor": event["actor"],
             "branch": event["branch"],
