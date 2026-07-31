@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(pkill -f \"http.server 8934\")",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(grep *)"
     ]
   }
 }
