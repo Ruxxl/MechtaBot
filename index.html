@@ -804,7 +804,7 @@
     var el = document.getElementById("releaseCard");
     var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
     el.innerHTML =
-      '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+      '<div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">' +
         '<h2 style="margin:0;">Последний релиз</h2>' +
         '<span class="badge ok">' + esc(d.version || "—") + '</span>' +
       '</div>' + demo +
