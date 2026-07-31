@@ -77,7 +77,6 @@
     display:flex; align-items:center; gap:6px; margin-bottom:10px;
     text-transform:none;
   }
-  .card-cmd::before{content:'$'; color:var(--muted);}
   .card h2{font-size:16px; margin:0 0 4px; font-weight:650;}
   .card p.desc{color:var(--muted); font-size:13px; margin:0 0 10px; line-height:1.45;}
 
@@ -266,7 +265,7 @@
 
   <!-- ================= HOME ================= -->
   <section class="page active" data-page="home">
-    <h1 class="page-title">$ dashboard <span>// обзор</span></h1>
+    <h1 class="page-title">dashboard <span>// обзор</span></h1>
 
     <!-- виджеты "N задач ..." — см. loadCompletedWidget()/loadCreatedWidget()/loadDueSoonWidget() ниже -->
     <div class="metric-row">
@@ -294,7 +293,6 @@
     </div>
 
     <div class="card">
-      <div class="card-cmd">/monthreport</div>
       <h2>Активность за месяц</h2>
       <div id="homeDemoFlag"></div>
       <div class="chart-wrap">
@@ -328,7 +326,7 @@
 
   <!-- ================= STANDS ================= -->
   <section class="page" data-page="stands">
-    <h1 class="page-title">$ /stands <span>// окружения</span></h1>
+    <h1 class="page-title">/stands <span>// окружения</span></h1>
     <div id="standsList">
       <div class="skeleton" style="height:64px;"></div>
       <div class="skeleton" style="height:64px;"></div>
@@ -338,7 +336,7 @@
 
   <!-- ================= JIRA ================= -->
   <section class="page" data-page="jira">
-    <h1 class="page-title">$ /jira <span>// новый баг</span></h1>
+    <h1 class="page-title">/jira <span>// новый баг</span></h1>
     <div class="card">
       <div class="card-cmd">jira issue create</div>
       <label>Заголовок</label>
@@ -364,7 +362,7 @@
 
   <!-- ================= TEAM ================= -->
   <section class="page" data-page="team">
-    <h1 class="page-title">$ /team <span>// участники и спринт</span></h1>
+    <h1 class="page-title">/team <span>// участники и спринт</span></h1>
     <div id="teamList">
       <div class="skeleton" style="height:52px;"></div>
       <div class="skeleton" style="height:52px;"></div>
@@ -374,7 +372,7 @@
 
   <!-- ================= ASK ================= -->
   <section class="page" data-page="ask">
-    <h1 class="page-title">$ /ask <span>// вопрос по документации</span></h1>
+    <h1 class="page-title">/ask <span>// вопрос по документации</span></h1>
     <div class="card">
       <div class="card-cmd">confluence search</div>
       <div class="chat" id="askChat">
@@ -389,7 +387,7 @@
 
   <!-- ================= REPORT ================= -->
   <section class="page" data-page="report">
-    <h1 class="page-title">$ /monthreport <span>// с 1 числа</span></h1>
+    <h1 class="page-title"><span>// с 1 числа</span></h1>
     <div class="card">
       <div class="card-cmd" id="reportRange">monthreport --from=... --to=...</div>
       <div id="reportDemoFlag"></div>
@@ -415,7 +413,7 @@
 
   <!-- ================= HELP ================= -->
   <section class="page" data-page="help">
-    <h1 class="page-title">$ /help <span>// что умеет бот</span></h1>
+    <h1 class="page-title">/help <span>// что умеет бот</span></h1>
     <div id="helpList">
       <div class="skeleton" style="height:48px;"></div>
       <div class="skeleton" style="height:48px;"></div>
@@ -834,10 +832,10 @@
     var demo = d.demo ? '<span class="demo-flag">⚠ демо</span><br>' : "";
     var pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
     el.innerHTML =
-      '<h2>Будущий релиз</h2>' + demo +
-      '<div style="display:flex; align-items:center; gap:8px; margin-top:6px;">' +
+      '<div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">' +
+        '<h2 style="margin:0;">Будущий релиз</h2>' +
         '<span class="badge">' + esc(d.name || "N/A") + '</span>' +
-      '</div>' +
+      '</div>' + demo +
       '<div style="background:var(--surface-2); border-radius:8px; height:10px; overflow:hidden; margin:10px 0 8px;">' +
         '<div style="width:'+pct+'%; height:100%; background:linear-gradient(90deg, var(--accent), var(--ok));"></div>' +
       '</div>' +
