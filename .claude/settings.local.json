@@ -1,9 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pkill -f \"http.server 8934\")"
+      "Bash(pkill -f \"http.server 8934\")",
+      "Bash(node *)"
     ]
-  },
-  "language": "russian"
+  }
 }
-
