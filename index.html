@@ -41,8 +41,9 @@
     background:rgba(11,13,18,.85); backdrop-filter:blur(10px);
     border-bottom:1px solid var(--border);
     padding:14px 18px 12px;
-    display:flex; align-items:center; justify-content:space-between;
+    display:flex; flex-direction:column; gap:6px;
   }
+  .topbar-row{display:flex; align-items:center; justify-content:space-between;}
   .brand{display:flex; align-items:baseline; gap:8px; font-family:var(--mono);}
   .brand .prompt{color:var(--accent); font-weight:700;}
   .brand .cursor{display:inline-block; width:8px; height:16px; background:var(--accent); margin-left:2px; animation:blink 1.1s steps(1) infinite; vertical-align:-2px;}
@@ -50,6 +51,12 @@
   .brand-name{font-size:15px; font-weight:600; letter-spacing:.2px;}
   .live-dot{width:7px; height:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px #34d39926; display:inline-block; margin-right:6px;}
   .clock{font-family:var(--mono); font-size:12px; color:var(--muted);}
+  .sprint-line{
+    font-family:var(--mono); font-size:11px; color:var(--muted);
+    display:flex; align-items:center; gap:6px; padding-left:1px; min-height:14px;
+  }
+  .sprint-line .sprint-name{color:var(--text); font-weight:600;}
+  .sprint-line .sprint-countdown{color:var(--accent); font-weight:600;}
 
   /* ---------- layout ---------- */
   main{padding:16px; max-width:640px; margin:0 auto;}
@@ -246,12 +253,15 @@
 <body>
 
 <header class="topbar">
-  <div class="brand">
-    <span class="prompt">&gt;</span>
-    <span class="brand-name">mechtabot_console</span>
-    <span class="cursor"></span>
+  <div class="topbar-row">
+    <div class="brand">
+      <span class="prompt">&gt;</span>
+      <span class="brand-name">mechtabot_console</span>
+      <span class="cursor"></span>
+    </div>
+    <div class="clock"><span class="live-dot"></span><span id="clockText">--:--</span></div>
   </div>
-  <div class="clock"><span class="live-dot"></span><span id="clockText">--:--</span></div>
+  <div class="sprint-line" id="sprintLine"></div>
 </header>
 
 <main id="main">
@@ -460,7 +470,8 @@
     teamUserTasks: function(id){ return API_BASE + "/api/team/users/" + encodeURIComponent(id); },
     completedRecent: function(days){ return API_BASE + "/api/tasks/completed-recent?days=" + days; },
     createdRecent: function(days){ return API_BASE + "/api/tasks/created-recent?days=" + days; },
-    dueSoon: function(days){ return API_BASE + "/api/tasks/due-soon?days=" + days; }
+    dueSoon: function(days){ return API_BASE + "/api/tasks/due-soon?days=" + days; },
+    activeSprint: API_BASE + "/api/sprint/active"
   };
 
   var tg = window.Telegram && window.Telegram.WebApp;
@@ -517,8 +528,57 @@
     var hh = String(d.getHours()).padStart(2,"0");
     var mm = String(d.getMinutes()).padStart(2,"0");
     document.getElementById("clockText").textContent = hh + ":" + mm;
+    tickSprintCountdown();
   }
   tickClock(); setInterval(tickClock, 15000);
+
+  /* ===================== спринт (шапка) ===================== */
+  var sprintEndDate = null;
+
+  function loadSprintLine(){
+    apiFetch(ENDPOINTS.activeSprint).then(function(data){
+      renderSprintLine(data);
+    }).catch(function(){
+      renderSprintLine(null);
+    });
+  }
+
+  function renderSprintLine(data){
+    var el = document.getElementById("sprintLine");
+    if (!data || !data.name){
+      el.innerHTML = "";
+      sprintEndDate = null;
+      return;
+    }
+    sprintEndDate = data.endDate ? new Date(data.endDate) : null;
+    el.innerHTML =
+      '🏃 <span class="sprint-name">' + esc(data.name) + '</span>' +
+      '<span class="sprint-countdown" id="sprintCountdown"></span>';
+    tickSprintCountdown();
+  }
+
+  function tickSprintCountdown(){
+    var el = document.getElementById("sprintCountdown");
+    if (!el) return;
+    if (!sprintEndDate || isNaN(sprintEndDate.getTime())){
+      el.textContent = "";
+      return;
+    }
+    var diffMs = sprintEndDate.getTime() - Date.now();
+    if (diffMs <= 0){
+      el.textContent = "· завершается";
+      return;
+    }
+    var totalMinutes = Math.floor(diffMs / 60000);
+    var days = Math.floor(totalMinutes / 1440);
+    var hours = Math.floor((totalMinutes % 1440) / 60);
+    var minutes = totalMinutes % 60;
+    var parts = [];
+    if (days > 0) parts.push(days + "д");
+    if (days > 0 || hours > 0) parts.push(hours + "ч");
+    if (days === 0) parts.push(minutes + "м");
+    el.textContent = "· осталось " + parts.join(" ");
+  }
 
   /* ===================== утилиты ===================== */
   function esc(s){
@@ -1115,6 +1175,7 @@
 
   /* ===================== старт ===================== */
   loadHome();
+  loadSprintLine();
 })();
 </script>
 </body>

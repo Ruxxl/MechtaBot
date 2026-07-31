@@ -65,6 +65,9 @@ GET  /api/tasks/created-recent?days=7
 GET  /api/tasks/due-soon?days=7
      -> { count: int, days: int }
 
+GET  /api/sprint/active
+     -> { name: str|null, endDate: iso-строка|null }
+
 ============================================================================
 БЕЗОПАСНОСТЬ
 ============================================================================
@@ -748,6 +751,38 @@ async def get_due_soon(request: web.Request) -> web.Response:
     return json_response(result)
 
 
+# ---------------------------------------------------------------------------
+# /api/sprint/active
+# ---------------------------------------------------------------------------
+
+def _mock_active_sprint() -> dict:
+    return {
+        "name": "Sprint 24",
+        "endDate": (datetime.now() + timedelta(days=3)).isoformat(),
+    }
+
+
+@routes.get("/api/sprint/active")
+@require_auth
+async def get_active_sprint(request: web.Request) -> web.Response:
+    services = request.app["miniapp_services"]
+    jira = services.get("jira")
+
+    if jira is None:
+        return json_response(_mock_active_sprint())
+
+    try:
+        result = await jira.get_active_sprint()
+    except Exception as e:
+        logger.exception(f"Ошибка получения активного спринта для Mini App: {e}")
+        return json_response(_mock_active_sprint())
+
+    if result is None:
+        return json_response({"name": None, "endDate": None})
+
+    return json_response(result)
+
+
 # ============================================================================
 # ПОДКЛЮЧЕНИЕ К СУЩЕСТВУЮЩЕМУ aiohttp-ПРИЛОЖЕНИЮ
 # ============================================================================
@@ -801,6 +836,7 @@ def setup_miniapp_routes(app: web.Application, services: Optional[dict] = None) 
         "/api/tasks/completed-recent",
         "/api/tasks/created-recent",
         "/api/tasks/due-soon",
+        "/api/sprint/active",
     ]:
         app.router.add_route("OPTIONS", path, options_handler)
 
