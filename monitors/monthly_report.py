@@ -271,6 +271,44 @@ async def fetch_recently_completed_count(jira_email, jira_token, jira_project_ke
     return total
 
 
+async def fetch_recently_created_count(jira_email, jira_token, jira_project_key, jira_url, days: int = 7) -> int:
+    """Количество задач проекта, созданных за последние `days` дней (по полю
+    created) — для карточки-виджета "N задач создано за последние N дней"
+    в Mini App (аналог гаджета "Number chart" на дашборде Jira, показатель
+    "Количество задач" + фильтр "Дата создания задачи")."""
+    base_url = jira_url.rstrip("/")
+    auth = aiohttp.BasicAuth(jira_email, jira_token)
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
+    jql = f'project="{jira_project_key}" AND created >= -{days}d'
+    search_url = f"{base_url}/rest/api/3/search/jql"
+    total = 0
+    next_page_token = None
+
+    try:
+        async with aiohttp.ClientSession(auth=auth, headers=headers) as session:
+            while True:
+                payload = {"jql": jql, "fields": ["key"], "maxResults": 100}
+                if next_page_token:
+                    payload["nextPageToken"] = next_page_token
+
+                async with session.post(search_url, json=payload) as resp:
+                    if resp.status != 200:
+                        logger.error(f"Ошибка подсчета созданных задач: {resp.status}")
+                        return total
+                    data = await resp.json()
+
+                total += len(data.get("issues", []))
+                next_page_token = data.get("nextPageToken")
+                if not next_page_token:
+                    break
+    except Exception as e:
+        logger.error(f"Ошибка запроса созданных задач: {e}")
+        return total
+
+    return total
+
+
 # =======================
 # Запрос данных в Jira
 # =======================
