@@ -120,6 +120,68 @@ async def get_jira_release_status(
                 lines.append(f"🔹 <a href='{JIRA_URL}/browse/{issue['key']}'>{issue['key']} — {issue['fields']['summary']}</a> — <b>{issue['fields']['status']['name']}</b>")
             return "\n".join(lines)
 
+
+async def get_release_status_data(
+    JIRA_EMAIL: str,
+    JIRA_API_TOKEN: str,
+    JIRA_PROJECT_KEY: str,
+    JIRA_URL: str
+) -> dict | None:
+    """Те же данные, что и get_jira_release_status(), но структурированные —
+    для Mini App (web/miniapp_api.py::get_next_release_status), где раньше
+    их пытались вытащить регулярками из готового текста для Telegram и
+    промахивались мимо реального формата (там нет строк "Готово: N" и т.п.,
+    только список задач с инлайн-статусом), из-за чего всегда получалось
+    "Релиз N/A" и "0 из 0".
+    Возвращает None, если версии/задачи получить не удалось."""
+    auth = aiohttp.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+
+    versions_url = f"{JIRA_URL}/rest/api/3/project/{JIRA_PROJECT_KEY}/versions"
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(versions_url, ssl=SSL_CONTEXT) as resp:
+            if resp.status != 200:
+                return None
+            versions = await resp.json()
+
+    unreleased = [v for v in versions if not v.get("released", False)]
+    if not unreleased:
+        return {"version": None, "total": 0, "done": 0, "in_progress": 0, "pending": 0}
+
+    def parse_version(v_name):
+        return [int(s) for s in re.findall(r'\d+', v_name)]
+
+    target_release = min(unreleased, key=lambda v: parse_version(v["name"]) or [0])
+    release_name = target_release["name"]
+    version_id = target_release.get("id")
+
+    jql = f'project="{JIRA_PROJECT_KEY}" AND fixVersion={version_id} ORDER BY priority DESC'
+    search_url = f"{JIRA_URL}/rest/api/3/search/jql?jql={quote(jql)}&fields=key,summary,status,subtasks&maxResults=200"
+
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(search_url, ssl=SSL_CONTEXT) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            issues = data.get("issues", [])
+
+    done = in_progress = pending = 0
+    for issue in issues:
+        category_key = issue["fields"]["status"].get("statusCategory", {}).get("key", "")
+        if category_key == "done":
+            done += 1
+        elif category_key == "indeterminate":
+            in_progress += 1
+        else:
+            pending += 1
+
+    return {
+        "version": release_name,
+        "total": len(issues),
+        "done": done,
+        "in_progress": in_progress,
+        "pending": pending,
+    }
+
 # =============================
 # Callback кнопки "Посмотреть статус релиза"
 # =============================
