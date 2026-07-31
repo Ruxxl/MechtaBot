@@ -62,6 +62,9 @@ GET  /api/tasks/completed-recent?days=7
 GET  /api/tasks/created-recent?days=7
      -> { count: int, days: int }
 
+GET  /api/tasks/due-soon?days=7
+     -> { count: int, days: int }
+
 ============================================================================
 БЕЗОПАСНОСТЬ
 ============================================================================
@@ -718,6 +721,33 @@ async def get_created_recent(request: web.Request) -> web.Response:
     return json_response(result)
 
 
+# ---------------------------------------------------------------------------
+# /api/tasks/due-soon
+# ---------------------------------------------------------------------------
+
+@routes.get("/api/tasks/due-soon")
+@require_auth
+async def get_due_soon(request: web.Request) -> web.Response:
+    try:
+        days = int(request.query.get("days", 7))
+    except ValueError:
+        days = 7
+
+    services = request.app["miniapp_services"]
+    jira = services.get("jira")
+
+    if jira is None:
+        return json_response({"count": 1, "days": days})
+
+    try:
+        result = await jira.get_due_soon(days=days)
+    except Exception as e:
+        logger.exception(f"Ошибка получения счетчика задач по сроку выполнения для Mini App: {e}")
+        return json_response({"count": 1, "days": days})
+
+    return json_response(result)
+
+
 # ============================================================================
 # ПОДКЛЮЧЕНИЕ К СУЩЕСТВУЮЩЕМУ aiohttp-ПРИЛОЖЕНИЮ
 # ============================================================================
@@ -770,6 +800,7 @@ def setup_miniapp_routes(app: web.Application, services: Optional[dict] = None) 
         "/api/team/users/{accountId}",
         "/api/tasks/completed-recent",
         "/api/tasks/created-recent",
+        "/api/tasks/due-soon",
     ]:
         app.router.add_route("OPTIONS", path, options_handler)
 

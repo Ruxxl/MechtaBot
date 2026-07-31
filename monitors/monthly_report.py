@@ -309,6 +309,48 @@ async def fetch_recently_created_count(jira_email, jira_token, jira_project_key,
     return total
 
 
+async def fetch_due_soon_count(jira_email, jira_token, jira_project_key, jira_url, days: int = 7) -> int:
+    """Количество задач проекта, у которых срок выполнения (due date) — от
+    сегодня и в ближайшие `days` дней — для карточки-виджета "N задач срок
+    выполнения — в ближайшие N дней" в Mini App (аналог гаджета "Number
+    chart" на дашборде Jira, фильтр "Дата выполнения задачи" From: Today,
+    To: Next N days)."""
+    base_url = jira_url.rstrip("/")
+    auth = aiohttp.BasicAuth(jira_email, jira_token)
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
+    jql = (
+        f'project="{jira_project_key}" AND due >= startOfDay() '
+        f'AND due <= startOfDay("+{days}d")'
+    )
+    search_url = f"{base_url}/rest/api/3/search/jql"
+    total = 0
+    next_page_token = None
+
+    try:
+        async with aiohttp.ClientSession(auth=auth, headers=headers) as session:
+            while True:
+                payload = {"jql": jql, "fields": ["key"], "maxResults": 100}
+                if next_page_token:
+                    payload["nextPageToken"] = next_page_token
+
+                async with session.post(search_url, json=payload) as resp:
+                    if resp.status != 200:
+                        logger.error(f"Ошибка подсчета задач по сроку выполнения: {resp.status}")
+                        return total
+                    data = await resp.json()
+
+                total += len(data.get("issues", []))
+                next_page_token = data.get("nextPageToken")
+                if not next_page_token:
+                    break
+    except Exception as e:
+        logger.error(f"Ошибка запроса задач по сроку выполнения: {e}")
+        return total
+
+    return total
+
+
 # =======================
 # Запрос данных в Jira
 # =======================
