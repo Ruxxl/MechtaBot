@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS monthly_report_state (
     id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
     last_sent_month TEXT
 );
+
+CREATE TABLE IF NOT EXISTS autotest_bug_subtasks (
+    subtask_key TEXT PRIMARY KEY,
+    parent_key TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 
@@ -131,3 +137,40 @@ async def set_last_sent_report_month(month_key: str):
             )
     except Exception as e:
         logger.error(f"Ошибка сохранения статуса ежемесячного отчета в БД: {e}")
+
+
+async def get_known_autotest_subtask_keys(parent_key: str) -> set:
+    """Ключи подзадач (багов автотестов) parent_key, которые уже были отправлены
+    в чат. Пустой набор (в т.ч. если DATABASE_URL не задан) означает самый первый
+    запуск монитора для этой задачи — тогда в чат уйдут все текущие подзадачи."""
+    if not _pool:
+        return set()
+    try:
+        async with _pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT subtask_key FROM autotest_bug_subtasks WHERE parent_key = $1",
+                parent_key,
+            )
+        return {r["subtask_key"] for r in rows}
+    except Exception as e:
+        logger.error(f"Ошибка чтения отправленных подзадач автотестов из БД (parent_key={parent_key}): {e}")
+        return set()
+
+
+async def save_autotest_subtask_keys(parent_key: str, subtask_keys: List[str]):
+    """Отмечает подзадачи как отправленные в чат, чтобы при следующих проверках
+    (в т.ч. после рестарта/редеплоя бота) они не отправлялись повторно."""
+    if not _pool or not subtask_keys:
+        return
+    try:
+        async with _pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO autotest_bug_subtasks (subtask_key, parent_key)
+                VALUES ($1, $2)
+                ON CONFLICT (subtask_key) DO NOTHING
+                """,
+                [(key, parent_key) for key in subtask_keys],
+            )
+    except Exception as e:
+        logger.error(f"Ошибка сохранения подзадач автотестов в БД (parent_key={parent_key}): {e}")
