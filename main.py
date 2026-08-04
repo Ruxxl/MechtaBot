@@ -26,6 +26,7 @@ from monitors.release_notifier import jira_release_check, generate_release_summa
 from web.admin_handler import AdminHandler, monitor
 from services.ai_service import ai_service
 from monitors.code_review_handler import run_code_review_monitor
+from monitors.autotest_bugs_monitor import check_autotest_bug_subtasks
 from handlers.vision_handler import handle_vision_message
 from monitors.monthly_report import check_monthly_report, register_monthly_report_handlers
 from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
@@ -50,6 +51,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
 VISION_THREAD_ID = 1886
+TESTERS_THREAD_ID = 1886  # Топик "Тестировщики" (тот же топик, что и VISION_THREAD_ID)
 # Render автоматически прокидывает RENDER_EXTERNAL_URL для web-сервисов —
 # используем его, чтобы Mini App раздавался тем же сервером, где крутится бот
 # (index.html теперь лежит в корне репозитория). Если переменной нет
@@ -71,6 +73,10 @@ JIRA_CONFIG = {
     'parent': os.getenv('JIRA_PARENT_KEY', 'AS-3312'),
     'url': os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net').rstrip('/')
 }
+
+# Родительская задача, чьи подзадачи (баги, заведенные автотестами)
+# мониторятся на предмет новых — см. monitors/autotest_bugs_monitor.py
+AUTOTEST_BUGS_PARENT_KEY = os.getenv('AUTOTEST_BUGS_PARENT_KEY', 'AS-4461')
 
 JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handler
 
@@ -740,6 +746,7 @@ async def main():
     monitor.update_status("Monthly Report", "OK")
     monitor.update_status("Stress Test", "OK")
     monitor.update_status("FAQ Bot", "OK")
+    monitor.update_status("Autotest Bugs Monitor", "OK")
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
@@ -790,6 +797,20 @@ async def main():
         JIRA_CONFIG['project'],
         JIRA_CONFIG['url'],
         interval=3600  # проверяем раз в час, отправит отчет только в отчетный день
+    ))
+
+    # 3.2 Мониторинг новых багов автотестов (подзадачи AUTOTEST_BUGS_PARENT_KEY)
+    logger.info("🐞 Запуск мониторинга багов автотестов...")
+    asyncio.create_task(run_background_task(
+        check_autotest_bug_subtasks,
+        bot,
+        TARGET_GROUP_ID,
+        TESTERS_THREAD_ID,
+        JIRA_CONFIG['email'],
+        JIRA_CONFIG['token'],
+        JIRA_CONFIG['url'],
+        AUTOTEST_BUGS_PARENT_KEY,
+        interval=180  # раз в 3 минуты
     ))
 
     # 4. Очистка вебхуков
