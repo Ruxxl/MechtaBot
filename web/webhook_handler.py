@@ -40,6 +40,7 @@ class WebhookHandler:
             "deploy d2": "http://d2.im.mdev.kz/",
             "deploy d3": "http://d3.im.mdev.kz/",
             "deploy d4": "http://d4.im.mdev.kz/",
+            "deploy d5": "http://d5.im.mdev.kz/",
             "deploy preprod": "https://pp.yc.mechta.kz/",
             "deploy preprod external integrations": "http://pp.im.mdev.kz/",
             "deploy ssr prod": "https://mechta.kz/",
