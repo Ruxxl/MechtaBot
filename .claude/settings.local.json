@@ -4,7 +4,8 @@
       "Bash(pkill -f \"http.server 8934\")",
       "Bash(node *)",
       "Bash(grep *)",
-      "Bash(python3 -m py_compile monitors/autotest_bugs_monitor.py services/db_service.py main.py)"
+      "Bash(python3 -m py_compile monitors/autotest_bugs_monitor.py services/db_service.py main.py)",
+      "Bash(python3 -m py_compile monitors/autotest_bugs_monitor.py)"
     ]
   }
 }

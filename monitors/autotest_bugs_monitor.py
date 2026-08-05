@@ -70,8 +70,7 @@ async def check_autotest_bug_subtasks(
         lines.append(f'• <a href="{base_url}/browse/{key}">{key}</a> — {summary} [{status}]')
 
     message_text = (
-        f"🐞 <b>Новые баги от автотестов ({len(new_keys)})</b>\n\n"
-        f'Подзадачи <a href="{base_url}/browse/{parent_key}">{parent_key}</a>:\n\n'
+        "🐞 <b>Новые баги от автотестов</b>\n\n"
         + "\n".join(lines)
     )
 
