@@ -73,6 +73,18 @@ GET  /api/tasks/due-soon?days=7
 GET  /api/sprint/active
      -> { name: str|null, endDate: iso-строка|null }
 
+GET  /api/autotests/latest
+     -> { runNumber, status, conclusion: "success"|"failure"|..., branch, actor,
+          commit, date, url,
+          totals: { tests, passing, failing, pending, skipped },
+          specs: [ { name, duration, tests, passing, failing, pending, skipped }, ... ] }
+     (прогон Cypress-автотестов из отдельного репо Ruxxl/MechtaATest —
+      см. services/autotest_service.py)
+
+GET  /api/autotests/runs?limit=10
+     -> [ { runNumber, conclusion, branch, actor, commit, date, url,
+            totals: {...} }, ... ]   (без specs, только сводка по рану)
+
 ============================================================================
 БЕЗОПАСНОСТЬ
 ============================================================================
@@ -842,6 +854,81 @@ async def get_active_sprint(request: web.Request) -> web.Response:
     return json_response(result)
 
 
+# ---------------------------------------------------------------------------
+# /api/autotests
+# ---------------------------------------------------------------------------
+
+def _mock_autotest_latest() -> dict:
+    return {
+        "runNumber": 128,
+        "status": "completed",
+        "conclusion": "failure",
+        "branch": "main",
+        "actor": "Ruxxl",
+        "commit": "Мок-данные: подключи services['autotests'] в main.py.",
+        "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+        "url": "https://github.com/Ruxxl/MechtaATest/actions",
+        "totals": {"tests": 42, "passing": 39, "failing": 3, "pending": 0, "skipped": 0},
+        "specs": [
+            {"name": "Regress_Test/add_basket.cy.js", "duration": "00:42",
+             "tests": 5, "passing": 5, "failing": 0, "pending": 0, "skipped": 0},
+            {"name": "Regress_Test/checkout.cy.js", "duration": "01:10",
+             "tests": 6, "passing": 4, "failing": 2, "pending": 0, "skipped": 0},
+            {"name": "Regress_Test/favorites.cy.js", "duration": "00:20",
+             "tests": 3, "passing": 2, "failing": 1, "pending": 0, "skipped": 0},
+        ],
+    }
+
+
+def _mock_autotest_runs() -> list:
+    latest = _mock_autotest_latest()
+    latest.pop("specs", None)
+    return [latest]
+
+
+@routes.get("/api/autotests/latest")
+@require_auth
+async def get_autotests_latest(request: web.Request) -> web.Response:
+    services = request.app["miniapp_services"]
+    autotests = services.get("autotests")
+
+    if autotests is None:
+        return json_response(_mock_autotest_latest())
+
+    try:
+        result = await autotests.get_latest()
+    except Exception as e:
+        logger.exception(f"Ошибка получения последнего прогона автотестов: {e}")
+        return json_response(_mock_autotest_latest())
+
+    if result is None:
+        return json_response(_mock_autotest_latest())
+    return json_response(result)
+
+
+@routes.get("/api/autotests/runs")
+@require_auth
+async def get_autotests_runs(request: web.Request) -> web.Response:
+    try:
+        limit = int(request.query.get("limit", 10))
+    except ValueError:
+        limit = 10
+
+    services = request.app["miniapp_services"]
+    autotests = services.get("autotests")
+
+    if autotests is None:
+        return json_response(_mock_autotest_runs())
+
+    try:
+        result = await autotests.get_runs(limit=limit)
+    except Exception as e:
+        logger.exception(f"Ошибка получения истории прогонов автотестов: {e}")
+        return json_response(_mock_autotest_runs())
+
+    return json_response(result)
+
+
 # ============================================================================
 # ПОДКЛЮЧЕНИЕ К СУЩЕСТВУЮЩЕМУ aiohttp-ПРИЛОЖЕНИЮ
 # ============================================================================
@@ -860,6 +947,7 @@ def setup_miniapp_routes(app: web.Application, services: Optional[dict] = None) 
             "ask": ask_engine,             # confluence-поиск для /ask
             "help": help_data,             # категории help, если структурированы
             "releases": releases_service,  # источник данных о релизах
+            "autotests": autotest_runs_service,  # прогоны Cypress-автотестов (MechtaATest)
         })
 
     Любой сервис можно не передавать — соответствующий эндпоинт тогда
@@ -897,6 +985,8 @@ def setup_miniapp_routes(app: web.Application, services: Optional[dict] = None) 
         "/api/tasks/created-recent",
         "/api/tasks/due-soon",
         "/api/sprint/active",
+        "/api/autotests/latest",
+        "/api/autotests/runs",
     ]:
         app.router.add_route("OPTIONS", path, options_handler)
 

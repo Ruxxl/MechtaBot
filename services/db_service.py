@@ -32,6 +32,38 @@ CREATE TABLE IF NOT EXISTS autotest_bug_subtasks (
     parent_key TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS autotest_runs (
+    run_id BIGINT PRIMARY KEY,
+    run_number INT,
+    status TEXT,
+    conclusion TEXT,
+    branch TEXT,
+    actor TEXT,
+    commit_message TEXT,
+    url TEXT,
+    run_date TEXT,
+    tests INT NOT NULL DEFAULT 0,
+    passing INT NOT NULL DEFAULT 0,
+    failing INT NOT NULL DEFAULT 0,
+    pending INT NOT NULL DEFAULT 0,
+    skipped INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_autotest_runs_created_at ON autotest_runs (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS autotest_run_specs (
+    id SERIAL PRIMARY KEY,
+    run_id BIGINT NOT NULL REFERENCES autotest_runs(run_id) ON DELETE CASCADE,
+    spec_name TEXT NOT NULL,
+    duration TEXT,
+    tests INT NOT NULL DEFAULT 0,
+    passing INT NOT NULL DEFAULT 0,
+    failing INT NOT NULL DEFAULT 0,
+    pending INT NOT NULL DEFAULT 0,
+    skipped INT NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_autotest_run_specs_run_id ON autotest_run_specs (run_id);
 """
 
 
@@ -174,3 +206,104 @@ async def save_autotest_subtask_keys(parent_key: str, subtask_keys: List[str]):
             )
     except Exception as e:
         logger.error(f"Ошибка сохранения подзадач автотестов в БД (parent_key={parent_key}): {e}")
+
+
+async def save_autotest_run(summary: dict):
+    """Сохраняет сводку прогона автотестов (см. services/autotest_service.py)
+    вместе с разбивкой по спекам. ON CONFLICT — идемпотентно, повторный опрос
+    того же рана просто обновит цифры."""
+    if not _pool:
+        return
+    run_id = summary.get("_run_id")
+    if run_id is None:
+        return
+    totals = summary.get("totals", {})
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    """
+                    INSERT INTO autotest_runs (
+                        run_id, run_number, status, conclusion, branch, actor,
+                        commit_message, url, run_date, tests, passing, failing, pending, skipped
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                    ON CONFLICT (run_id) DO UPDATE SET
+                        status = EXCLUDED.status, conclusion = EXCLUDED.conclusion,
+                        tests = EXCLUDED.tests, passing = EXCLUDED.passing,
+                        failing = EXCLUDED.failing, pending = EXCLUDED.pending, skipped = EXCLUDED.skipped
+                    """,
+                    run_id, summary.get("runNumber"), summary.get("status"), summary.get("conclusion"),
+                    summary.get("branch"), summary.get("actor"), summary.get("commit"), summary.get("url"),
+                    summary.get("date"), totals.get("tests", 0), totals.get("passing", 0),
+                    totals.get("failing", 0), totals.get("pending", 0), totals.get("skipped", 0),
+                )
+                await conn.execute("DELETE FROM autotest_run_specs WHERE run_id = $1", run_id)
+                for spec in summary.get("specs", []):
+                    await conn.execute(
+                        """
+                        INSERT INTO autotest_run_specs
+                            (run_id, spec_name, duration, tests, passing, failing, pending, skipped)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                        """,
+                        run_id, spec["name"], spec.get("duration"), spec.get("tests", 0),
+                        spec.get("passing", 0), spec.get("failing", 0), spec.get("pending", 0),
+                        spec.get("skipped", 0),
+                    )
+    except Exception as e:
+        logger.error(f"Ошибка сохранения прогона автотестов в БД (run_id={run_id}): {e}")
+
+
+async def get_recent_autotest_runs(limit: int = 10) -> List[dict]:
+    """Последние N прогонов автотестов вместе с разбивкой по спекам, свежие
+    первыми. Используется для восстановления кэша AutotestRunsService после
+    рестарта бота (до первого нового опроса GitHub API)."""
+    if not _pool:
+        return []
+    try:
+        async with _pool.acquire() as conn:
+            run_rows = await conn.fetch(
+                """
+                SELECT run_id, run_number, status, conclusion, branch, actor,
+                       commit_message, url, run_date, tests, passing, failing, pending, skipped
+                FROM autotest_runs
+                ORDER BY created_at DESC
+                LIMIT $1
+                """,
+                limit,
+            )
+            result = []
+            for row in run_rows:
+                spec_rows = await conn.fetch(
+                    """
+                    SELECT spec_name, duration, tests, passing, failing, pending, skipped
+                    FROM autotest_run_specs WHERE run_id = $1 ORDER BY spec_name
+                    """,
+                    row["run_id"],
+                )
+                result.append({
+                    "_run_id": row["run_id"],
+                    "runNumber": row["run_number"],
+                    "status": row["status"],
+                    "conclusion": row["conclusion"],
+                    "branch": row["branch"],
+                    "actor": row["actor"],
+                    "commit": row["commit_message"],
+                    "url": row["url"],
+                    "date": row["run_date"],
+                    "totals": {
+                        "tests": row["tests"], "passing": row["passing"], "failing": row["failing"],
+                        "pending": row["pending"], "skipped": row["skipped"],
+                    },
+                    "specs": [
+                        {
+                            "name": s["spec_name"], "duration": s["duration"], "tests": s["tests"],
+                            "passing": s["passing"], "failing": s["failing"], "pending": s["pending"],
+                            "skipped": s["skipped"],
+                        }
+                        for s in spec_rows
+                    ],
+                })
+            return result
+    except Exception as e:
+        logger.error(f"Ошибка чтения истории прогонов автотестов из БД: {e}")
+        return []
