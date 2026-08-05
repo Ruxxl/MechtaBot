@@ -27,6 +27,8 @@ from web.admin_handler import AdminHandler, monitor
 from services.ai_service import ai_service
 from monitors.code_review_handler import run_code_review_monitor
 from monitors.autotest_bugs_monitor import check_autotest_bug_subtasks
+from monitors.autotest_runs_monitor import check_autotest_runs
+from services.autotest_service import AutotestRunsService
 from handlers.vision_handler import handle_vision_message
 from monitors.monthly_report import check_monthly_report, register_monthly_report_handlers
 from handlers.stress_handler import register_stress_handlers, trigger_smoke_test
@@ -77,6 +79,11 @@ JIRA_CONFIG = {
 # Родительская задача, чьи подзадачи (баги, заведенные автотестами)
 # мониторятся на предмет новых — см. monitors/autotest_bugs_monitor.py
 AUTOTEST_BUGS_PARENT_KEY = os.getenv('AUTOTEST_BUGS_PARENT_KEY', 'AS-4461')
+
+# Репозиторий и воркфлоу с автотестами (Cypress), результаты которых
+# показываются в Mini App — см. services/autotest_service.py
+AUTOTEST_REPO = os.getenv('AUTOTEST_REPO', 'Ruxxl/MechtaATest')
+AUTOTEST_WORKFLOW = os.getenv('AUTOTEST_WORKFLOW', 'Cypress Tests')
 
 JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handler
 
@@ -406,6 +413,11 @@ team_client = TeamClientMock(JIRA_CONFIG)
 stands_config = StandsConfigMock()
 github_store = GithubStoreMock(webhook_handler)
 releases_service = JiraReleasesClient(JIRA_CONFIG)
+autotest_runs_service = AutotestRunsService(
+    repo_full_name=AUTOTEST_REPO,
+    github_token=os.getenv('GITHUB_TOKEN'),
+    workflow_name=AUTOTEST_WORKFLOW,
+)
 
 # ask_engine уже является объектом ai_service, который можно передать напрямую
 # Добавим ему метод answer для совместимости с Mini App API
@@ -440,6 +452,7 @@ setup_miniapp_routes(app, services={ # 'app' is now defined
     "ask": ask_engine,             # confluence-поиск из /ask
     "help": help_data,             # категории help из help_handler
     "releases": releases_service,  # Данные о релизах
+    "autotests": autotest_runs_service,  # прогоны Cypress-автотестов (MechtaATest)
 })
 
 # =======================
@@ -747,6 +760,7 @@ async def main():
     monitor.update_status("Stress Test", "OK")
     monitor.update_status("FAQ Bot", "OK")
     monitor.update_status("Autotest Bugs Monitor", "OK")
+    monitor.update_status("Autotest Runs Monitor", "OK")
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
@@ -811,6 +825,14 @@ async def main():
         JIRA_CONFIG['url'],
         AUTOTEST_BUGS_PARENT_KEY,
         interval=180  # раз в 3 минуты
+    ))
+
+    # 3.3 Мониторинг прогонов автотестов MechtaATest (Cypress, GitHub Actions)
+    logger.info("🧪 Запуск мониторинга прогонов автотестов...")
+    asyncio.create_task(run_background_task(
+        check_autotest_runs,
+        autotest_runs_service,
+        interval=300  # раз в 5 минут
     ))
 
     # 4. Очистка вебхуков

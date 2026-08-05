@@ -351,6 +351,26 @@
     </div>
   </section>
 
+  <!-- ================= AUTOTESTS ================= -->
+  <section class="page" data-page="autotests">
+    <h1 class="page-title">/autotests <span>// прогоны Cypress (MechtaATest)</span></h1>
+    <div class="card" id="autotestSummaryCard">
+      <div class="skeleton" style="height:64px;"></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-bottom:10px;">Спеки</h2>
+      <div id="autotestSpecList">
+        <div class="skeleton" style="height:40px;"></div>
+        <div class="skeleton" style="height:40px;"></div>
+        <div class="skeleton" style="height:40px;"></div>
+      </div>
+    </div>
+    <div class="toggle-row" id="autotestHistoryToggle">
+      <span>История прогонов ▾</span>
+    </div>
+    <div class="toggle-body" id="autotestHistoryBody"></div>
+  </section>
+
   <!-- ================= JIRA ================= -->
   <section class="page" data-page="jira">
     <h1 class="page-title">/jira <span>// новый баг</span></h1>
@@ -457,6 +477,7 @@
 <nav class="bottom">
   <button class="nav-btn active" data-nav="home"><span class="icon">🏠</span>Обзор</button>
   <button class="nav-btn" data-nav="stands"><span class="icon">🖥</span>Стенды</button>
+  <button class="nav-btn" data-nav="autotests"><span class="icon">🧪</span>Автотесты</button>
   <button class="nav-btn" data-nav="jira"><span class="icon">🐞</span>Баг</button>
   <button class="nav-btn" data-nav="team"><span class="icon">👥</span>Команда</button>
   <button class="nav-btn" data-nav="ask"><span class="icon">💬</span>Спросить</button>
@@ -499,7 +520,9 @@
     completedRecent: function(days){ return API_BASE + "/api/tasks/completed-recent?days=" + days; },
     createdRecent: function(days){ return API_BASE + "/api/tasks/created-recent?days=" + days; },
     dueSoon: function(days){ return API_BASE + "/api/tasks/due-soon?days=" + days; },
-    activeSprint: API_BASE + "/api/sprint/active"
+    activeSprint: API_BASE + "/api/sprint/active",
+    autotestLatest: API_BASE + "/api/autotests/latest",
+    autotestRuns: API_BASE + "/api/autotests/runs?limit=10"
   };
 
   var tg = window.Telegram && window.Telegram.WebApp;
@@ -544,6 +567,7 @@
   function loadPage(name){
     if (name === "home") loadHome();
     if (name === "stands") loadStands();
+    if (name === "autotests") loadAutotests();
     if (name === "team") loadTeam();
     if (name === "ask") {} // ленивая загрузка не нужна, чат пуст изначально
     if (name === "report") loadReport();
@@ -982,6 +1006,104 @@
         '<div class="build-row">' +
           '<div class="commit">' + (i===0 ? '🟢 ' : '🔹 ') + esc(b.commit || "—") + '</div>' +
           '<div class="meta">@' + esc(b.actor || "?") + ' · ' + esc(b.date || "") + '</div>' +
+        '</div>'
+      );
+    }).join("");
+  }
+
+  /* ===================== AUTOTESTS ===================== */
+  var autotestHistoryLoaded = false;
+
+  function loadAutotests(){
+    apiFetch(ENDPOINTS.autotestLatest).then(function(data){
+      renderAutotestLatest(data, false);
+    }).catch(function(){
+      renderAutotestLatest({
+        runNumber: 128, conclusion: "failure", branch: "main", actor: "Ruxxl",
+        commit: "Демо: бэкенд недоступен", date: "—", url: null,
+        totals: {tests:42, passing:39, failing:3, pending:0, skipped:0},
+        specs: [
+          {name:"Regress_Test/add_basket.cy.js", duration:"00:42", tests:5, passing:5, failing:0, pending:0, skipped:0},
+          {name:"Regress_Test/checkout.cy.js", duration:"01:10", tests:6, passing:4, failing:2, pending:0, skipped:0},
+          {name:"Regress_Test/favorites.cy.js", duration:"00:20", tests:3, passing:2, failing:1, pending:0, skipped:0}
+        ]
+      }, true);
+    });
+
+    var toggle = document.getElementById("autotestHistoryToggle");
+    toggle.onclick = function(){
+      var body = document.getElementById("autotestHistoryBody");
+      var open = body.classList.toggle("open");
+      if (open && !autotestHistoryLoaded){
+        autotestHistoryLoaded = true;
+        body.innerHTML = '<div class="skeleton" style="height:40px;"></div>';
+        apiFetch(ENDPOINTS.autotestRuns).then(function(runs){
+          renderAutotestHistory(body, runs);
+        }).catch(function(){
+          renderAutotestHistory(body, []);
+        });
+      }
+    };
+  }
+
+  function renderAutotestLatest(d, demo){
+    var wrap = document.getElementById("autotestSummaryCard");
+    var t = d.totals || {tests:0, passing:0, failing:0, pending:0, skipped:0};
+    var badgeClass = d.conclusion === "success" ? "ok" : d.conclusion === "failure" ? "danger" : "warn";
+    var badgeLabel = d.conclusion === "success" ? "все пройдены" : d.conclusion === "failure" ? "есть падения" : (d.conclusion || d.status || "?");
+    var demoTag = demo ? '<span class="demo-flag">⚠ демо-данные — API недоступен</span>' : "";
+    wrap.innerHTML =
+      demoTag +
+      '<div class="card-cmd">cypress run · #' + esc(d.runNumber || "?") + '</div>' +
+      '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+        '<div>' +
+          '<div style="font-weight:650; font-size:14.5px;">' + esc(d.branch || "—") + '</div>' +
+          '<div style="font-size:12px; color:var(--muted); margin-top:2px;">@' + esc(d.actor || "?") + ' · ' + esc(d.date || "") + '</div>' +
+        '</div>' +
+        '<span class="badge ' + badgeClass + '">' + esc(badgeLabel) + '</span>' +
+      '</div>' +
+      '<div class="stat-row">' +
+        '<div class="stat"><div class="num">' + t.tests + '</div><div class="lbl">тестов</div></div>' +
+        '<div class="stat"><div class="num" style="color:var(--ok);">' + t.passing + '</div><div class="lbl">прошло</div></div>' +
+        '<div class="stat"><div class="num" style="color:' + (t.failing ? 'var(--danger)' : 'var(--text)') + ';">' + t.failing + '</div><div class="lbl">упало</div></div>' +
+      '</div>' +
+      (d.url ? '<a href="' + esc(d.url) + '" target="_blank" style="display:block; margin-top:12px; font-family:var(--mono); font-size:12px;">↗ Открыть в GitHub Actions</a>' : "");
+
+    renderAutotestSpecs(d.specs || []);
+  }
+
+  function renderAutotestSpecs(specs){
+    var wrap = document.getElementById("autotestSpecList");
+    if (!specs.length){
+      wrap.innerHTML = '<div class="empty"><span class="icon">🧪</span>Нет данных по спекам</div>';
+      return;
+    }
+    wrap.innerHTML = specs.map(function(s){
+      var failed = s.failing > 0;
+      return (
+        '<div class="list-item">' +
+          '<div>' +
+            '<div class="title">' + (failed ? '✖ ' : '✔ ') + esc(s.name) + '</div>' +
+            '<div class="sub">' + s.passing + ' passing' + (failed ? ', ' + s.failing + ' failing' : '') + ' · ' + esc(s.duration || '') + '</div>' +
+          '</div>' +
+          '<span class="badge ' + (failed ? 'danger' : 'ok') + '">' + s.tests + '</span>' +
+        '</div>'
+      );
+    }).join("");
+  }
+
+  function renderAutotestHistory(wrap, runs){
+    if (!runs || !runs.length){
+      wrap.innerHTML = '<div class="empty" style="padding:14px 0;">История пока пуста</div>';
+      return;
+    }
+    wrap.innerHTML = runs.map(function(r){
+      var t = r.totals || {};
+      var failed = (t.failing || 0) > 0;
+      return (
+        '<div class="build-row">' +
+          '<div class="commit">' + (failed ? '✖ ' : '✔ ') + '#' + esc(r.runNumber) + ' · ' + esc(r.branch || '') + '</div>' +
+          '<div class="meta">@' + esc(r.actor || '?') + ' · ' + esc(r.date || '') + ' · ' + (t.passing||0) + '/' + (t.tests||0) + ' passed</div>' +
         '</div>'
       );
     }).join("");

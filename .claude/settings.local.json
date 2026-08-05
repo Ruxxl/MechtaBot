@@ -6,7 +6,10 @@
       "Bash(grep *)",
       "Bash(python3 -m py_compile monitors/autotest_bugs_monitor.py services/db_service.py main.py)",
       "Bash(python3 -m py_compile monitors/autotest_bugs_monitor.py)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(python3 -m py_compile services/autotest_service.py services/db_service.py monitors/autotest_runs_monitor.py web/miniapp_api.py main.py)",
+      "Bash(python3 -)",
+      "Bash(git check-ignore *)"
     ]
   }
 }

@@ -18,6 +18,7 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 │
 ├── services/                         # переиспользуемые сервисы, не привязанные к конкретным сообщениям
 │   ├── ai_service.py                 # обёртка над Groq (текст + vision)
+│   ├── autotest_service.py           # опрос GitHub Actions API репо MechtaATest + парсинг логов Cypress по спекам
 │   ├── calendar_service.py           # мониторинг ICS-календаря, уведомления о встречах
 │   ├── confluence_service.py         # поиск и получение страниц Confluence (для FAQ-бота)
 │   └── translator_service.py         # перевод RU → KK в теме переводчика
@@ -34,7 +35,9 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 │   ├── nurlan_handler.py             # спец-реакция на сообщения конкретного пользователя
 │   └── daily_reminder.py             # утреннее/вечернее напоминание + кнопка статуса будущего релиза
 │
-├── monitors/                         # фоновые задачи, которые сами ходят в Jira по таймеру
+├── monitors/                         # фоновые задачи, которые сами ходят в Jira/GitHub по таймеру
+│   ├── autotest_bugs_monitor.py      # новые подзадачи-баги, заведенные автотестами (Jira)
+│   ├── autotest_runs_monitor.py      # опрос прогонов автотестов MechtaATest (см. services/autotest_service.py)
 │   ├── code_review_handler.py        # мониторинг задач в статусе "Код ревью"
 │   ├── release_notifier.py           # уведомление о выходе релиза + AI-описание релиза (Groq)
 │   └── monthly_report.py             # ежемесячный отчет по релизам/задачам/багам (30-е число)
@@ -73,6 +76,11 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 - **Напоминания** — утреннее (08:05) и вечернее (17:00) напоминание отметиться в Clockster (по будням).
 - **Jira Release Monitor** — уведомление в группу о выходе релиза + AI-описание релиза (Groq, ограничено ~350 символами под лимит подписи к фото в Telegram).
 - **Code Review Monitor** — отслеживание задач в статусе "Код ревью".
+- **Autotest Runs Monitor** — раз в 5 минут опрашивает GitHub Actions API репозитория
+  [Ruxxl/MechtaATest](https://github.com/Ruxxl/MechtaATest) (Cypress), парсит логи
+  джобов на предмет финальной таблицы результатов по спекам и обновляет кэш для
+  Mini App (`/api/autotests/latest`, `/api/autotests/runs`). Ничего не меняет и не
+  требует изменений в самом репозитории с автотестами.
 - **Monthly Report** — ежемесячный отчет по релизам/задачам/багам, отправляется 30-го числа (или в последний день месяца, если он короче).
 - **Smoke-тест после деплоя** — при успешном GitHub Actions деплое нужного воркфлоу (`SMOKE_TEST_WORKFLOWS`) автоматически запускается короткий нагрузочный тест на задеплоенный стенд.
 
@@ -81,6 +89,8 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 - `GET /` — health-check для Render.
 - `POST /webhook/notify` — вебхук GitHub Actions (уведомление о сборке + автотриггер smoke-теста); также принимает ручной JSON `{"text": "...", "thread_id": "..."}` для тестов через curl.
 - `GET /admin` — дашборд: статусы всех сервисов, ручной запуск зарегистрированных проверок, лог последних ошибок.
+- `GET /api/autotests/latest`, `GET /api/autotests/runs` — результаты прогонов автотестов
+  MechtaATest для Mini App (контракт см. в `web/miniapp_api.py`).
 
 ## Принципы (см. также комментарии в коде)
 
@@ -135,3 +145,9 @@ python3 main.py
 `LT_WEIGHT_PRODUCT`, `LT_WEIGHT_SECTION`, `LT_WEIGHT_STATIC`, `LT_WEIGHT_BRAND`,
 `LT_WEIGHT_FAQ` — веса сценариев Locust. `LT_MIN_RESPONSE_BYTES` — порог
 "подозрительно короткого" ответа (по умолчанию 200 байт).
+
+**Автотесты (Mini App, `services/autotest_service.py`):**
+`AUTOTEST_REPO` (по умолчанию `Ruxxl/MechtaATest`) — репозиторий с автотестами,
+`AUTOTEST_WORKFLOW` (по умолчанию `Cypress Tests`) — имя воркфлоу в нём. Токен —
+тот же `GITHUB_TOKEN`, что и для деплоев; нужен доступ на чтение Actions
+указанного репозитория (публичный репозиторий подойдет с любым валидным токеном).
