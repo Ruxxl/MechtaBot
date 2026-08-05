@@ -26,6 +26,7 @@ ENVIRONMENTS = {
     "d2": ("🔵 D2", "http://d2.im.mdev.kz"),
     "d3": ("🔵 D3", "http://d3.im.mdev.kz"),
     "d4": ("🔵 D4", "http://d4.im.mdev.kz"),
+    "d5": ("🔵 D5", "http://d5.im.mdev.kz"),
     "1c": ("🟣 1C", "http://1c.im.mdev.kz"),
     "prod": ("🔴 Production", "https://mechta.kz"),
 }
