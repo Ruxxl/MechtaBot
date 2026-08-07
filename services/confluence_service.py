@@ -258,38 +258,48 @@ async def search_confluence_under_parent(confluence_config: dict, query: str, li
 # =======================
 async def search_confluence(confluence_config: dict, query: str, limit: int = 3) -> List[dict]:
     """
-    Приоритет источников:
-    1. parent_page_id — поиск по всем дочерним страницам дерева. Если ничего
-       не нашлось (ошибка доступа, пустое дерево и т.п.) — не сдаемся сразу,
-       а падаем в обычный CQL text-поиск ниже как запасной вариант.
-    2. page_id — одна закрепленная страница целиком.
-    3. Обычный CQL text-поиск по всему Confluence / space.
+    Источники объединяются, а не выбираются по принципу "первый непустой":
+    1. page_id — закрепленная страница (например "Информация") — если задана,
+       включается ВСЕГДА гарантированным первым слотом. Раньше, если был
+       также задан parent_page_id, закрепленная страница вообще никогда не
+       использовалась: поиск по дереву дочерних страниц почти всегда
+       возвращает непустой результат (см. фоллбэк "ничего не совпало —
+       отдаем первые страницы" в search_confluence_under_parent) и полностью
+       перекрывал собой page_id.
+    2. parent_page_id — поиск по всем дочерним страницам дерева, заполняет
+       оставшиеся слоты (limit минус уже занятый закрепленной страницей).
+    3. Обычный CQL text-поиск по всему Confluence / space — запасной
+       вариант, если ни закрепленная страница, ни дерево ничего не дали.
     """
-    if confluence_config.get('parent_page_id'):
-        results = await search_confluence_under_parent(confluence_config, query, limit=limit)
-        if results:
-            return results
-        logger.warning(
-            "Поиск по дереву parent_page_id ничего не нашел — "
-            "пробую обычный CQL text-поиск как запасной вариант."
-        )
-        # не возвращаем [] сразу — идем дальше по обычной CQL text-логике
+    results: List[dict] = []
+
+    if confluence_config.get('page_id'):
+        pinned = await get_pinned_page(confluence_config)
+        if pinned:
+            results.append(pinned)
+
+    remaining = limit - len(results)
+    if remaining > 0 and confluence_config.get('parent_page_id'):
+        child_results = await search_confluence_under_parent(confluence_config, query, limit=remaining)
+        pinned_urls = {p['url'] for p in results}
+        results.extend(p for p in child_results if p['url'] not in pinned_urls)
+
+    if results:
+        return results
+
+    logger.warning(
+        "Ни закрепленная страница (page_id), ни дерево parent_page_id ничего "
+        "не дали — пробую обычный CQL text-поиск как запасной вариант."
+    )
 
     base_url = confluence_config.get('url', '').rstrip('/')
     email = confluence_config.get('email')
     token = confluence_config.get('token')
     space_key = confluence_config.get('space')
-    page_id = confluence_config.get('page_id')
 
     if not base_url or not email or not token:
         logger.error("Confluence не настроен: отсутствует url, email или token")
         return []
-
-    # Если задана конкретная закрепленная страница — используем её содержимое
-    # напрямую (см. get_pinned_page выше), а не CQL text-поиск.
-    if page_id:
-        pinned = await get_pinned_page(confluence_config)
-        return [pinned] if pinned else []
 
     auth = aiohttp.BasicAuth(email, token)
     headers = {"Accept": "application/json"}
