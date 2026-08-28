@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from aiogram import Dispatcher, F
 from aiogram.types import Message
 from web.admin_handler import monitor
@@ -8,12 +9,28 @@ from services.ai_service import ai_service
 
 logger = logging.getLogger("bot.translator")
 
+
+def _clean_translation(raw: str) -> str:
+    """Убирает возможные кавычки, нумерацию и лишние пробелы в ответе модели."""
+    text = raw.strip()
+    # убираем обрамляющие кавычки, если модель их всё же добавила
+    text = re.sub(r'^["\'«]+|["\'»]+$', '', text.strip())
+    # убираем возможную нумерацию в начале строк вида "1. " или "1) "
+    text = re.sub(r'(?m)^\s*\d+[\.\)]\s*', '', text)
+    return text.strip()
+
+
 async def translate_ru_to_kk(text: str) -> str:
     try:
         prompt = (
-            "Переведи на казахский в максимально табиғи и естественном стиле. "
-            "Дай самый лучший основной вариант перевода. "
-            "Если нужно, добавь 1–2 альтернативных варианта.\n\n"
+            "Переведи следующий текст с русского на казахский в максимально "
+            "табиғи и естественном стиле.\n\n"
+            "Ответ дай СТРОГО в таком формате, без нумерации, без кавычек и "
+            "без лишних пояснений:\n\n"
+            "<основной вариант перевода>\n\n"
+            "Альтернативті вариант: <альтернативный вариант перевода>\n\n"
+            "Если хорошего альтернативного варианта нет — просто не добавляй "
+            "вторую часть и выведи только основной вариант.\n\n"
             f"Текст: {text}"
         )
 
@@ -22,7 +39,7 @@ async def translate_ru_to_kk(text: str) -> str:
             max_tokens=1000,
             temperature=0.3
         )
-        return result
+        return _clean_translation(result) if result else ""
 
     except Exception as e:
         error_msg = str(e)
@@ -41,6 +58,7 @@ async def translate_ru_to_kk(text: str) -> str:
 
         logger.error(f"Ошибка Groq при переводе (текст: {text[:20]}...): {e}")
         return ""
+
 
 def register_translator_handlers(dp: Dispatcher, translation_thread_id: int):
     @dp.message(F.message_thread_id == translation_thread_id, F.text & ~F.text.startswith("/"))
