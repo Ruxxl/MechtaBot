@@ -15,7 +15,7 @@ class AIService:
             except Exception as e:
                 logger.error(f"❌ Failed to init Groq: {e}")
 
-    async def generate_groq(self, prompt: str, model: str = "llama-3.3-70b-versatile", temperature: float = 0.7, max_tokens: int = 500):
+    async def generate_groq(self, prompt: str, model: str = "openai/gpt-oss-20b", temperature: float = 0.7, max_tokens: int = 500):
         if not self.groq_client:
             raise ValueError("Groq client not initialized")
         
