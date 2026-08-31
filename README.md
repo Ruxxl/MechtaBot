@@ -1,7 +1,7 @@
 # MechtaBot
 
 Telegram-бот на aiogram, интегрированный с Jira, Confluence, GitHub Actions,
-Groq AI, Google Calendar и Locust (нагрузочное тестирование).
+Gemini AI, Google Calendar и Locust (нагрузочное тестирование).
 Деплоится на Render как worker-процесс (см. `Procfile`).
 
 ## Структура проекта
@@ -17,7 +17,7 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 │   └── webhook_handler.py            # POST /webhook/notify — приём вебхуков GitHub Actions (+ автотриггер smoke-теста)
 │
 ├── services/                         # переиспользуемые сервисы, не привязанные к конкретным сообщениям
-│   ├── ai_service.py                 # обёртка над Groq (текст + vision)
+│   ├── ai_service.py                 # обёртка над Gemini (текст + vision)
 │   ├── autotest_service.py           # опрос GitHub Actions API репо MechtaATest + парсинг логов Cypress по спекам
 │   ├── calendar_service.py           # мониторинг ICS-календаря, уведомления о встречах
 │   ├── confluence_service.py         # поиск и получение страниц Confluence (для FAQ-бота)
@@ -28,9 +28,9 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 │   ├── photo_handler.py              # фото с тегом #bug/#jira в группе → задача в Jira
 │   ├── text_handler.py               # текст с тегом #bug/#jira → задача в Jira, #check — health-check
 │   ├── personal_photo_handler.py     # фото/текст в ЛС боту → пересылка в основной чат (минуя Jira-логику)
-│   ├── vision_handler.py             # анализ скриншотов через Groq Vision (сейчас отключен, см. main.py)
+│   ├── vision_handler.py             # анализ скриншотов через Gemini Vision (сейчас отключен, см. main.py)
 │   ├── stress_handler.py             # /stress — нагрузочное тестирование стендов через Locust + автотриггер smoke-теста после деплоя
-│   ├── faq_handler.py                # /ask, #faq — вопрос-ответ по документации Confluence через Groq
+│   ├── faq_handler.py                # /ask, #faq — вопрос-ответ по документации Confluence через Gemini
 │   ├── team_tasks_handler.py         # /team — список пользователей Jira → его задачи и подзадачи в текущем спринте
 │   ├── nurlan_handler.py             # спец-реакция на сообщения конкретного пользователя
 │   └── daily_reminder.py             # утреннее/вечернее напоминание + кнопка статуса будущего релиза
@@ -39,7 +39,7 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 │   ├── autotest_bugs_monitor.py      # новые подзадачи-баги, заведенные автотестами (Jira)
 │   ├── autotest_runs_monitor.py      # опрос прогонов автотестов MechtaATest (см. services/autotest_service.py)
 │   ├── code_review_handler.py        # мониторинг задач в статусе "Код ревью"
-│   ├── release_notifier.py           # уведомление о выходе релиза + AI-описание релиза (Groq)
+│   ├── release_notifier.py           # уведомление о выходе релиза + AI-описание релиза (Gemini)
 │   └── monthly_report.py             # ежемесячный отчет по релизам/задачам/багам (30-е число)
 │
 ├── data/                             # статичные данные/конфиги без логики
@@ -64,7 +64,7 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 | `#check`                     | группа                | Отвечает "бот работает" — проверка живости                                  |
 | `/jira`                      | группа                | Пошаговая регистрация дефекта (заголовок → описание → приоритет → ссылки → скриншоты) |
 | `/stress`                    | группа                | Запуск нагрузочного теста на выбранный стенд (Locust), прогресс и отчет прямо в чате |
-| `/ask <вопрос>`, `#faq`      | группа                | Ответ на вопрос по документации Confluence через Groq                       |
+| `/ask <вопрос>`, `#faq`      | группа                | Ответ на вопрос по документации Confluence через Gemini                       |
 | `/team`                      | группа                | Список пользователей проекта Jira → задачи и подзадачи выбранного человека в текущем спринте (статусы "Готово"/"Ожидает релиза" скрыты) |
 | `/stands`                    | группа                | Статус последних сборок по каждому стенду (из кэша вебхуков или GitHub API) |
 | `#hr`                        | группа                | Меню HR-тем (отметки, командировки, обходной лист и т.д.)                   |
@@ -74,7 +74,7 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
 
 - **Календарь** — мониторинг общего (`ICS_URL`) и личного календаря, уведомления за 5 минут до встречи.
 - **Напоминания** — утреннее (08:05) и вечернее (17:00) напоминание отметиться в Clockster (по будням).
-- **Jira Release Monitor** — уведомление в группу о выходе релиза + AI-описание релиза (Groq, ограничено ~350 символами под лимит подписи к фото в Telegram).
+- **Jira Release Monitor** — уведомление в группу о выходе релиза + AI-описание релиза (Gemini, ограничено ~350 символами под лимит подписи к фото в Telegram).
 - **Code Review Monitor** — отслеживание задач в статусе "Код ревью".
 - **Autotest Runs Monitor** — раз в 5 минут опрашивает GitHub Actions API репозитория
   [Ruxxl/MechtaATest](https://github.com/Ruxxl/MechtaATest) (Cypress), парсит логи
@@ -99,7 +99,7 @@ Groq AI, Google Calendar и Locust (нагрузочное тестирован�
   осознанно принятый риск дублирования при перезапуске Render-дайно.
 - Свежие данные по Jira/Confluence запрашиваются каждый раз заново, а не кэшируются
   в локальные JSON/БД.
-- Все HTTP-вызовы — через `aiohttp`, AI-вызовы — через `AsyncGroq`.
+- Все HTTP-вызовы — через `aiohttp`, AI-вызовы — через `google-genai` (модель `gemini-flash-lite-latest`).
 - Фильтрация по статусам Jira (например, скрытие "Готово"/"Ожидает релиза") делается
   на стороне Python по частичному совпадению, а не через точный JQL-фильтр —
   формулировки статусов в разных проектах/инстансах могут отличаться.
@@ -122,7 +122,7 @@ python3 main.py
 ## Переменные окружения (Render → Environment)
 
 **Обязательные:**
-`BOT_TOKEN`, `GROQ_API_KEY`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY`,
+`BOT_TOKEN`, `GEMINI_API_KEY`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY`,
 `JIRA_PARENT_KEY`, `JIRA_URL`.
 
 **GitHub Actions / деплой:**

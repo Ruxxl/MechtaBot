@@ -45,7 +45,7 @@ async def _generate_answer(question: str, pages: list) -> str:
         f"Материалы из документации:\n{context_blocks}"
     )
 
-    return await ai_service.generate_groq(prompt=prompt, max_tokens=900, temperature=0.3)
+    return await ai_service.generate_gemini(prompt=prompt, max_tokens=900, temperature=0.3)
 
 
 async def handle_faq_question(bot: Bot, message: Message, question: str, confluence_config: dict) -> None:

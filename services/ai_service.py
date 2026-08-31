@@ -1,74 +1,71 @@
+import base64
 import logging
-from groq import AsyncGroq
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger("bot.ai_service")
 
+VISION_SYSTEM_PROMPT = (
+    "Ты — помощник для IT-команды. Анализируешь скриншоты.\n"
+    "Всегда отвечай в таком формате:\n"
+    "1) Сначала кратко (1-2 предложения) опиши, что изображено на скриншоте "
+    "(какой экран, какой раздел, что происходит).\n"
+    "2) Если на скриншоте есть ошибка (exception, stack trace, HTTP-код ошибки "
+    "вроде 4xx/5xx, красный текст в консоли/DevTools, баг в интерфейсе) — "
+    "опиши какая именно ошибка, в чём вероятная причина, и предложи конкретные шаги "
+    "для исправления.\n"
+    "3) Если явных ошибок нет — просто укажи, что выглядит штатно, без лишних слов.\n"
+    "Не пиши общих фраз вроде 'на скриншоте видно интерфейс' без конкретики. "
+    "Указывай конкретные элементы: текст ошибок, коды статусов, названия полей и т.д., "
+    "если они видны.\n"
+    "Отвечай на русском языке, без длинных вступлений."
+)
+
 class AIService:
     def __init__(self):
-        self.groq_client = None
+        self.gemini_client = None
+        self.gemini_model = "gemini-flash-lite-latest"
 
-    def init_groq(self, api_key: str):
+    def init_gemini(self, api_key: str, model: str = "gemini-flash-lite-latest"):
         if api_key:
             try:
-                self.groq_client = AsyncGroq(api_key=api_key)
-                logger.info("✅ Groq service initialized")
+                self.gemini_client = genai.Client(api_key=api_key)
+                self.gemini_model = model
+                logger.info("✅ Gemini service initialized")
             except Exception as e:
-                logger.error(f"❌ Failed to init Groq: {e}")
+                logger.error(f"❌ Failed to init Gemini: {e}")
 
-    async def generate_groq(self, prompt: str, model: str = "openai/gpt-oss-20b", temperature: float = 0.7, max_tokens: int = 500):
-        if not self.groq_client:
-            raise ValueError("Groq client not initialized")
-        
-        response = await self.groq_client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=temperature
+    async def generate_gemini(self, prompt: str, temperature: float = 0.7, max_tokens: int = 500):
+        if not self.gemini_client:
+            raise ValueError("Gemini client not initialized")
+
+        response = await self.gemini_client.aio.models.generate_content(
+            model=self.gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            ),
         )
-        return response.choices[0].message.content.strip()
+        return (response.text or "").strip()
 
-    async def analyze_image_groq(self, image_b64: str, caption: str = "", max_tokens: int = 1024):
-        """Анализирует изображение через Groq Vision (llama-4-scout)."""
-        if not self.groq_client:
-            raise ValueError("Groq client not initialized")
+    async def analyze_image_gemini(self, image_b64: str, caption: str = "", max_tokens: int = 1024):
+        """Анализирует изображение через Gemini Vision."""
+        if not self.gemini_client:
+            raise ValueError("Gemini client not initialized")
 
-        user_content = [
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
-            },
-            {
-                "type": "text",
-                "text": caption if caption else "Проанализируй этот скриншот. Если есть ошибки — объясни причину и предложи решение.",
-            },
-        ]
+        image_bytes = base64.b64decode(image_b64)
+        user_text = caption if caption else "Проанализируй этот скриншот. Если есть ошибки — объясни причину и предложи решение."
 
-        response = await self.groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Ты — помощник для IT-команды. Анализируешь скриншоты.\n"
-                        "Всегда отвечай в таком формате:\n"
-                        "1) Сначала кратко (1-2 предложения) опиши, что изображено на скриншоте "
-                        "(какой экран, какой раздел, что происходит).\n"
-                        "2) Если на скриншоте есть ошибка (exception, stack trace, HTTP-код ошибки "
-                        "вроде 4xx/5xx, красный текст в консоли/DevTools, баг в интерфейсе) — "
-                        "опиши какая именно ошибка, в чём вероятная причина, и предложи конкретные шаги "
-                        "для исправления.\n"
-                        "3) Если явных ошибок нет — просто укажи, что выглядит штатно, без лишних слов.\n"
-                        "Не пиши общих фраз вроде 'на скриншоте видно интерфейс' без конкретики. "
-                        "Указывай конкретные элементы: текст ошибок, коды статусов, названия полей и т.д., "
-                        "если они видны.\n"
-                        "Отвечай на русском языке, без длинных вступлений."
-                    ),
-                },
-                {"role": "user", "content": user_content},
+        response = await self.gemini_client.aio.models.generate_content(
+            model=self.gemini_model,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                f"{VISION_SYSTEM_PROMPT}\n\n{user_text}",
             ],
-            max_tokens=max_tokens,
+            config=types.GenerateContentConfig(max_output_tokens=max_tokens),
         )
-        return response.choices[0].message.content.strip()
+        return (response.text or "").strip()
 
 # Создаем экземпляр для импорта в другие файлы
 ai_service = AIService()
