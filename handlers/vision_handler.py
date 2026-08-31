@@ -10,7 +10,7 @@ logger = logging.getLogger("bot.vision")
 
 async def handle_vision_message(bot: Bot, message: Message) -> None:
     """
-    Скачивает фото, отправляет в Groq Vision (llama-4-scout),
+    Скачивает фото, отправляет в Gemini Vision,
     возвращает анализ пользователю.
     """
     caption = message.caption or ""
@@ -27,8 +27,8 @@ async def handle_vision_message(bot: Bot, message: Message) -> None:
         # Кодируем в base64
         image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
-        # Анализируем через Groq Vision
-        result = await ai_service.analyze_image_groq(
+        # Анализируем через Gemini Vision
+        result = await ai_service.analyze_image_gemini(
             image_b64=image_b64,
             caption=caption,
         )

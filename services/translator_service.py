@@ -34,7 +34,7 @@ async def translate_ru_to_kk(text: str) -> str:
             f"Текст: {text}"
         )
 
-        result = await ai_service.generate_groq(
+        result = await ai_service.generate_gemini(
             prompt=prompt,
             max_tokens=1000,
             temperature=0.3
@@ -46,7 +46,7 @@ async def translate_ru_to_kk(text: str) -> str:
 
         # Если исчерпана квота — используем запасной переводчик
         if "429" in error_msg or "rate_limit" in error_msg.lower():
-            logger.warning("Квота Groq исчерпана, использую запасной переводчик (GoogleTranslator)")
+            logger.warning("Квота Gemini исчерпана, использую запасной переводчик (GoogleTranslator)")
             try:
                 translated = await asyncio.to_thread(
                     lambda: GoogleTranslator(source='ru', target='kk').translate(text)
@@ -56,7 +56,7 @@ async def translate_ru_to_kk(text: str) -> str:
                 logger.error(f"Ошибка запасного переводчика: {fallback_error}")
                 return ""
 
-        logger.error(f"Ошибка Groq при переводе (текст: {text[:20]}...): {e}")
+        logger.error(f"Ошибка Gemini при переводе (текст: {text[:20]}...): {e}")
         return ""
 
 

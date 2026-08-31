@@ -63,7 +63,7 @@ _DEFAULT_MINIAPP_URL = f"{RENDER_EXTERNAL_URL}/app" if RENDER_EXTERNAL_URL else 
 MINIAPP_FRONTEND_URL = os.getenv("MINIAPP_FRONTEND_URL", _DEFAULT_MINIAPP_URL)
 INDEX_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
 TRANSLATION_THREAD_ID = 12741  # Укажи здесь ID темы для перевода
-GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 PERSONAL_CALENDAR_URL = "https://calendar.yandex.kz/export/ics.xml?private_token=11da362d0fa9b6f7260c4d97a3113fbba258a129&tz_id=Asia/Tashkent"
 PERSONAL_CHAT_ID = 998292747
 
@@ -527,14 +527,14 @@ register_bugreport_handlers(
 logger.info("ℹ️ Регистрация хендлеров /help...")
 register_help_handlers(dp=dp, bot=bot)
 
-# Регистрация FAQ-бота (/ask, #faq) — поиск по Confluence + ответ через Groq.
+# Регистрация FAQ-бота (/ask, #faq) — поиск по Confluence + ответ через Gemini.
 # Регистрируется до общих текстовых хендлеров ниже по файлу, чтобы тег #faq
 # перехватывался раньше общей Jira-логики (см. handle_text ниже).
 logger.info("📚 Регистрация FAQ-бота (Confluence)...")
 register_faq_handlers(dp=dp, bot=bot, confluence_config=CONFLUENCE_CONFIG)
 
 # Инициализация AI сервисов
-ai_service.init_groq(GROQ_API_KEY)
+ai_service.init_gemini(GEMINI_API_KEY)
 
 
 # Регистрация переводчика для конкретной темы
@@ -735,11 +735,9 @@ async def main():
 
     bot_user = await bot.get_me()
 
-    # Инициализация AI сервисов (Groq / Gemini)
-    # Инициализация AI сервиса (Groq)
-    # Инициализация AI сервиса
-    logger.info("⚙️ Инициализация Groq AI сервиса...")
-    ai_service.init_groq(GROQ_API_KEY)
+    # Инициализация AI сервиса (Gemini)
+    logger.info("⚙️ Инициализация Gemini AI сервиса...")
+    ai_service.init_gemini(GEMINI_API_KEY)
 
     logger.info("🗄 Подключение к базе данных...")
     await init_db()

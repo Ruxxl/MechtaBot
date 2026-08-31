@@ -38,7 +38,7 @@ async def _generate_title_and_description(raw_text: str) -> tuple[str, str]:
     )
 
     try:
-        raw = await ai_service.generate_groq(prompt=prompt, max_tokens=400, temperature=0.3)
+        raw = await ai_service.generate_gemini(prompt=prompt, max_tokens=400, temperature=0.3)
         cleaned = re.sub(r"^```json|^```|```$", "", (raw or "").strip(), flags=re.MULTILINE).strip()
         data = json.loads(cleaned)
         title = str(data.get("title") or fallback_title).strip()[:80]
@@ -53,7 +53,7 @@ def register_bugreport_handlers(dp, bot: Bot, jira_config: dict, create_jira_iss
     """
     /bugreport — команда, отправляемая ОТВЕТОМ на сообщение с багом (текст
     и/или фото). Достает текст/фото из исходного сообщения, прогоняет текст
-    через Groq для аккуратного заголовка и описания, создает подзадачу в
+    через Gemini для аккуратного заголовка и описания, создает подзадачу в
     родительской задаче jira_config['parent'] (та же логика, что и /jira,
     см. handlers/jira_fsm.py::create_jira_issue) и отвечает ссылкой на задачу.
 

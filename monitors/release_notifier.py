@@ -58,7 +58,7 @@ async def generate_release_summary(issues: list, max_chars: int = 350) -> str:
     )
 
     try:
-        summary = await ai_service.generate_groq(
+        summary = await ai_service.generate_gemini(
             prompt=prompt,
             max_tokens=120,
             temperature=0.5
