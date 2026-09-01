@@ -1,9 +1,32 @@
+import asyncio
 import base64
 import logging
 from google import genai
 from google.genai import types
+from google.genai import errors as genai_errors
 
 logger = logging.getLogger("bot.ai_service")
+
+# Коды ошибок Gemini, при которых имеет смысл повторить запрос
+RETRYABLE_STATUS_CODES = {429, 500, 503, 504}
+RETRY_DELAYS = (1, 3, 7)  # секунды между попытками (экспоненциально нарастающая пауза)
+
+
+async def _call_with_retry(func, *args, **kwargs):
+    last_error = None
+    for attempt, delay in enumerate((0, *RETRY_DELAYS)):
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            return await func(*args, **kwargs)
+        except genai_errors.APIError as e:
+            last_error = e
+            if getattr(e, "code", None) not in RETRYABLE_STATUS_CODES:
+                raise
+            logger.warning(
+                f"Gemini API вернул {e.code} (попытка {attempt + 1}/{len(RETRY_DELAYS) + 1}): {e}"
+            )
+    raise last_error
 
 VISION_SYSTEM_PROMPT = (
     "Ты — помощник для IT-команды. Анализируешь скриншоты.\n"
@@ -39,7 +62,8 @@ class AIService:
         if not self.gemini_client:
             raise ValueError("Gemini client not initialized")
 
-        response = await self.gemini_client.aio.models.generate_content(
+        response = await _call_with_retry(
+            self.gemini_client.aio.models.generate_content,
             model=self.gemini_model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -57,7 +81,8 @@ class AIService:
         image_bytes = base64.b64decode(image_b64)
         user_text = caption if caption else "Проанализируй этот скриншот. Если есть ошибки — объясни причину и предложи решение."
 
-        response = await self.gemini_client.aio.models.generate_content(
+        response = await _call_with_retry(
+            self.gemini_client.aio.models.generate_content,
             model=self.gemini_model,
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
