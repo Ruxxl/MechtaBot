@@ -71,14 +71,14 @@ PERSONAL_CHAT_ID = 998292747
 JIRA_CONFIG = {
     'email': os.getenv('JIRA_EMAIL'),
     'token': os.getenv('JIRA_API_TOKEN'),
-    'project': os.getenv('JIRA_PROJECT_KEY', 'AS'),
-    'parent': os.getenv('JIRA_PARENT_KEY', 'AS-3312'),
+    'project': os.getenv('JIRA_PROJECT_KEY', 'ITDEV'),
+    'parent': os.getenv('JIRA_PARENT_KEY', 'ITDEV-3312'),
     'url': os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net').rstrip('/')
 }
 
 # Родительская задача, чьи подзадачи (баги, заведенные автотестами)
 # мониторятся на предмет новых — см. monitors/autotest_bugs_monitor.py
-AUTOTEST_BUGS_PARENT_KEY = os.getenv('AUTOTEST_BUGS_PARENT_KEY', 'AS-4461')
+AUTOTEST_BUGS_PARENT_KEY = os.getenv('AUTOTEST_BUGS_PARENT_KEY', 'ITDEV-4461')
 
 # Репозиторий и воркфлоу с автотестами (Cypress), результаты которых
 # показываются в Mini App — см. services/autotest_service.py
