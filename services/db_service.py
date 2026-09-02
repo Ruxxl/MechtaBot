@@ -171,12 +171,16 @@ async def set_last_sent_report_month(month_key: str):
         logger.error(f"Ошибка сохранения статуса ежемесячного отчета в БД: {e}")
 
 
-async def get_known_autotest_subtask_keys(parent_key: str) -> set:
+async def get_known_autotest_subtask_keys(parent_key: str) -> Optional[set]:
     """Ключи подзадач (багов автотестов) parent_key, которые уже были отправлены
-    в чат. Пустой набор (в т.ч. если DATABASE_URL не задан) означает самый первый
-    запуск монитора для этой задачи — тогда в чат уйдут все текущие подзадачи."""
+    в чат.
+
+    Возвращает None, если БД недоступна: это важно, чтобы монитор не считал
+    "все текущие подзадачи новыми" при каждом цикле и не спамил в чат после
+    падения Postgres. Пустой набор означает только то, что в БД еще нет записей
+    для этого parent_key, и тогда в чат уйдут все текущие подзадачи."""
     if not _pool:
-        return set()
+        return None
     try:
         async with _pool.acquire() as conn:
             rows = await conn.fetch(
@@ -186,7 +190,7 @@ async def get_known_autotest_subtask_keys(parent_key: str) -> set:
         return {r["subtask_key"] for r in rows}
     except Exception as e:
         logger.error(f"Ошибка чтения отправленных подзадач автотестов из БД (parent_key={parent_key}): {e}")
-        return set()
+        return None
 
 
 async def save_autotest_subtask_keys(parent_key: str, subtask_keys: List[str]):

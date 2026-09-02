@@ -55,6 +55,14 @@ async def check_autotest_bug_subtasks(
     current_by_key = {sub["key"]: sub for sub in subtasks if sub.get("key")}
 
     known_keys = await get_known_autotest_subtask_keys(parent_key)
+    if known_keys is None:
+        logger.warning(
+            f"БД недоступна, пропускаю проверку новых багов автотестов для {parent_key}; "
+            "чтобы избежать повторного спама в чат."
+        )
+        monitor.update_status("Autotest Bugs Monitor", "ERROR")
+        return
+
     new_keys = [key for key in current_by_key if key not in known_keys]
 
     if not new_keys:
