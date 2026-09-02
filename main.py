@@ -78,7 +78,7 @@ JIRA_CONFIG = {
 
 # Родительская задача, чьи подзадачи (баги, заведенные автотестами)
 # мониторятся на предмет новых — см. monitors/autotest_bugs_monitor.py
-AUTOTEST_BUGS_PARENT_KEY = os.getenv('AUTOTEST_BUGS_PARENT_KEY', 'ITDEV-4461')
+AUTOTEST_BUGS_PARENT_KEY = os.getenv('AUTOTEST_BUGS_PARENT_KEY', 'ITDEV-1155')
 
 # Репозиторий и воркфлоу с автотестами (Cypress), результаты которых
 # показываются в Mini App — см. services/autotest_service.py
