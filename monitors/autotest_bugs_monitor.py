@@ -63,6 +63,7 @@ async def check_autotest_bug_subtasks(
         monitor.update_status("Autotest Bugs Monitor", "ERROR")
         return
 
+    is_first_run = len(known_keys) == 0
     new_keys = [key for key in current_by_key if key not in known_keys]
 
     if not new_keys:
@@ -70,8 +71,23 @@ async def check_autotest_bug_subtasks(
 
     logger.info(f"🐞 Найдено новых багов автотестов: {len(new_keys)}")
 
+    # На первом запуске мониторинга для parent_key (в БД еще нет записей) все
+    # текущие подзадачи считаются "новыми" — их может быть много, и сообщение
+    # со всем списком легко упирается в лимит Telegram на длину сообщения.
+    # В чат в этом случае уходит только последняя (самая свежая) подзадача,
+    # остальные молча помечаются как известные, чтобы не спамить и не терять
+    # их из виду при следующих проверках.
+    if is_first_run and len(new_keys) > 1:
+        logger.info(
+            f"Первый запуск мониторинга для {parent_key}: из {len(new_keys)} "
+            "существующих подзадач в чат уйдет только последняя."
+        )
+        notify_keys = [new_keys[-1]]
+    else:
+        notify_keys = new_keys
+
     lines = []
-    for key in new_keys:
+    for key in notify_keys:
         fields = current_by_key[key].get("fields", {}) or {}
         summary = fields.get("summary", "Без названия")
         status = (fields.get("status") or {}).get("name", "—")
@@ -91,7 +107,8 @@ async def check_autotest_bug_subtasks(
             disable_web_page_preview=True,
         )
         logger.info(
-            f"✅ Уведомление о {len(new_keys)} новых багах отправлено в группу {target_group_id} (топик {thread_id})"
+            f"✅ Уведомление о {len(notify_keys)} новых багах отправлено в группу {target_group_id} "
+            f"(топик {thread_id}); всего новых подзадач помечено как известные: {len(new_keys)}"
         )
     except Exception as e:
         logger.error(f"❌ Ошибка отправки уведомления о багах автотестов в TG: {e}")
