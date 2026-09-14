@@ -72,7 +72,7 @@ JIRA_CONFIG = {
     'email': os.getenv('JIRA_EMAIL'),
     'token': os.getenv('JIRA_API_TOKEN'),
     'project': os.getenv('JIRA_PROJECT_KEY', 'ITDEV'),
-    'parent': os.getenv('JIRA_PARENT_KEY', 'ITDEV-3312'),
+    'parent': os.getenv('JIRA_PARENT_KEY', 'ITDEV-1157'),
     'url': os.getenv('JIRA_URL', 'https://mechtamarket.atlassian.net').rstrip('/')
 }
 
