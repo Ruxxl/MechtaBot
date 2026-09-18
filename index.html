@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MechtaBot Console</title>
+<title>PulseBot Console</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
@@ -353,7 +353,7 @@
 
   <!-- ================= AUTOTESTS ================= -->
   <section class="page" data-page="autotests">
-    <h1 class="page-title">/autotests <span>// прогоны Cypress (MechtaATest)</span></h1>
+    <h1 class="page-title">/autotests <span>// прогоны Cypress (QA Suite)</span></h1>
     <div class="card" id="autotestSummaryCard">
       <div class="skeleton" style="height:64px;"></div>
     </div>
@@ -492,17 +492,17 @@
 
   /* ===================================================================
      КОНФИГ
-     Страница живет на GitHub Pages (ruxxl.github.io/telegramminiapp/) —
+     Страница живет на GitHub Pages (<username>.github.io/<repo>/) —
      это другой домен, чем backend на Render, поэтому адрес API нужно
      указывать абсолютным (относительный "/api/..." ушел бы на сам
      github.io, где никакого API нет — оттуда демо-данные и бралась
      подмена в проде). CORS на бэкенде (web/miniapp_api.py, ALLOWED_ORIGIN)
-     уже разрешает https://ruxxl.github.io по умолчанию.
+     уже разрешает нужный github.io-домен по умолчанию.
      Если когда-нибудь страница будет отдаваться тем же сервером, что и
      бэкенд (см. main.py:/app), можно смело оставить пустую строку —
      тогда запросы пойдут как relative, тоже сработает.
   =================================================================== */
-  var API_BASE = window.MECHTABOT_API_BASE || "https://mechtabot.onrender.com";
+  var API_BASE = window.PULSEBOT_API_BASE || "https://pulsebot-demo.onrender.com";
 
   var ENDPOINTS = {
     monthReport:   API_BASE + "/api/monthreport",
@@ -728,14 +728,14 @@
     apiFetch(ENDPOINTS.latestRelease).then(renderReleaseCard).catch(function(){
       renderReleaseCard({
         demo:true, version:"3.22.1", date:"28.07.2026",
-        description:"Исправлены задержки при синхронизации остатков и починен экспорт отчетов в 1С.",
+        description:"Исправлены задержки при синхронизации данных и починен экспорт отчётов.",
         url:null
       });
     });
 
     apiFetch(ENDPOINTS.lastWebhook).then(renderWebhookCard).catch(function(){
       renderWebhookCard({
-        demo:true, actor:"peaceffuul", branch:"predprod", commit:"fix: синхронизация остатков",
+        demo:true, actor:"dev-user1", branch:"release", commit:"fix: синхронизация данных",
         time:"29.07.2026 18:42", conclusion:"success"
       });
     });
@@ -745,9 +745,9 @@
         demo:true, name:"3.23.0", total:14, done:9, inProgress:3, pending:2,
         description:"В релиз войдут доработки корзины, push-уведомления о статусе заказа и фиксы оплаты рассрочкой.",
         tasks:[
-          {key:"MECHTA-1301", summary:"Рефакторинг корзины", status:"В работе", url:null},
-          {key:"MECHTA-1302", summary:"Push-уведомления о статусе заказа", status:"Готово", url:null},
-          {key:"MECHTA-1303", summary:"Фикс расчёта рассрочки на чекауте", status:"Ожидает", url:null}
+          {key:"DEMO-1301", summary:"Рефакторинг корзины", status:"В работе", url:null},
+          {key:"DEMO-1302", summary:"Push-уведомления о статусе заказа", status:"Готово", url:null},
+          {key:"DEMO-1303", summary:"Фикс расчёта рассрочки на чекауте", status:"Ожидает", url:null}
         ]
       });
     });
@@ -943,10 +943,10 @@
       renderStands(list, false);
     }).catch(function(){
       renderStands([
-        {key:"deploy preprod", label:"PREPROD", url:"https://pp.yc.mechta.kz/", status:"ok"},
-        {key:"deploy d2", label:"D2", url:"http://d2.im.mdev.kz/", status:"ok"},
-        {key:"deploy d3", label:"D3", url:"http://d3.im.mdev.kz/", status:"warn"},
-        {key:"deploy ssr prod", label:"PRODUCTION", url:"https://mechta.kz/", status:"ok"}
+        {key:"deploy preprod", label:"PREPROD", url:"https://pp.demo-shop.kz/", status:"ok"},
+        {key:"deploy d2", label:"D2", url:"http://d2.demo-dev.kz/", status:"ok"},
+        {key:"deploy d3", label:"D3", url:"http://d3.demo-dev.kz/", status:"warn"},
+        {key:"deploy ssr prod", label:"PRODUCTION", url:"https://demo-shop.kz/", status:"ok"}
       ], true);
     });
   }
@@ -987,8 +987,8 @@
             renderBuilds(detail, builds);
           }).catch(function(){
             renderBuilds(detail, [
-              {commit:"fix: обработка пустого ответа API", actor:"nurgi17", date:"29.07.2026 14:02"},
-              {commit:"chore: обновление зависимостей", actor:"peaceffuul", date:"28.07.2026 09:15"}
+              {commit:"fix: обработка пустого ответа API", actor:"dev-user2", date:"29.07.2026 14:02"},
+              {commit:"chore: обновление зависимостей", actor:"dev-user1", date:"28.07.2026 09:15"}
             ]);
           });
         }
@@ -1019,13 +1019,13 @@
       renderAutotestLatest(data, false);
     }).catch(function(){
       renderAutotestLatest({
-        runNumber: 128, conclusion: "failure", branch: "main", actor: "Ruxxl",
+        runNumber: 128, conclusion: "failure", branch: "main", actor: "dev-user1",
         commit: "Демо: бэкенд недоступен", date: "—", url: null,
         totals: {tests:42, passing:39, failing:3, pending:0, skipped:0},
         specs: [
-          {name:"Regress_Test/add_basket.cy.js", duration:"00:42", tests:5, passing:5, failing:0, pending:0, skipped:0},
-          {name:"Regress_Test/checkout.cy.js", duration:"01:10", tests:6, passing:4, failing:2, pending:0, skipped:0},
-          {name:"Regress_Test/favorites.cy.js", duration:"00:20", tests:3, passing:2, failing:1, pending:0, skipped:0}
+          {name:"regression/add_to_cart.cy.js", duration:"00:42", tests:5, passing:5, failing:0, pending:0, skipped:0},
+          {name:"regression/checkout.cy.js", duration:"01:10", tests:6, passing:4, failing:2, pending:0, skipped:0},
+          {name:"regression/favorites.cy.js", duration:"00:20", tests:3, passing:2, failing:1, pending:0, skipped:0}
         ]
       }, true);
     });
@@ -1115,9 +1115,9 @@
       renderTeamUsers(list, false);
     }).catch(function(){
       renderTeamUsers([
-        {accountId:"demo-1", displayName:"Алия Сатпаева"},
-        {accountId:"demo-2", displayName:"Данияр Ахметов"},
-        {accountId:"demo-3", displayName:"Марат Исенов"}
+        {accountId:"demo-1", displayName:"Иван Иванов"},
+        {accountId:"demo-2", displayName:"Мария Смирнова"},
+        {accountId:"demo-3", displayName:"Сергей Петров"}
       ], true);
     });
   }
@@ -1154,9 +1154,9 @@
             renderTeamTasks(detail, data.tasks || []);
           }).catch(function(){
             renderTeamTasks(detail, [
-              {key:"MECHTA-1210", summary:"Проверка формы оплаты рассрочки", status:"В работе", url:null,
-                subtasks:[{key:"MECHTA-1211", summary:"Валидация номера карты", status:"Код ревью", url:null}]},
-              {key:"MECHTA-1207", summary:"Исправить дублирование уведомлений", status:"Тестирование", url:null, subtasks:[]}
+              {key:"DEMO-1210", summary:"Проверка формы оплаты рассрочки", status:"В работе", url:null,
+                subtasks:[{key:"DEMO-1211", summary:"Валидация номера карты", status:"Код ревью", url:null}]},
+              {key:"DEMO-1207", summary:"Исправить дублирование уведомлений", status:"Тестирование", url:null, subtasks:[]}
             ]);
           });
         }
@@ -1352,7 +1352,7 @@
     }).catch(function(){
       renderReleaseSearch({
         matchType: "nearby",
-        releases: [{version: "3.24.0", date: "16.06.2026", url: null, tasks: 9, description: "В релиз вошли фиксы оплаты рассрочкой и улучшение синхронизации остатков."}]
+        releases: [{version: "3.24.0", date: "16.06.2026", url: null, tasks: 9, description: "В релиз вошли фиксы оплаты рассрочкой и улучшение синхронизации данных."}]
       }, true, date);
     });
   }
