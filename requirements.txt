@@ -5,6 +5,7 @@ requests
 google-genai>=1.0.0
 beautifulsoup4
 icalendar
+python-dateutil
 pytesseract
 playwright>=1.37.0
 deep-translator
