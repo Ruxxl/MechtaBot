@@ -3,6 +3,7 @@ import os
 import types as std_types
 import logging
 from dotenv import load_dotenv
+import aiohttp
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
@@ -482,6 +483,22 @@ async def start_web_server(app: web.Application, webhook_h: WebhookHandler, bot_
     logger.info(f"🌐 Веб-сервер запущен на порту {port}")
     await site.start()
 
+async def keep_alive_ping(interval: int = 600):
+    """Free-инстанс Render засыпает после ~15 мин без входящего HTTP-трафика,
+    и вместе с ним останавливается polling бота. Пингуем свой публичный URL
+    (через прокси Render — локальный запрос не считается), чтобы не засыпать."""
+    if not RENDER_EXTERNAL_URL:
+        return
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                async with session.get(f"{RENDER_EXTERNAL_URL}/") as resp:
+                    if resp.status != 200:
+                        logger.warning(f"Keep-alive ping: HTTP {resp.status}")
+            except Exception as e:
+                logger.warning(f"Keep-alive ping не удался: {e}")
+
 # Регистрация хендлеров для работы с Jira через FSM
 logger.info("📝 Регистрация хендлеров Jira FSM...")
 register_jira_handlers(
@@ -745,6 +762,7 @@ async def main():
     # Запуск Health Check сервера
     logger.info("🌐 Запуск веб-сервера (Health Check & Webhooks)...") # Pass the globally defined 'app'
     asyncio.create_task(start_web_server(app, webhook_handler, bot_user))
+    asyncio.create_task(keep_alive_ping())
 
     # Обновляем начальные статусы в админке
     monitor.update_status("Core", "OK")
