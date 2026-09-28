@@ -498,11 +498,12 @@
      github.io, где никакого API нет — оттуда демо-данные и бралась
      подмена в проде). CORS на бэкенде (web/miniapp_api.py, ALLOWED_ORIGIN)
      уже разрешает нужный github.io-домен по умолчанию.
-     Если когда-нибудь страница будет отдаваться тем же сервером, что и
-     бэкенд (см. main.py:/app), можно смело оставить пустую строку —
-     тогда запросы пойдут как relative, тоже сработает.
+     Когда страница отдаётся самим бэкендом (main.py:/app — так её
+     открывает кнопка бота на Render), API_BASE пустой и запросы идут
+     relative на тот же домен.
   =================================================================== */
-  var API_BASE = window.PULSEBOT_API_BASE || "https://pulsebot-demo.onrender.com";
+  var API_BASE = window.PULSEBOT_API_BASE ||
+    (/\.github\.io$/.test(location.hostname) ? "https://mechtabot-pqlm.onrender.com" : "");
 
   var ENDPOINTS = {
     monthReport:   API_BASE + "/api/monthreport",
