@@ -37,6 +37,8 @@ from handlers.faq_handler import register_faq_handlers
 from handlers.team_tasks_handler import register_team_tasks_handlers
 from handlers.help_handler import register_help_handlers, help_data, CATEGORIES
 from handlers.bugreport_handler import register_bugreport_handlers
+from handlers.market_tests_handler import register_market_tests_handlers
+from services.market_tests_service import MarketTestsService
 from services.db_service import init_db, close_db, get_latest_builds as get_stand_builds_from_db
 from web.miniapp_api import setup_miniapp_routes
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
@@ -85,6 +87,13 @@ AUTOTEST_BUGS_PARENT_KEY = os.getenv('AUTOTEST_BUGS_PARENT_KEY', 'ITDEV-1155')
 # показываются в Mini App — см. services/autotest_service.py
 AUTOTEST_REPO = os.getenv('AUTOTEST_REPO', 'Ruxxl/MechtaATest')
 AUTOTEST_WORKFLOW = os.getenv('AUTOTEST_WORKFLOW', 'Cypress Tests')
+
+# E2E-тесты market_site (Playwright), запускаемые командой /autotest через
+# workflow_dispatch — см. services/market_tests_service.py
+MARKET_TESTS_REPO = os.getenv('MARKET_TESTS_REPO', 'mechta-market/microservices-tests-automation')
+MARKET_TESTS_WORKFLOW = os.getenv('MARKET_TESTS_WORKFLOW', 'market_site_tests.yml')
+MARKET_TESTS_REF = os.getenv('MARKET_TESTS_REF', 'market_site')
+MARKET_TESTS_BASE_URL = os.getenv('MARKET_TESTS_BASE_URL', 'https://pp.yc.mechta.kz')
 
 JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handler
 
@@ -538,6 +547,20 @@ register_bugreport_handlers(
     bot=bot,
     jira_config=JIRA_CONFIG,
     create_jira_issue_func=create_jira_issue,
+)
+
+# Регистрация /autotest — запуск E2E-тестов market_site в GitHub Actions
+logger.info("🧪 Регистрация команды /autotest...")
+register_market_tests_handlers(
+    dp=dp,
+    bot=bot,
+    service=MarketTestsService(
+        repo_full_name=MARKET_TESTS_REPO,
+        github_token=os.getenv('MARKET_TESTS_GITHUB_TOKEN') or os.getenv('GITHUB_TOKEN'),
+        workflow_file=MARKET_TESTS_WORKFLOW,
+        ref=MARKET_TESTS_REF,
+        base_url=MARKET_TESTS_BASE_URL,
+    ),
 )
 
 # Регистрация /help и /start — интерактивное меню возможностей бота
