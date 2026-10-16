@@ -64,6 +64,11 @@ CREATE TABLE IF NOT EXISTS autotest_run_specs (
     skipped INT NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_autotest_run_specs_run_id ON autotest_run_specs (run_id);
+
+CREATE TABLE IF NOT EXISTS aplaut_notified_reviews (
+    review_id TEXT PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 
@@ -311,3 +316,40 @@ async def get_recent_autotest_runs(limit: int = 10) -> List[dict]:
     except Exception as e:
         logger.error(f"Ошибка чтения истории прогонов автотестов из БД: {e}")
         return []
+
+
+async def mark_aplaut_review_notified(review_id: str) -> Optional[bool]:
+    """Атомарно помечает отзыв Aplaut как отправленный в чат.
+
+    True — отзыв помечен впервые (нужно слать уведомление), False — он уже
+    был отправлен раньше (повтор вебхука), None — БД недоступна (решение о
+    дедупликации остается за вызывающим кодом)."""
+    if not _pool:
+        return None
+    try:
+        async with _pool.acquire() as conn:
+            inserted = await conn.fetchval(
+                """
+                INSERT INTO aplaut_notified_reviews (review_id) VALUES ($1)
+                ON CONFLICT (review_id) DO NOTHING
+                RETURNING review_id
+                """,
+                review_id,
+            )
+        return inserted is not None
+    except Exception as e:
+        logger.error(f"Ошибка сохранения отзыва Aplaut {review_id} в БД: {e}")
+        return None
+
+
+async def has_aplaut_notified_reviews() -> Optional[bool]:
+    """Есть ли в БД хоть один отправленный отзыв Aplaut. False означает самый
+    первый запуск уведомлений, None — БД недоступна."""
+    if not _pool:
+        return None
+    try:
+        async with _pool.acquire() as conn:
+            return bool(await conn.fetchval("SELECT EXISTS (SELECT 1 FROM aplaut_notified_reviews)"))
+    except Exception as e:
+        logger.error(f"Ошибка чтения отправленных отзывов Aplaut из БД: {e}")
+        return None
