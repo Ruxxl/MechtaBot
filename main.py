@@ -56,6 +56,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 # Твои конкретные ID
 TARGET_GROUP_ID = -1002196628724
 TARGET_THREAD_ID = 42896
+APPLAUT_THREAD_ID = 50271
 VISION_THREAD_ID = 1886
 TESTERS_THREAD_ID = 1886  # Топик "Тестировщики" (тот же топик, что и VISION_THREAD_ID)
 # Render автоматически прокидывает RENDER_EXTERNAL_URL для web-сервисов —
@@ -102,7 +103,7 @@ APLAUT_WEBHOOK_SECRET = os.getenv('APLAUT_WEBHOOK_SECRET')
 # Токен Platform API — только чтобы при самом первом запуске отправить последний отзыв
 APLAUT_API_TOKEN = os.getenv('APLAUT_API_TOKEN')
 APLAUT_SECRET_HEADER = os.getenv('APLAUT_SECRET_HEADER', 'X-Api-Key')
-APLAUT_THREAD_ID = int(os.getenv('APLAUT_THREAD_ID', TARGET_THREAD_ID))
+APLAUT_THREAD_ID = int(os.getenv('APLAUT_THREAD_ID', APPLAUT_THREAD_ID))
 APLAUT_EVENTS = {
     e.strip()
     for e in os.getenv('APLAUT_EVENTS', 'create_review').split(',')
@@ -192,7 +193,7 @@ webhook_handler = WebhookHandler(
 aplaut_handler = AplautWebhookHandler(
     bot=bot,
     target_group_id=TARGET_GROUP_ID,
-    target_thread_id=APLAUT_THREAD_ID,
+    APPLAUT_THREAD_ID=APLAUT_THREAD_ID,
     secret=APLAUT_WEBHOOK_SECRET,
     secret_header=APLAUT_SECRET_HEADER,
     events=APLAUT_EVENTS,
