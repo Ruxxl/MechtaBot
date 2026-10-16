@@ -13,6 +13,7 @@ Gemini AI, Google Calendar и Locust (нагрузочное тестирова�
 ├── requirements.txt
 │
 ├── web/                              # aiohttp веб-роуты (health-check, вебхуки, админка)
+│   ├── aplaut_handler.py             # POST /webhook/aplaut — вебхук Aplaut → уведомление о новом отзыве в чат
 │   ├── admin_handler.py              # GET /admin — дашборд со статусами сервисов, ручным запуском проверок и логом ошибок
 │   └── webhook_handler.py            # POST /webhook/notify — приём вебхуков GitHub Actions (+ автотриггер smoke-теста)
 │
@@ -82,12 +83,17 @@ Gemini AI, Google Calendar и Locust (нагрузочное тестирова�
   Mini App (`/api/autotests/latest`, `/api/autotests/runs`). Ничего не меняет и не
   требует изменений в самом репозитории с автотестами.
 - **Monthly Report** — ежемесячный отчет по релизам/задачам/багам, отправляется 30-го числа (или в последний день месяца, если он короче).
+- **Отзывы Aplaut** — Aplaut сам присылает событие о новом отзыве на `POST /webhook/aplaut`
+  (Aplaut → Интеграции → «Исходящий вебхук», URL `<RENDER_EXTERNAL_URL>/webhook/aplaut`,
+  событие «Создание отзыва», учётные данные «Секрет в заголовке» `X-Api-Key`). Повторные
+  доставки отсекаются по id отзыва (таблица `aplaut_notified_reviews`).
 - **Smoke-тест после деплоя** — при успешном GitHub Actions деплое нужного воркфлоу (`SMOKE_TEST_WORKFLOWS`) автоматически запускается короткий нагрузочный тест на задеплоенный стенд.
 
 ## Веб-эндпоинты
 
 - `GET /` — health-check для Render.
 - `POST /webhook/notify` — вебхук GitHub Actions (уведомление о сборке + автотриггер smoke-теста); также принимает ручной JSON `{"text": "...", "thread_id": "..."}` для тестов через curl.
+- `POST /webhook/aplaut` — исходящий вебхук Aplaut (событие `create_review`) → уведомление о новом отзыве в чат.
 - `GET /admin` — дашборд: статусы всех сервисов, ручной запуск зарегистрированных проверок, лог последних ошибок.
 - `GET /api/autotests/latest`, `GET /api/autotests/runs` — результаты прогонов автотестов
   MechtaATest для Mini App (контракт см. в `web/miniapp_api.py`).
@@ -156,3 +162,14 @@ python3 main.py
 `AUTOTEST_WORKFLOW` (по умолчанию `Cypress Tests`) — имя воркфлоу в нём. Токен —
 тот же `GITHUB_TOKEN`, что и для деплоев; нужен доступ на чтение Actions
 указанного репозитория (публичный репозиторий подойдет с любым валидным токеном).
+
+**Отзывы Aplaut (`web/aplaut_handler.py`):**
+`APLAUT_API_TOKEN` — токен OAuth-приложения с доступом Platform API (Aplaut →
+Настройки → Разработчикам → Новое приложение → «Platform API» → Сгенерировать токен); нужен только для того, чтобы при самом первом запуске
+(таблица `aplaut_notified_reviews` пуста) один раз отправить в чат последний отзыв.
+`APLAUT_WEBHOOK_SECRET` — секрет, заданный в учётных данных вебхука в Aplaut
+(если не задан, запросы не проверяются), `APLAUT_SECRET_HEADER` (по умолчанию
+`X-Api-Key`; секрет также принимается из поля `secret` тела), `APLAUT_THREAD_ID`
+(топик для уведомлений, по умолчанию основной `TARGET_THREAD_ID`), `APLAUT_EVENTS`
+(события через запятую, по умолчанию `create_review`; например `publish_review`,
+чтобы слать только прошедшие модерацию).

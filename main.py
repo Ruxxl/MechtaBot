@@ -41,6 +41,7 @@ from handlers.market_tests_handler import register_market_tests_handlers
 from services.market_tests_service import MarketTestsService
 from services.db_service import init_db, close_db, get_latest_builds as get_stand_builds_from_db
 from web.miniapp_api import setup_miniapp_routes
+from web.aplaut_handler import AplautWebhookHandler
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 
@@ -94,6 +95,19 @@ MARKET_TESTS_REPO = os.getenv('MARKET_TESTS_REPO', 'mechta-market/microservices-
 MARKET_TESTS_WORKFLOW = os.getenv('MARKET_TESTS_WORKFLOW', 'market_site_tests.yml')
 MARKET_TESTS_REF = os.getenv('MARKET_TESTS_REF', 'market_site')
 MARKET_TESTS_BASE_URL = os.getenv('MARKET_TESTS_BASE_URL', 'https://pp.yc.mechta.kz')
+
+# Aplaut (отзывы): исходящий вебхук Aplaut шлет события на POST /webhook/aplaut,
+# бот публикует новые отзывы в чат — см. web/aplaut_handler.py
+APLAUT_WEBHOOK_SECRET = os.getenv('APLAUT_WEBHOOK_SECRET')
+# Токен Platform API — только чтобы при самом первом запуске отправить последний отзыв
+APLAUT_API_TOKEN = os.getenv('APLAUT_API_TOKEN')
+APLAUT_SECRET_HEADER = os.getenv('APLAUT_SECRET_HEADER', 'X-Api-Key')
+APLAUT_THREAD_ID = int(os.getenv('APLAUT_THREAD_ID', TARGET_THREAD_ID))
+APLAUT_EVENTS = {
+    e.strip()
+    for e in os.getenv('APLAUT_EVENTS', 'create_review').split(',')
+    if e.strip()
+}
 
 JIRA_URL = JIRA_CONFIG['url'] # Для совместимости с text_handler
 
@@ -173,6 +187,16 @@ webhook_handler = WebhookHandler(
     repo_full_name=os.getenv('GITHUB_REPO'), # например "mechta-kz/my-repo"
     smoke_test_callback=_smoke_test_callback,
     smoke_test_workflows=SMOKE_TEST_WORKFLOWS,
+)
+
+aplaut_handler = AplautWebhookHandler(
+    bot=bot,
+    target_group_id=TARGET_GROUP_ID,
+    target_thread_id=APLAUT_THREAD_ID,
+    secret=APLAUT_WEBHOOK_SECRET,
+    secret_header=APLAUT_SECRET_HEADER,
+    events=APLAUT_EVENTS,
+    api_token=APLAUT_API_TOKEN,
 )
 
 # =======================
@@ -483,6 +507,7 @@ async def start_web_server(app: web.Application, webhook_h: WebhookHandler, bot_
     app.router.add_get('/', handle_web_root)
     app.router.add_get('/app', handle_miniapp_page)
     app.router.add_post('/webhook/notify', webhook_h.handle_notification)
+    app.router.add_post('/webhook/aplaut', aplaut_handler.handle)
     app.router.add_get('/admin', admin_h.handle_dashboard)
 
     runner = web.AppRunner(app)
@@ -800,6 +825,7 @@ async def main():
     monitor.update_status("FAQ Bot", "OK")
     monitor.update_status("Autotest Bugs Monitor", "OK")
     monitor.update_status("Autotest Runs Monitor", "OK")
+    monitor.update_status("Aplaut Reviews", "OK")
 
     # 1. Сервисы календаря и напоминаний
     logger.info("📅 Запуск мониторинга календаря...")
@@ -873,6 +899,11 @@ async def main():
         autotest_runs_service,
         interval=300  # раз в 5 минут
     ))
+
+    # 3.4 Отзывы Aplaut приходят вебхуком (POST /webhook/aplaut); при самом
+    # первом запуске один раз отправляем последний отзыв
+    logger.info("📝 Проверка первого запуска уведомлений об отзывах Aplaut...")
+    asyncio.create_task(aplaut_handler.send_latest_on_first_run())
 
     # 4. Очистка вебхуков
     logger.info("🧹 Очистка старых вебхуков...")
