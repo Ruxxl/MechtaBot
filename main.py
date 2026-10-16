@@ -41,7 +41,7 @@ from handlers.market_tests_handler import register_market_tests_handlers
 from services.market_tests_service import MarketTestsService
 from services.db_service import init_db, close_db, get_latest_builds as get_stand_builds_from_db
 from web.miniapp_api import setup_miniapp_routes
-from web.aplaut_handler import AplautWebhookHandler
+from web.aplaut_handler import AplautWebhookHandler, register_aplaut_handlers
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 
@@ -198,6 +198,7 @@ aplaut_handler = AplautWebhookHandler(
     events=APLAUT_EVENTS,
     api_token=APLAUT_API_TOKEN,
 )
+register_aplaut_handlers(dp=dp, aplaut_handler=aplaut_handler)
 
 # =======================
 # Mini App Services

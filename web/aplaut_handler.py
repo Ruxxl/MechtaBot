@@ -9,8 +9,9 @@ from typing import Optional, Set
 from zoneinfo import ZoneInfo
 
 from aiohttp import web
-from aiogram import Bot
+from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
+from aiogram.types import Message
 
 from services.aplaut_service import fetch_latest_review
 from services.db_service import has_aplaut_notified_reviews, mark_aplaut_review_notified
@@ -238,30 +239,39 @@ class AplautWebhookHandler:
             logger.error(f"❌ Ошибка отправки уведомления об отзыве Aplaut {review.get('id')}: {e}")
             monitor.update_status("Aplaut Reviews", "ERROR")
 
+    async def send_latest_review(self) -> str:
+        """Шлет в чат последний отзыв из Aplaut (Platform API). Возвращает
+        короткий текст результата для ответа на команду /lastreview."""
+        if not self.api_token:
+            return "APLAUT_API_TOKEN не задан — не могу получить последний отзыв."
+        review = await fetch_latest_review(self.api_token)
+        if not review or not review.get("id"):
+            monitor.update_status("Aplaut Reviews", "ERROR")
+            return "Не удалось получить последний отзыв из Aplaut API (подробности в логах)."
+        # Помечаем как отправленный, чтобы вебхук этого же отзыва не продублировал его.
+        await self._is_new_review(str(review["id"]))
+        logger.info(f"📝 Отправляю последний отзыв Aplaut {review['id']}")
+        await self._notify(review)
+        return "Последний отзыв отправлен."
+
     async def send_latest_on_first_run(self):
         """Самый первый запуск (в БД еще нет ни одного отправленного отзыва):
         один раз шлем в чат последний отзыв из Aplaut, чтобы было видно, что
         интеграция работает. Дальше отзывы приходят только вебхуком.
 
-        Без БД пропускаем — иначе последний отзыв уходил бы при каждом рестарте."""
+        Без БД пропускаем — иначе последний отзыв уходил бы при каждом рестарте
+        (free-инстанс Render засыпает и перезапускается часто). В этом случае
+        последний отзыв можно отправить вручную командой /lastreview."""
         if not self.api_token:
             logger.info("APLAUT_API_TOKEN не задан — последний отзыв при первом запуске не отправляется.")
             return
         has_any = await has_aplaut_notified_reviews()
         if has_any is None:
-            logger.warning("БД недоступна — пропускаю отправку последнего отзыва Aplaut при старте.")
+            logger.info("БД недоступна — последний отзыв Aplaut при старте не шлю, есть команда /lastreview.")
             return
-        if has_any:
-            return
+        if not has_any:
+            logger.info(await self.send_latest_review())
 
-        review = await fetch_latest_review(self.api_token)
-        if not review or not review.get("id"):
-            logger.warning("Не удалось получить последний отзыв из Aplaut API.")
-            monitor.update_status("Aplaut Reviews", "ERROR")
-            return
-        if await self._is_new_review(str(review["id"])):
-            logger.info(f"📝 Первый запуск: отправляю последний отзыв Aplaut {review['id']}")
-            await self._notify(review)
 
     async def handle(self, request: web.Request):
         try:
@@ -289,3 +299,19 @@ class AplautWebhookHandler:
         logger.info(f"📝 Новый отзыв Aplaut {review_id} (событие {event})")
         asyncio.create_task(self._notify(data))
         return web.json_response({"status": "accepted", "id": review_id})
+
+
+def register_aplaut_handlers(dp: Dispatcher, aplaut_handler: AplautWebhookHandler):
+    """/lastreview — вручную отправить в топик отзывов последний отзыв из Aplaut."""
+
+    @dp.message(F.text.regexp(r"^/lastreview(@\w+)?$"))
+    async def last_review_command(message: Message):
+        result = await aplaut_handler.send_latest_review()
+        same_topic = (
+            message.chat.id == aplaut_handler.target_group_id
+            and message.message_thread_id == aplaut_handler.target_thread_id
+        )
+        # В топике отзывов сам отзыв и есть ответ; в остальных местах и при
+        # ошибке — коротко сообщаем результат.
+        if not same_topic or not result.startswith("Последний"):
+            await message.reply(result)
