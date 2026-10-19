@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import aiohttp
 from aiogram import Bot
@@ -8,6 +10,12 @@ from services.db_service import get_known_autotest_subtask_keys, save_autotest_s
 from web.admin_handler import monitor
 
 logger = logging.getLogger("bot.autotest_bugs")
+
+# Подзадача считается новым багом, только если она создана в Jira не раньше
+# этого окна. Старые задачи, которые перенесли под parent_key (сменили родителя
+# / сконвертировали в подзадачу), тоже впервые появляются в списке подзадач,
+# но в чат уходить не должны — их молча помечаем как известные.
+FRESH_WINDOW = timedelta(hours=24)
 
 
 async def check_autotest_bug_subtasks(
@@ -69,7 +77,24 @@ async def check_autotest_bug_subtasks(
     if not new_keys:
         return
 
-    logger.info(f"🐞 Найдено новых багов автотестов: {len(new_keys)}")
+    created_by_key = await _fetch_created(base_url, auth, new_keys)
+    if created_by_key is None:
+        monitor.update_status("Autotest Bugs Monitor", "ERROR")
+        return
+
+    threshold = datetime.now(timezone.utc) - FRESH_WINDOW
+    fresh_keys = [key for key in new_keys if created_by_key.get(key) and created_by_key[key] >= threshold]
+    stale_count = len(new_keys) - len(fresh_keys)
+    if stale_count:
+        logger.info(
+            f"Подзадач {parent_key}, созданных раньше {FRESH_WINDOW}, помечено как известные "
+            f"без уведомления: {stale_count}"
+        )
+    if not fresh_keys:
+        await save_autotest_subtask_keys(parent_key, new_keys)
+        return
+
+    logger.info(f"🐞 Найдено новых багов автотестов: {len(fresh_keys)}")
 
     # На первом запуске мониторинга для parent_key (в БД еще нет записей) все
     # текущие подзадачи считаются "новыми" — их может быть много, и сообщение
@@ -77,14 +102,14 @@ async def check_autotest_bug_subtasks(
     # В чат в этом случае уходит только последняя (самая свежая) подзадача,
     # остальные молча помечаются как известные, чтобы не спамить и не терять
     # их из виду при следующих проверках.
-    if is_first_run and len(new_keys) > 1:
+    if is_first_run and len(fresh_keys) > 1:
         logger.info(
-            f"Первый запуск мониторинга для {parent_key}: из {len(new_keys)} "
-            "существующих подзадач в чат уйдет только последняя."
+            f"Первый запуск мониторинга для {parent_key}: из {len(fresh_keys)} "
+            "свежих подзадач в чат уйдет только последняя."
         )
-        notify_keys = [new_keys[-1]]
+        notify_keys = [fresh_keys[-1]]
     else:
-        notify_keys = new_keys
+        notify_keys = fresh_keys
 
     lines = []
     for key in notify_keys:
@@ -116,3 +141,27 @@ async def check_autotest_bug_subtasks(
         return
 
     await save_autotest_subtask_keys(parent_key, new_keys)
+
+
+async def _fetch_created(base_url: str, auth: aiohttp.BasicAuth, keys: list) -> Optional[dict]:
+    """Дата создания задач keys в Jira: {key: datetime}. None — если Jira не
+    ответила (тогда проверка повторится на следующем цикле)."""
+    params = {"jql": f"key in ({','.join(keys)})", "fields": "created", "maxResults": len(keys)}
+    try:
+        async with aiohttp.ClientSession(auth=auth) as session:
+            async with session.get(f"{base_url}/rest/api/3/search/jql", params=params) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    logger.error(f"Ошибка получения дат создания подзадач: {resp.status} — {body[:300]}")
+                    return None
+                data = await resp.json()
+    except Exception as e:
+        logger.exception(f"Ошибка запроса дат создания подзадач из Jira: {e}")
+        return None
+
+    result = {}
+    for issue in data.get("issues", []):
+        created = (issue.get("fields") or {}).get("created")
+        if created:
+            result[issue["key"]] = datetime.strptime(created, "%Y-%m-%dT%H:%M:%S.%f%z")
+    return result
