@@ -172,6 +172,6 @@ python3 main.py
 `APLAUT_WEBHOOK_SECRET` — секрет, заданный в учётных данных вебхука в Aplaut
 (если не задан, запросы не проверяются), `APLAUT_SECRET_HEADER` (по умолчанию
 `X-Api-Key`; секрет также принимается из поля `secret` тела), `APLAUT_THREAD_ID`
-(топик для уведомлений, по умолчанию основной `TARGET_THREAD_ID`), `APLAUT_EVENTS`
+(топик для уведомлений, по умолчанию 50271), `APLAUT_EVENTS`
 (события через запятую, по умолчанию `create_review`; например `publish_review`,
 чтобы слать только прошедшие модерацию).
