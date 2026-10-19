@@ -143,7 +143,7 @@ class WebhookHandler:
                     builds.insert(0, build_entry)
                     self.latest_builds[stand_info] = builds[:self.MAX_BUILDS_PER_STAND]
 
-                    # Дублируем в Postgres — переживает рестарт бота
+                    # Дублируем в Google Таблицу (MechtaBot DB) — переживает рестарт бота
                     asyncio.create_task(save_build(
                         stand_key=workflow_key,
                         stand_label=stand_info,

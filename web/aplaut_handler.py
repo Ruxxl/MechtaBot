@@ -187,7 +187,7 @@ class AplautWebhookHandler:
         self.secret_header = secret_header
         self.events = events or {"create_review"}
         self.api_token = api_token or None
-        # Запасная дедупликация в памяти на случай, если Postgres недоступен.
+        # Запасная дедупликация в памяти на случай, если таблица БД недоступна.
         self._recent_ids: deque = deque(maxlen=1000)
 
     def _is_authorized(self, request: web.Request, data: dict) -> bool:
