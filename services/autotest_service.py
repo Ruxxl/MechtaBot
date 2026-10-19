@@ -243,7 +243,7 @@ class AutotestRunsService:
 
     async def _bootstrap_from_db(self) -> None:
         """После рестарта бота — подхватываем последнее известное состояние из
-        Postgres, чтобы Mini App не показывал пустоту, пока не отработает
+        Google Таблицы (MechtaBot DB), чтобы Mini App не показывал пустоту, пока не отработает
         первый опрос по таймеру."""
         try:
             from services.db_service import get_recent_autotest_runs

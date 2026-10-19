@@ -153,6 +153,15 @@ python3 main.py
 страницей выше. Если ни то, ни другое ничего не дало — запасной вариант:
 обычный CQL text-поиск по всему Confluence / space.
 
+**База данных (`services/db_service.py`):**
+Google Таблица «MechtaBot DB» (лист = таблица: `stand_builds`, `monthly_report_state`,
+`autotest_bug_subtasks`, `autotest_runs`, `autotest_run_specs`, `aplaut_notified_reviews`),
+доступ через веб-приложение Apps Script (код — `apps_script/db.gs`).
+`GSHEETS_DB_URL` — URL веб-приложения (`https://script.google.com/macros/s/.../exec`),
+`GSHEETS_DB_SECRET` — секрет из Apps Script → Project Settings → Script Properties → `DB_SECRET`.
+Без них бот работает только на in-memory кэше. Перенос старых данных из Postgres —
+`scripts/migrate_pg_to_sheets.py`.
+
 **Нагрузочное тестирование:**
 `LT_WEIGHT_PRODUCT`, `LT_WEIGHT_SECTION`, `LT_WEIGHT_STATIC`, `LT_WEIGHT_BRAND`,
 `LT_WEIGHT_FAQ` — веса сценариев Locust. `LT_MIN_RESPONSE_BYTES` — порог
@@ -168,7 +177,7 @@ python3 main.py
 `APLAUT_API_TOKEN` — токен OAuth-приложения с доступом Platform API (Aplaut →
 Настройки → Разработчикам → Новое приложение → «Platform API» → Сгенерировать токен); нужен для команды `/lastreview` и для того, чтобы при самом первом запуске
 (таблица `aplaut_notified_reviews` пуста) один раз отправить в чат последний отзыв.
-Без `DATABASE_URL` автоотправки при старте нет (бот не помнит, что уже слал), используйте `/lastreview`.
+Без `GSHEETS_DB_URL` автоотправки при старте нет (бот не помнит, что уже слал), используйте `/lastreview`.
 `APLAUT_WEBHOOK_SECRET` — секрет, заданный в учётных данных вебхука в Aplaut
 (если не задан, запросы не проверяются), `APLAUT_SECRET_HEADER` (по умолчанию
 `X-Api-Key`; секрет также принимается из поля `secret` тела), `APLAUT_THREAD_ID`
